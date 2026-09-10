@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("ADMIN")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Source {
+  id            String    @id @default(uuid())
+  key           String    @unique
+  baseUrl       String
+  authorityType String
+  isActive      Boolean   @default(true)
+  lastScanned   DateTime?
+  cursor        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  documents     Document[]
+}
+
+model Document {
+  id             String    @id @default(uuid())
+  sourceId       String
+  externalId     String?
+  canonicalUrl   String    @unique
+  title          String
+  publishedOn    DateTime  @db.Date
+  institution    String?
+  regulationNum  String?
+  createdAt      DateTime  @default(now())
+
+  source         Source    @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  versions       DocumentVersion[]
+
+  @@unique([sourceId, externalId])
+}
+
+model DocumentVersion {
+  id               String   @id @default(uuid())
+  documentId       String
+  contentHash      String
+  extractedText    String?
+  extractionStatus String   @default("PENDING")
+  mimeType         String   @default("application/pdf")
+  createdAt        DateTime @default(now())
+
+  document         Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, contentHash])
+}
+
+model Job {
+  id             String    @id @default(uuid())
+  kind           String
+  entityId       String
+  actorId        String?
+  idempotencyKey String    @unique
+  status         String    @default("QUEUED")
+  errorDetails   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model ChatSession {
+  id        String   @id @default(uuid())
+  ownerId   String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

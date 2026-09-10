@@ -1,122 +1,69 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { api } from './lib/api'
 
-function App() {
-  const [count, setCount] = useState(0)
+// --- Test Bileşenleri ---
+function Dashboard() {
+  const [health, setHealth] = useState<any>(null)
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    // Vite proxy üzerinden Fastify backendine istekler
+    api.get('/health').then(res => setHealth(res.data)).catch(console.error)
+    api.get('/auth/me').then(res => setUser(res.data.user)).catch(console.error)
+  }, [])
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+      <h1>⚖️ ATEZ Mevzuat Web App</h1>
+      <nav style={{ marginBottom: '2rem' }}>
+        <Link to="/reports/123" style={{ marginRight: '1rem', color: '#2563eb' }}>Rapor 123 (SPA Yönlendirme Testi)</Link>
+        <Link to="/chat" style={{ color: '#2563eb' }}>Sohbet (SSE Stream Testi)</Link>
+      </nav>
+      
+      <div style={{ border: '1px solid #ccc', padding: '1rem', marginBottom: '1rem', borderRadius: '8px' }}>
+        <h3>🟢 API Durumu (Health Check)</h3>
+        <pre style={{ background: '#f4f4f5', padding: '1rem' }}>{JSON.stringify(health, null, 2) || 'Yükleniyor...'}</pre>
+      </div>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <div style={{ border: '1px solid #ccc', padding: '1rem', borderRadius: '8px' }}>
+        <h3>👤 Giriş Yapan Kullanıcı (/auth/me)</h3>
+        <pre style={{ background: '#f4f4f5', padding: '1rem' }}>{JSON.stringify(user, null, 2) || 'Yükleniyor...'}</pre>
+      </div>
+    </div>
   )
 }
 
-export default App
+function ReportDetail() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+      <h1>📄 Rapor Detayı</h1>
+      <p>Burası Rapor 123 sayfası. SPA Routing başarılı bir şekilde çalışıyor ve sayfa yenilenmedi.</p>
+      <Link to="/" style={{ color: '#2563eb' }}>Ana Sayfaya Dön</Link>
+    </div>
+  )
+}
+
+function NotFound() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+      <h1>❌ 404 Sayfa Bulunamadı</h1>
+      <Link to="/" style={{ color: '#2563eb' }}>Ana Sayfaya Dön</Link>
+    </div>
+  )
+}
+
+import { ChatScreen } from './features/chat/ChatScreen'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/chat" element={<ChatScreen />} />
+        <Route path="/reports/:id" element={<ReportDetail />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}

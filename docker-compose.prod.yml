@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: atez
+      POSTGRES_PASSWORD: atezpassword
+      POSTGRES_DB: atez_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    command:
+      - "gotenberg"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: "postgresql://atez:atezpassword@db:5432/atez_db?schema=public"
+      GOTENBERG_URL: "http://gotenberg:3000"
+      PORT: "3001"
+    depends_on:
+      - db
+      - gotenberg
+    restart: unless-stopped
+
+  # Caddy sunucusu (frontend statik dosyaları + backend proxy'si)
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8888:80" # Port çakışmalarını önlemek için 8888 portunu açıyoruz
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
