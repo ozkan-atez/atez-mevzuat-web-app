@@ -1,14 +1,42 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-navy: #0a1628;
+  --color-brand-navyCard: #0d1d36;
+  --color-brand-navyBorder: #1e3252;
+  --color-brand-accent: #2563eb;
+  --color-brand-accentHover: #1d4ed8;
+  --color-brand-cyan: #06b6d4;
+  --color-brand-emerald: #10b981;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #09090b;
+  --background: #f1f5f9;
+  --foreground: #0f172a;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.hero-gradient {
+  background: radial-gradient(circle at 80% 20%, #162c52 0%, #0a1628 75%);
+}
+.glass-effect {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.custom-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
 }
