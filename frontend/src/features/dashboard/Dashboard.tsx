@@ -349,7 +349,7 @@ export function Dashboard() {
                 <td className="py-4 px-6 text-right whitespace-nowrap">
                   <div className="inline-flex items-center gap-2 justify-end">
                     <Link
-                      to="/reports/1"
+                      to="/runs/325b2514-0e2e-499d-b268-060b0373f33c"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm"
                     >
                       <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" strokeLinecap="round" strokeLinejoin="round"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
@@ -370,7 +370,7 @@ export function Dashboard() {
                 </td>
                 <td className="py-4 px-6 whitespace-nowrap">
                   <Link
-                    to="/runs/CRON-01"
+                    to="/runs/325b2514-0e2e-499d-b268-060b0373f33c"
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
                   >
                     <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
@@ -386,13 +386,7 @@ export function Dashboard() {
                 <td className="py-4 px-6 text-right whitespace-nowrap">
                   <div className="inline-flex items-center gap-2 justify-end">
                     <Link
-                      to="/reports/4"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition"
-                    >
-                      Onayla
-                    </Link>
-                    <Link
-                      to="/reports/4"
+                      to="/runs/325b2514-0e2e-499d-b268-060b0373f33c"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm"
                     >
                       <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" strokeLinecap="round" strokeLinejoin="round"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
