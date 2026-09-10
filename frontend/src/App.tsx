@@ -1,7 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { AppLayout } from './components/layout/AppLayout'
-import { Dashboard } from './features/dashboard/Dashboard'
-import { ChatScreen } from './features/chat/ChatScreen'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AppLayout } from './components/layout/AppLayout';
+import { Dashboard } from './features/dashboard/Dashboard';
+import { ChatScreen } from './features/chat/ChatScreen';
+import { ReportDetail } from './features/reports/ReportDetail';
+import { RunDetail } from './features/runs/RunDetail';
+import { GroupsPage } from './features/groups/GroupsPage';
 
 export default function App() {
   return (
@@ -9,13 +12,13 @@ export default function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/reports/:id" element={<ReportDetail />} />
+          <Route path="/runs/:id" element={<RunDetail />} />
+          <Route path="/groups" element={<GroupsPage />} />
           <Route path="/chat" element={<ChatScreen />} />
-          <Route path="/pending" element={<div className="p-4 font-medium text-slate-500">Yakında: Onay Bekleyenler Sayfası</div>} />
-          <Route path="/reports" element={<div className="p-4 font-medium text-slate-500">Yakında: Tüm Raporlar</div>} />
-          <Route path="/workflows" element={<div className="p-4 font-medium text-slate-500">Yakında: Geçmiş Görevler (Runs)</div>} />
-          <Route path="/groups" element={<div className="p-4 font-medium text-slate-500">Yakında: Kullanıcı ve Mail Grupları</div>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>
-  )
+  );
 }

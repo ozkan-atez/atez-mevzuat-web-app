@@ -1,4 +1,11 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Users } from 'lucide-react';
+import { TriggerWorkflowModal } from './TriggerWorkflowModal';
+
 export function Dashboard() {
+  const [isTriggerOpen, setIsTriggerOpen] = useState(false);
+
   return (
     <div className="space-y-8">
       {/* Hero Section */}
@@ -19,13 +26,18 @@ export function Dashboard() {
           
           {/* Hero Actions */}
           <div className="flex items-center gap-3 relative z-10">
-            <button className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-slate-200 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition duration-150 active:scale-95 shadow-sm" type="button">
-              <svg className="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round"></path>
-              </svg>
-              <span>Yenile</span>
-            </button>
-            <button className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 border border-blue-400/30 transition duration-150 active:scale-95 shadow-lg shadow-blue-900/40" type="button">
+            <Link
+              to="/groups"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-slate-200 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition duration-150 active:scale-95 shadow-sm"
+            >
+              <Users className="w-4 h-4 text-slate-300" />
+              <span>Dağıtım Grupları</span>
+            </Link>
+            <button
+              onClick={() => setIsTriggerOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 border border-blue-400/30 transition duration-150 active:scale-95 shadow-lg shadow-blue-900/40 cursor-pointer"
+              type="button"
+            >
               <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                 <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"></path>
               </svg>
@@ -320,23 +332,29 @@ export function Dashboard() {
                   <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">Belirli menşeli sıcak haddelenmiş rulo sac ürünlerinde dampinge karşı kesin önlem revizyonu.</div>
                 </td>
                 <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <Link
+                    to="/runs/CRON-02"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                  >
                     <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                     Cron Job (#CRON-02)
-                  </span>
+                  </Link>
                 </td>
                 <td className="py-4 px-6 whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+                    <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                     Bülten Dağıtıldı
                   </span>
                 </td>
                 <td className="py-4 px-6 text-right whitespace-nowrap">
                   <div className="inline-flex items-center gap-2 justify-end">
-                    <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm" type="button">
+                    <Link
+                      to="/reports/1"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm"
+                    >
                       <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" strokeLinecap="round" strokeLinejoin="round"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                       İncele
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>
@@ -351,10 +369,13 @@ export function Dashboard() {
                   <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">Avrupa Birliği menşeli olmayan pamuk ipliklerinde gümrük vergisi muafiyet kotaları.</div>
                 </td>
                 <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <Link
+                    to="/runs/CRON-01"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                  >
                     <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                     Cron Job (#CRON-01)
-                  </span>
+                  </Link>
                 </td>
                 <td className="py-4 px-6 whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
@@ -364,13 +385,19 @@ export function Dashboard() {
                 </td>
                 <td className="py-4 px-6 text-right whitespace-nowrap">
                   <div className="inline-flex items-center gap-2 justify-end">
-                    <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition" type="button">
+                    <Link
+                      to="/reports/4"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition"
+                    >
                       Onayla
-                    </button>
-                    <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm" type="button">
+                    </Link>
+                    <Link
+                      to="/reports/4"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm"
+                    >
                       <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" strokeLinecap="round" strokeLinejoin="round"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                       İncele
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>
@@ -378,6 +405,8 @@ export function Dashboard() {
           </table>
         </div>
       </section>
+
+      {isTriggerOpen && <TriggerWorkflowModal onClose={() => setIsTriggerOpen(false)} />}
     </div>
   )
 }
