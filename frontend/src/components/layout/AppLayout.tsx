@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom'
-import { DockedAiAssistant } from '../features/chat/DockedAiAssistant'
+import { DockedAiAssistant } from '../../features/chat/DockedAiAssistant'
 
 export function AppLayout() {
   return (
