@@ -8,7 +8,7 @@ async function startWorker() {
   
   console.log('👷 Worker arka plan işlerini bekliyor...')
 
-  await queue.work('test-job', async (jobs) => {
+  await queue.work('test-job', async (jobs: any) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs]
     
     for (const job of jobList) {
@@ -22,11 +22,11 @@ async function startWorker() {
 
       // İş bittiğinde veritabanındaki durumunu güncelliyoruz
       if (dbJobId) {
-        await prisma.job.update({
+        await prisma.workflowRun.updateMany({
           where: { id: dbJobId },
-          data: { status: 'SUCCEEDED' }
+          data: { status: 'COMPLETED' }
         })
-        console.log(`[WORKER] ✅ İş ${dbJobId} başarıyla tamamlandı ve veritabanına SUCCEEDED yazıldı.`)
+        console.log(`[WORKER] ✅ İş ${dbJobId} başarıyla tamamlandı ve veritabanına COMPLETED yazıldı.`)
       }
     }
   })

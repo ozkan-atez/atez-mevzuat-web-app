@@ -1,30 +1,36 @@
 import { FastifyInstance } from 'fastify'
 import { getQueue } from '../../platform/queue'
-import { PrismaClient } from '@prisma/client'
-import crypto from 'crypto'
-
-const prisma = new PrismaClient()
+import { prisma } from '../../platform/database'
 
 export async function jobsRoutes(app: FastifyInstance) {
   app.post('/test', async (request, reply) => {
     const queue = getQueue()
-    
-    // 1. Veritabanında iş kaydını oluştur
-    const dbJob = await prisma.job.create({
+    const { targetDate } = (request.body as { targetDate?: string }) || {}
+
+    let workflow = await prisma.workflow.findFirst()
+    if (!workflow) {
+      workflow = await prisma.workflow.create({
+        data: {
+          key: 'resmi-gazete-gumruk',
+          name: 'Resmi Gazete Gümrük & Dış Ticaret Takip Otomasyonu',
+        }
+      })
+    }
+
+    const run = await prisma.workflowRun.create({
       data: {
-        kind: 'TEST_JOB',
-        entityId: 'test-entity-123',
-        idempotencyKey: crypto.randomUUID(),
+        workflowId: workflow.id,
+        status: 'RUNNING',
+        parameters: JSON.stringify({ targetDate: targetDate || new Date().toISOString().split('T')[0] }),
       }
     })
 
-    // 2. İş Kuyruğuna (pg-boss) ekle
-    const pgBossJobId = await queue.send('test-job', { dbJobId: dbJob.id })
+    const pgBossJobId = await queue.send('test-job', { dbJobId: run.id })
 
-    return reply.code(202).send({ 
-      message: 'Job accepted', 
-      pgBossJobId, 
-      dbJobId: dbJob.id 
+    return reply.code(202).send({
+      message: 'Tarama görevi kuyruğa eklendi',
+      jobId: run.id,
+      pgBossJobId,
     })
   })
 }

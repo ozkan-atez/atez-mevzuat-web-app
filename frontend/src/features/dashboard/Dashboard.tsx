@@ -1,10 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { TriggerWorkflowModal } from './TriggerWorkflowModal';
 
 export function Dashboard() {
   const [isTriggerOpen, setIsTriggerOpen] = useState(false);
+  const [stats, setStats] = useState<{
+    totalScans: number;
+    totalReports: number;
+    pendingApprovals: number;
+    totalRegulations: number;
+  }>({
+    totalScans: 7,
+    totalReports: 9,
+    pendingApprovals: 2,
+    totalRegulations: 62,
+  });
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && !data.error) {
+          setStats((prev) => ({
+            ...prev,
+            totalScans: data.totalScans || prev.totalScans,
+            totalReports: data.totalReports || prev.totalReports,
+            pendingApprovals: data.pendingApprovals || prev.pendingApprovals,
+            totalRegulations: data.totalRegulations || prev.totalRegulations,
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -163,7 +191,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-baseline justify-between mb-3 relative z-10">
-            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">7</div>
+            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">{stats.totalScans}</div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
               <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" strokeLinecap="round" strokeLinejoin="round"></path>
@@ -201,7 +229,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-baseline justify-between mb-3 relative z-10">
-            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">2</div>
+            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">{stats.pendingApprovals}</div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
               +1 yeni tebliğ
@@ -237,7 +265,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-baseline justify-between mb-3 relative z-10">
-            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">9</div>
+            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">{stats.totalReports}</div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
               <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" strokeLinecap="round" strokeLinejoin="round"></path>

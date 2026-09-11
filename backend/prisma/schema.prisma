@@ -17,66 +17,134 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
-model Source {
-  id            String    @id @default(uuid())
-  key           String    @unique
-  baseUrl       String
-  authorityType String
-  isActive      Boolean   @default(true)
-  lastScanned   DateTime?
-  cursor        String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  documents     Document[]
+model Workflow {
+  id          String        @id @default(uuid())
+  key         String        @unique
+  name        String
+  description String?
+  cron        String?
+  isActive    Boolean       @default(true)
+  runs        WorkflowRun[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 }
 
-model Document {
-  id             String    @id @default(uuid())
-  sourceId       String
-  externalId     String?
-  canonicalUrl   String    @unique
-  title          String
-  publishedOn    DateTime  @db.Date
-  institution    String?
-  regulationNum  String?
-  createdAt      DateTime  @default(now())
+model WorkflowRun {
+  id         String          @id @default(uuid())
+  workflowId String
+  workflow   Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status     String          @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED
+  parameters String?         // JSON: { targetDate, mode, ... }
+  summary    String?
+  error      String?
+  logs       AgentTaskLog[]
+  items      GazetteItem[]
+  reports    Report[]
+  dispatches EmailDispatch[]
+  startedAt  DateTime        @default(now())
+  finishedAt DateTime?
 
-  source         Source    @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  versions       DocumentVersion[]
-
-  @@unique([sourceId, externalId])
+  @@index([workflowId, startedAt])
 }
 
-model DocumentVersion {
-  id               String   @id @default(uuid())
-  documentId       String
-  contentHash      String
-  extractedText    String?
-  extractionStatus String   @default("PENDING")
-  mimeType         String   @default("application/pdf")
-  createdAt        DateTime @default(now())
+model AgentTaskLog {
+  id         String      @id @default(uuid())
+  runId      String
+  run        WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  agentName  String
+  stepName   String
+  status     String      @default("STARTED") // STARTED, RUNNING, COMPLETED, FAILED
+  inputData  String?
+  outputData String?
+  durationMs Int?
+  error      String?
+  createdAt  DateTime    @default(now())
 
-  document         Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
-
-  @@unique([documentId, contentHash])
+  @@index([runId, createdAt])
 }
 
-model Job {
-  id             String    @id @default(uuid())
-  kind           String
-  entityId       String
-  actorId        String?
-  idempotencyKey String    @unique
-  status         String    @default("QUEUED")
-  errorDetails   String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+model GazetteItem {
+  id                 String      @id @default(uuid())
+  runId              String
+  run                WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  date               String      // YYYY-MM-DD
+  title              String
+  category           String      // Tebliğ, Karar, Yönetmelik
+  url                String
+  pdfUrl             String?
+  fullText           String?
+  isRelevant         Boolean     @default(false)
+  relevanceScore     Int         @default(0)
+  relevanceReason    String?
+  precedingTitle     String?
+  precedingDate      String?
+  precedingGazetteNo String?
+  precedingUrl       String?
+  createdAt          DateTime    @default(now())
+
+  @@index([runId, isRelevant])
+}
+
+model Report {
+  id              String           @id @default(uuid())
+  runId           String?
+  run             WorkflowRun?     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  title           String
+  status          String           @default("DRAFT") // DRAFT, REVISED, APPROVED, SENT
+  version         Int              @default(1)
+  contentMarkdown String?
+  contentHtml     String?
+  keyPoints       String?          // JSON or Text
+  affectedSectors String?          // JSON or Text
+  actionItems     String?          // JSON or Text
+  revisions       ReportRevision[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([runId])
+}
+
+model ReportRevision {
+  id            String   @id @default(uuid())
+  reportId      String
+  report        Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userPrompt    String
+  changeSummary String?
+  previousData  String?
+  revisedData   String?
+  createdAt     DateTime @default(now())
+
+  @@index([reportId, createdAt])
+}
+
+model CustomerGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  emails      String   // Comma separated
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model EmailDispatch {
+  id             String       @id @default(uuid())
+  runId          String?
+  run            WorkflowRun? @relation(fields: [runId], references: [id], onDelete: Cascade)
+  recipients     String
+  subject        String
+  status         String       @default("PENDING") // PENDING, SENT, SIMULATED, FAILED
+  isSimulation   Boolean      @default(false)
+  graphMessageId String?
+  sentAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([runId])
 }
 
 model ChatSession {
   id        String   @id @default(uuid())
-  ownerId   String
+  ownerId   String?
   title     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
