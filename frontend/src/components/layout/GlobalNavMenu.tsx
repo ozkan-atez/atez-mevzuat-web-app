@@ -9,11 +9,7 @@ import {
 } from 'lucide-react';
 import { ChatHistoryDrawer } from '../../features/chat/ChatHistoryDrawer';
 
-interface Props {
-  variant?: 'hero' | 'light';
-}
-
-export function GlobalNavMenu({ variant = 'hero' }: Props) {
+export function GlobalNavMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -40,14 +36,9 @@ export function GlobalNavMenu({ variant = 'hero' }: Props) {
     setIsMenuOpen(false);
   }, [location.pathname]);
 
-  const buttonClasses =
-    variant === 'hero'
-      ? isMenuOpen
-        ? 'bg-blue-600 text-white border-blue-400/40 rotate-90 scale-105 shadow-md shadow-blue-900/40'
-        : 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-200 hover:text-white hover:scale-105 active:scale-95 shadow-sm'
-      : isMenuOpen
-      ? 'bg-blue-600 text-white border-blue-400/40 rotate-90 scale-105 shadow-md shadow-blue-500/20'
-      : 'bg-slate-100 hover:bg-slate-200/90 border-slate-200 text-slate-600 hover:text-slate-900 hover:scale-105 active:scale-95 shadow-2xs';
+  const buttonClasses = isMenuOpen
+    ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-900/40 rotate-90 scale-105'
+    : 'bg-[#0a1628] hover:bg-[#132747] text-slate-200 hover:text-white border-[#1e3252] hover:border-slate-500 shadow-sm hover:scale-105 active:scale-95';
 
   return (
     <>

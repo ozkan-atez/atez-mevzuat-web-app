@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { TriggerWorkflowModal } from './TriggerWorkflowModal';
-import { GlobalNavMenu } from '../../components/layout/GlobalNavMenu';
 
 export function Dashboard() {
   const [isTriggerOpen, setIsTriggerOpen] = useState(false);
@@ -64,7 +63,6 @@ export function Dashboard() {
               </svg>
               <span>Yeni Tarama Başlat</span>
             </button>
-            <GlobalNavMenu variant="hero" />
           </div>
         </div>
         
