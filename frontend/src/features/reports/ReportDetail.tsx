@@ -14,6 +14,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { EmailDispatchModal } from "./EmailDispatchModal";
+import { GlobalNavMenu } from "../../components/layout/GlobalNavMenu";
 
 interface GazetteItem {
   id: string;
@@ -285,6 +286,8 @@ export function ReportDetail() {
             <Mail className="w-3.5 h-3.5" />
             <span>E-Posta ile Dağıt</span>
           </button>
+
+          <GlobalNavMenu variant="light" />
         </div>
       </div>
 

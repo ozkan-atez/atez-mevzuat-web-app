@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { TriggerWorkflowModal } from './TriggerWorkflowModal';
+import { GlobalNavMenu } from '../../components/layout/GlobalNavMenu';
 
 export function Dashboard() {
   const [isTriggerOpen, setIsTriggerOpen] = useState(false);
@@ -51,8 +52,8 @@ export function Dashboard() {
             <span>Sistem Aktif & İzlemede</span>
           </div>
           
-          {/* Hero Actions */}
-          <div className="flex items-center gap-3 relative z-10">
+          {/* Hero Actions: Yeni Tarama Başlat ve sağında uyumlu radius/renkli Hızlı Menü */}
+          <div className="flex items-center gap-2.5 relative z-10">
             <button
               onClick={() => setIsTriggerOpen(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 border border-blue-400/30 transition duration-150 active:scale-95 shadow-lg shadow-blue-900/40 cursor-pointer"
@@ -63,6 +64,7 @@ export function Dashboard() {
               </svg>
               <span>Yeni Tarama Başlat</span>
             </button>
+            <GlobalNavMenu variant="hero" />
           </div>
         </div>
         

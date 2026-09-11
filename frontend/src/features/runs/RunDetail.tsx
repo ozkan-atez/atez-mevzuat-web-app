@@ -11,6 +11,7 @@ import {
   ExternalLink,
   ArrowRight,
 } from 'lucide-react';
+import { GlobalNavMenu } from '../../components/layout/GlobalNavMenu';
 
 interface TaskLog {
   id: string;
@@ -324,6 +325,10 @@ export function RunDetail() {
               Hedef Tarih: <strong>{targetDate}</strong> • İşlem: {new Date(run.startedAt).toLocaleString('tr-TR')}
             </p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <GlobalNavMenu variant="light" />
         </div>
       </div>
 
