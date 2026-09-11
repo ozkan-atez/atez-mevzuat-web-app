@@ -36,37 +36,37 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Hero Section */}
-      <section className="hero-gradient rounded-3xl p-6 sm:p-10 lg:p-12 text-white shadow-2xl border border-[#1a2e4d] relative overflow-hidden" data-purpose="hero-banner">
-        {/* Ambient light effect */}
-        <div className="absolute -right-20 -top-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        
-        {/* Top Row: Status Badge & Header Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          {/* Live Status Pill */}
-          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-slate-900/60 border border-slate-700/60 text-xs sm:text-sm font-medium text-slate-200 backdrop-blur-md">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span>Sistem Aktif & İzlemede</span>
-          </div>
+      {/* Hero Section & Dışında Sağında Yer Alan Hızlı Menü */}
+      <div className="flex items-start gap-3 sm:gap-4">
+        <section className="flex-1 min-w-0 hero-gradient rounded-3xl p-6 sm:p-10 lg:p-12 text-white shadow-2xl border border-[#1a2e4d] relative overflow-hidden" data-purpose="hero-banner">
+          {/* Ambient light effect */}
+          <div className="absolute -right-20 -top-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
           
-          {/* Hero Actions: Yeni Tarama Başlat ve sağında uyumlu radius/renkli Hızlı Menü */}
-          <div className="flex items-center gap-2.5 relative z-10">
-            <button
-              onClick={() => setIsTriggerOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 border border-blue-400/30 transition duration-150 active:scale-95 shadow-lg shadow-blue-900/40 cursor-pointer"
-              type="button"
-            >
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"></path>
-              </svg>
-              <span>Yeni Tarama Başlat</span>
-            </button>
-            <GlobalNavMenu variant="hero" />
+          {/* Top Row: Status Badge & Header Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            {/* Live Status Pill */}
+            <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-slate-900/60 border border-slate-700/60 text-xs sm:text-sm font-medium text-slate-200 backdrop-blur-md">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span>Sistem Aktif & İzlemede</span>
+            </div>
+            
+            {/* Hero Actions: Yalnızca Yeni Tarama Başlat (İçeride) */}
+            <div className="flex items-center gap-3 relative z-10">
+              <button
+                onClick={() => setIsTriggerOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 border border-blue-400/30 transition duration-150 active:scale-95 shadow-lg shadow-blue-900/40 cursor-pointer"
+                type="button"
+              >
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"></path>
+                </svg>
+                <span>Yeni Tarama Başlat</span>
+              </button>
+            </div>
           </div>
-        </div>
         
         {/* Main Title and Description */}
         <div className="max-w-4xl space-y-4 mb-10 relative z-10">
@@ -165,6 +165,12 @@ export function Dashboard() {
           </div>
         </div>
       </section>
+
+      {/* Hızlı Menü (Hero'nun DIŞINDA ve SAĞINDA yer alan bileşen) */}
+      <div className="shrink-0 sticky top-6 z-30">
+        <GlobalNavMenu variant="hero" />
+      </div>
+    </div>
 
       {/* KPI Metrics Section */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6" data-purpose="kpi-overview">

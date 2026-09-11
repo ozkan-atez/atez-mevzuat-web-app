@@ -43,26 +43,26 @@ export function GlobalNavMenu({ variant = 'hero' }: Props) {
   const buttonClasses =
     variant === 'hero'
       ? isMenuOpen
-        ? 'bg-blue-600 text-white border-blue-400/40 rotate-90 scale-105 shadow-md shadow-blue-900/40'
-        : 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 active:scale-95 shadow-sm'
+        ? 'bg-blue-600 text-white border-blue-400/50 rotate-90 scale-105 shadow-xl shadow-blue-900/40'
+        : 'bg-[#0d1d36]/95 hover:bg-[#122442] border-[#1e3252] hover:border-slate-500 text-slate-200 hover:text-white active:scale-95 shadow-xl shadow-black/20 backdrop-blur-xl'
       : isMenuOpen
-      ? 'bg-blue-600 text-white border-blue-400/40 rotate-90 scale-105 shadow-md shadow-blue-500/20'
-      : 'bg-slate-100 hover:bg-slate-200/90 border-slate-200 text-slate-600 hover:text-slate-900 active:scale-95 shadow-2xs';
+      ? 'bg-blue-600 text-white border-blue-400/50 rotate-90 scale-105 shadow-md shadow-blue-500/20'
+      : 'bg-white hover:bg-slate-50 border-slate-200/90 hover:border-slate-300 text-slate-700 hover:text-slate-900 active:scale-95 shadow-sm hover:shadow-md';
 
   return (
     <>
       <div ref={menuRef} className="relative inline-flex items-center">
-        {/* Buton: Yanındaki buton ile aynı radius (rounded-xl), aynı yükseklik (38px) ve uyumlu renk */}
+        {/* Buton: Kartın dışında ve sağında, kart ile aynı radius (rounded-3xl), uyumlu boyut ve renk */}
         <button
           type="button"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className={`w-[38px] h-[38px] rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border ${buttonClasses}`}
+          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl sm:rounded-3xl flex items-center justify-center transition-all duration-200 cursor-pointer border ${buttonClasses}`}
           title="Hızlı Menü"
         >
           {isMenuOpen ? (
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           ) : (
-            <Menu className="w-4 h-4" />
+            <Menu className="w-5 h-5" />
           )}
         </button>
 

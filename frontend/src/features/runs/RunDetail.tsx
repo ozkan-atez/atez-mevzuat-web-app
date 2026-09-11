@@ -297,37 +297,52 @@ export function RunDetail() {
   return (
     <div className="space-y-6 w-full pb-10">
       {/* 1. Üst Bar & Bilgi */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/"
-            className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
-            title="Geri Dön"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-slate-900">Tarama İnceleme Masası</h1>
-              {run.status === 'COMPLETED' ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <Check className="w-3 h-3 stroke-[3]" />
-                  Tamamlandı
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  İnceleniyor
-                </span>
-              )}
+      {/* 1. Üst Bar: Navigasyon ve Başlık & Dışında Sağında Hızlı Menü */}
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-3">
+            <Link
+              to="/"
+              className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+              title="Geri Dön"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold text-slate-900">Tarama İnceleme Masası</h1>
+                {run.status === 'COMPLETED' ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <Check className="w-3 h-3 stroke-[3]" />
+                    Tamamlandı
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    İnceleniyor
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Hedef Tarih: <strong>{targetDate}</strong> • İşlem: {new Date(run.startedAt).toLocaleString('tr-TR')}
+              </p>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Hedef Tarih: <strong>{targetDate}</strong> • İşlem: {new Date(run.startedAt).toLocaleString('tr-TR')}
-            </p>
           </div>
+
+          {/* Varsa Rapor Butonu (Kartın içinde) */}
+          {run.reports && run.reports.length > 0 && (
+            <Link
+              to={`/reports/${run.reports[0].id}`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 transition-colors shadow-xs"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Rapor</span>
+            </Link>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Hızlı Menü (Kartın DIŞINDA ve SAĞINDA) */}
+        <div className="shrink-0">
           <GlobalNavMenu variant="light" />
         </div>
       </div>
