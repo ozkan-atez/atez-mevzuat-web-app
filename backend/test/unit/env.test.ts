@@ -22,4 +22,15 @@ describe('loadEnv', () => {
   it('rejects a non-positive download limit', () => {
     expect(() => loadEnv({ ...base, MAX_FILE_BYTES: '0' })).toThrow()
   })
+
+  it('applies Gemini filter defaults without requiring a development key', () => {
+    const env = loadEnv({ ...base, GEMINI_API_KEY: '  ' })
+    expect(env.gemini).toEqual({
+      apiKey: undefined,
+      model: 'gemini-3.8-flash',
+      timeoutMs: 30_000,
+      maxAttempts: 3,
+      maxContentBytes: 8_000_000,
+    })
+  })
 })

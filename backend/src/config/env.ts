@@ -16,6 +16,14 @@ const schema = z.object({
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('true'),
+  GEMINI_API_KEY: z.preprocess(
+    (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().min(1).optional(),
+  ),
+  GEMINI_MODEL: z.string().min(1).default('gemini-3.8-flash'),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
+  GEMINI_MAX_CONTENT_BYTES: z.coerce.number().int().positive().default(8_000_000),
 })
 
 export interface AppEnv {
@@ -35,6 +43,13 @@ export interface AppEnv {
     accessKeyId: string
     secretAccessKey: string
     forcePathStyle: boolean
+  }
+  gemini: {
+    apiKey: string | undefined
+    model: string
+    timeoutMs: number
+    maxAttempts: number
+    maxContentBytes: number
   }
 }
 
@@ -57,6 +72,13 @@ export function loadEnv(input: NodeJS.ProcessEnv = process.env): AppEnv {
       accessKeyId: value.S3_ACCESS_KEY_ID,
       secretAccessKey: value.S3_SECRET_ACCESS_KEY,
       forcePathStyle: value.S3_FORCE_PATH_STYLE === 'true',
+    },
+    gemini: {
+      apiKey: value.GEMINI_API_KEY,
+      model: value.GEMINI_MODEL,
+      timeoutMs: value.GEMINI_TIMEOUT_MS,
+      maxAttempts: value.GEMINI_MAX_ATTEMPTS,
+      maxContentBytes: value.GEMINI_MAX_CONTENT_BYTES,
     },
   }
 }

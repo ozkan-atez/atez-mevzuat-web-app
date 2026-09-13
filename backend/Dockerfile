@@ -8,6 +8,7 @@ RUN npm ci
 COPY prisma ./prisma
 RUN npx prisma generate
 COPY tsconfig.json ./
+COPY config ./config
 COPY src ./src
 RUN npm run build
 
@@ -20,6 +21,7 @@ RUN apt-get update \
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/prisma ./prisma
+COPY --chown=node:node --from=build /app/config ./config
 COPY --chown=node:node --from=build /app/src ./src
 COPY --chown=node:node certs ./certs
 USER node
