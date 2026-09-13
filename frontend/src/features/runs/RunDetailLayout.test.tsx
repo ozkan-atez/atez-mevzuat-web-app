@@ -45,6 +45,6 @@ describe('RunDetail overview layout', () => {
     expect(within(overview).getByRole('heading', { name: 'Tarama İnceleme Masası' })).toBeVisible()
     expect(within(summary).getByText('4')).toBeVisible()
     expect(within(summary).getByText('2')).toBeVisible()
-    expect(screen.getByText('Yayınlar keşfediliyor')).toBeVisible()
+    expect(screen.getByText('Resmî Gazete yayınları bulunuyor')).toBeVisible()
   })
 })
