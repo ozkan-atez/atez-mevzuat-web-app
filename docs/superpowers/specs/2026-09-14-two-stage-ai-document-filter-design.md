@@ -32,7 +32,7 @@ The system will use a shared Gemini infrastructure adapter behind an application
 
 This avoids embedding provider calls in the scan orchestrator and avoids prematurely building a generic agent platform. The boundary permits replacing Gemini or testing without external API traffic.
 
-Gemini 3.8 Flash is addressed by the stable model ID `gemini-3.8-flash`. Structured output is required for both filtering passes.
+Gemini 3.7 Flash is addressed by the stable model ID `gemini-3.7-flash`. Structured output is required for both filtering passes.
 
 ## Operation Flow
 
@@ -198,7 +198,7 @@ The Operation Steps component shows AI filtering as step second row. When waitin
 The worker receives configuration through server-side environment variables:
 
 - `GEMINI_API_KEY`
-- `GEMINI_MODEL=gemini-3.8-flash`
+- `GEMINI_MODEL=gemini-3.7-flash`
 - request timeout and automatic attempt count
 - safe content input budget
 

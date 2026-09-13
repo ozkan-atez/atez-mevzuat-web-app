@@ -27,7 +27,7 @@ describe('loadEnv', () => {
     const env = loadEnv({ ...base, GEMINI_API_KEY: '  ' })
     expect(env.gemini).toEqual({
       apiKey: undefined,
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.7-flash',
       timeoutMs: 30_000,
       maxAttempts: 3,
       maxContentBytes: 8_000_000,

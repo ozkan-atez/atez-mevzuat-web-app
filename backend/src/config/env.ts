@@ -20,7 +20,7 @@ const schema = z.object({
     (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
     z.string().trim().min(1).optional(),
   ),
-  GEMINI_MODEL: z.string().min(1).default('gemini-3.8-flash'),
+  GEMINI_MODEL: z.string().min(1).default('gemini-3.7-flash'),
   GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
   GEMINI_MAX_CONTENT_BYTES: z.coerce.number().int().positive().default(8_000_000),
