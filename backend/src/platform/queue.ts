@@ -1,5 +1,7 @@
 import { PgBoss } from 'pg-boss'
 
+export const manualScanQueueName = 'resmi-gazete-manual-scan'
+
 let boss: PgBoss | null = null
 
 export function getQueue(): PgBoss {
@@ -15,8 +17,7 @@ export async function startQueue() {
   const queue = getQueue()
   await queue.start()
   
-  // pg-boss v9+ için kuyrukları önceden oluşturmamız gerekiyor
-  await queue.createQueue('test-job')
+  await queue.createQueue(manualScanQueueName)
 
   console.log('📦 pg-boss kuyruk sistemi başlatıldı.')
   return queue

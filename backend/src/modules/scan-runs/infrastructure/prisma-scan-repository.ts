@@ -41,13 +41,14 @@ export class PrismaScanRepository {
   }
 
   async markOutboxDispatched(outboxId: string, queueJobId: string): Promise<void> {
+    const outbox = await this.prisma.scanOutbox.findUniqueOrThrow({ where: { id: outboxId } })
     await this.prisma.$transaction([
       this.prisma.scanOutbox.update({
         where: { id: outboxId },
         data: { dispatchedAt: new Date(), lastError: null },
       }),
       this.prisma.scanRun.update({
-        where: { id: (await this.prisma.scanOutbox.findUniqueOrThrow({ where: { id: outboxId } })).scanRunId },
+        where: { id: outbox.scanRunId },
         data: { queueJobId },
       }),
     ])

@@ -1,16 +1,19 @@
-import Fastify, { FastifyInstance } from 'fastify'
+import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import { authRoutes } from './modules/auth/auth.routes'
-import { jobsRoutes } from './modules/jobs/jobs.routes'
 import { chatRoutes } from './modules/chat/chat.routes'
-import { startQueue } from './platform/queue'
+import { prisma } from './platform/database'
+import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-scan-repository'
+import { scanRunsRoutes } from './modules/scan-runs/scan-runs.routes'
 
-export async function buildApp(): Promise<FastifyInstance> {
+interface BuildAppOptions {
+  scanRepository?: PrismaScanRepository
+}
+
+export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: true,
   })
-
-  await startQueue() // pg-boss'u uygulamaya bağlamadan önce başlat
 
   await app.register(cors, {
     origin: true,
@@ -24,8 +27,11 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Register Modules
   app.register(authRoutes, { prefix: '/api/auth' })
-  app.register(jobsRoutes, { prefix: '/api/jobs' })
   app.register(chatRoutes, { prefix: '/api/chat' })
+  app.register(scanRunsRoutes, {
+    prefix: '/api/v1/scan-runs',
+    repository: options.scanRepository ?? new PrismaScanRepository(prisma),
+  })
 
   return app
 }
