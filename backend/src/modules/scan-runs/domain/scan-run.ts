@@ -1,7 +1,8 @@
-export type ScanRunStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
+export type ScanRunStatus = 'QUEUED' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
 
 export type ScanStage =
   | 'DISCOVERING'
+  | 'AI_FILTERING'
   | 'DOWNLOADING_DOCUMENTS'
   | 'DISCOVERING_ASSETS'
   | 'DOWNLOADING_ASSETS'
@@ -10,6 +11,7 @@ export type ScanStage =
 
 export const scanStages: readonly ScanStage[] = [
   'DISCOVERING',
+  'AI_FILTERING',
   'DOWNLOADING_DOCUMENTS',
   'DISCOVERING_ASSETS',
   'DOWNLOADING_ASSETS',

@@ -19,7 +19,7 @@ export class PrismaScanRepository {
           requestKey: input.requestKey,
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
           timezone: 'Europe/Istanbul',
-          outbox: { create: {} },
+          outbox: { create: { requestKey: input.requestKey } },
         },
       })
     })

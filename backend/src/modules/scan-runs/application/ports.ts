@@ -71,7 +71,7 @@ export interface ScanRunDetailDto {
   }
   stages: Array<{
     stage: ScanStage
-    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+    status: 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'FAILED'
     completedItems: number
     totalItems: number
     failedItems: number

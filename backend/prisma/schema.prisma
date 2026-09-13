@@ -15,6 +15,7 @@ enum ScanTrigger {
 enum ScanRunStatus {
   QUEUED
   RUNNING
+  AWAITING_RETRY
   COMPLETED
   PARTIAL
   FAILED
@@ -23,6 +24,7 @@ enum ScanRunStatus {
 
 enum ScanStage {
   DISCOVERING
+  AI_FILTERING
   DOWNLOADING_DOCUMENTS
   DISCOVERING_ASSETS
   DOWNLOADING_ASSETS
@@ -51,8 +53,60 @@ enum AssetRole {
 enum StageExecutionStatus {
   PENDING
   RUNNING
+  AWAITING_RETRY
   COMPLETED
   FAILED
+}
+
+enum FilterDecision {
+  IN
+  OUT
+  MAYBE
+}
+
+enum FinalFilterDecision {
+  IN
+  OUT
+}
+
+enum AiJobKind {
+  DOCUMENT_FILTER
+}
+
+enum AiJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  AWAITING_RETRY
+  FAILED
+}
+
+enum AiCallPhase {
+  TITLE
+  CONTENT
+}
+
+enum AiCallStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AiErrorCategory {
+  AUTHENTICATION
+  PERMISSION
+  QUOTA_EXCEEDED
+  RATE_LIMITED
+  PROVIDER_UNAVAILABLE
+  TIMEOUT
+  INVALID_RESPONSE
+  CONTENT_REJECTED
+  UNKNOWN_PROVIDER_ERROR
+}
+
+enum ScanCommandType {
+  START_SCAN
+  RETRY_AI_FILTER
 }
 
 enum FetchAttemptStatus {
@@ -85,23 +139,27 @@ model ScanRun {
   editions          GazetteEdition[]
   stages            StageExecution[]
   attempts          FetchAttempt[]
-  outbox            ScanOutbox?
+  outbox            ScanOutbox[]
+  aiJobs            AiJob[]
 
   @@index([targetDate, createdAt])
   @@index([status, createdAt])
 }
 
 model ScanOutbox {
-  id           String    @id @default(uuid())
-  scanRunId    String    @unique
-  scanRun      ScanRun   @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
-  attempts     Int       @default(0)
-  availableAt  DateTime  @default(now())
+  id           String          @id @default(uuid())
+  scanRunId    String
+  scanRun      ScanRun         @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  commandType  ScanCommandType @default(START_SCAN)
+  requestKey   String          @unique
+  attempts     Int             @default(0)
+  availableAt  DateTime        @default(now())
   dispatchedAt DateTime?
   lastError    String?
-  createdAt    DateTime  @default(now())
+  createdAt    DateTime        @default(now())
 
   @@index([dispatchedAt, availableAt])
+  @@index([scanRunId, createdAt])
 }
 
 model GazetteEdition {
@@ -119,19 +177,88 @@ model GazetteEdition {
 }
 
 model CollectedDocument {
-  id               String           @id @default(uuid())
+  id               String                   @id @default(uuid())
   editionId        String
-  edition          GazetteEdition   @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  edition          GazetteEdition           @relation(fields: [editionId], references: [id], onDelete: Cascade)
   title            String
   documentType     String?
   sourceUrl        String
   publicationOrder Int
   storedObjectId   String?
-  storedObject     StoredObject?    @relation(fields: [storedObjectId], references: [id])
-  validationStatus ValidationStatus @default(PENDING)
+  storedObject     StoredObject?            @relation(fields: [storedObjectId], references: [id])
+  validationStatus ValidationStatus         @default(PENDING)
   assets           DocumentAsset[]
+  filterDecisions  DocumentFilterDecision[]
 
   @@unique([editionId, sourceUrl])
+}
+
+model AiJob {
+  id                   String                   @id @default(uuid())
+  scanRunId            String
+  scanRun              ScanRun                  @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  kind                 AiJobKind
+  status               AiJobStatus              @default(QUEUED)
+  model                String
+  titlePromptVersion   String
+  contentPromptVersion String
+  configurationHash    String                   @db.Char(64)
+  lastErrorCategory    AiErrorCategory?
+  lastErrorMessage     String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  calls                AiCall[]
+  decisions            DocumentFilterDecision[]
+
+  @@unique([scanRunId, kind])
+  @@index([status, createdAt])
+}
+
+model AiCall {
+  id                String           @id @default(uuid())
+  aiJobId           String
+  aiJob             AiJob            @relation(fields: [aiJobId], references: [id], onDelete: Cascade)
+  phase             AiCallPhase
+  batchKey          String
+  attemptNo         Int
+  status            AiCallStatus     @default(RUNNING)
+  providerRequestId String?
+  inputHash         String           @db.Char(64)
+  latencyMs         Int?
+  inputTokens       Int?
+  outputTokens      Int?
+  errorCategory     AiErrorCategory?
+  providerStatus    Int?
+  errorMessage      String?
+  startedAt         DateTime         @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+
+  @@unique([aiJobId, phase, batchKey, attemptNo])
+  @@index([aiJobId, createdAt])
+}
+
+model DocumentFilterDecision {
+  id                String               @id @default(uuid())
+  aiJobId           String
+  aiJob             AiJob                @relation(fields: [aiJobId], references: [id], onDelete: Cascade)
+  documentId        String
+  document          CollectedDocument    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  titleDecision     FilterDecision
+  titleReason       String
+  titleConfidence   Float
+  contentDecision   FinalFilterDecision?
+  contentReason     String?
+  contentConfidence Float?
+  finalDecision     FinalFilterDecision?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@unique([aiJobId, documentId])
+  @@index([documentId])
+  @@index([aiJobId, finalDecision])
 }
 
 model StoredObject {
