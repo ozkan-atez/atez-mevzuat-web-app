@@ -1,0 +1,123 @@
+import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { PrismaClient } from '@prisma/client'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { buildApp } from '../../src/app'
+import { executeScanRun } from '../../src/modules/scan-runs/application/execute-scan-run'
+import type { DownloadedFile, OfficialHttp } from '../../src/modules/scan-runs/application/ports'
+import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
+import { S3ObjectStore } from '../../src/modules/scan-runs/infrastructure/s3-object-store'
+import { fixtureFile } from '../helpers/files'
+
+const s3Config = {
+  endpoint: 'http://localhost:59000',
+  region: 'eu-central-1',
+  bucket: 'resmi-gazete-test',
+  accessKeyId: 'atez-local-access',
+  secretAccessKey: 'atez-local-secret-change-me',
+  forcePathStyle: true,
+}
+
+class FixtureOfficialHttp implements OfficialHttp {
+  constructor(private readonly indexHtml: string, private readonly documentHtml: string) {}
+
+  async download(url: string, _directory: string): Promise<DownloadedFile> {
+    const pathname = new URL(url).pathname
+    let body: string | Buffer
+    let mediaType: string
+    if (pathname.endsWith('20260711.htm') || pathname === '/11.07.2026') {
+      body = this.indexHtml
+      mediaType = 'text/html'
+    } else if (pathname.endsWith('20260711-1.htm')) {
+      body = this.documentHtml
+      mediaType = 'text/html'
+    } else if (pathname.endsWith('.htm')) {
+      body = '<!doctype html><html><body>Belge</body></html>'
+      mediaType = 'text/html'
+    } else if (pathname.endsWith('.pdf')) {
+      body = `%PDF-1.7\n${url}`
+      mediaType = 'application/pdf'
+    } else {
+      body = Buffer.from(`fixture-image:${url}`)
+      mediaType = pathname.endsWith('.gif') ? 'image/gif' : pathname.endsWith('.webp') ? 'image/webp' : 'image/png'
+    }
+    return { ...(await fixtureFile(body, mediaType)), sourceUrl: url }
+  }
+}
+
+const prisma = new PrismaClient()
+const repository = new PrismaScanRepository(prisma)
+const objectStore = new S3ObjectStore(s3Config)
+const s3 = new S3Client({
+  endpoint: s3Config.endpoint,
+  region: s3Config.region,
+  forcePathStyle: true,
+  credentials: { accessKeyId: s3Config.accessKeyId, secretAccessKey: s3Config.secretAccessKey },
+})
+let http: FixtureOfficialHttp
+
+describe('manual scan acceptance', () => {
+  beforeAll(async () => {
+    const fixtureRoot = resolve('test/fixtures/resmi-gazete/2026-07-11')
+    http = new FixtureOfficialHttp(
+      await readFile(resolve(fixtureRoot, 'index.html'), 'utf8'),
+      await readFile(resolve(fixtureRoot, 'document.html'), 'utf8'),
+    )
+    await objectStore.ensureBucket()
+  })
+
+  beforeEach(async () => {
+    await prisma.scanRun.deleteMany()
+    await prisma.storedObject.deleteMany()
+  })
+
+  afterAll(async () => {
+    await prisma.$disconnect()
+    s3.destroy()
+  })
+
+  it('archives a complete run and reuses content on a same-date rescan', async () => {
+    const app = await buildApp({ scanRepository: repository })
+    const requestKey = crypto.randomUUID()
+    const create = () => app.inject({
+      method: 'POST',
+      url: '/api/v1/scan-runs',
+      headers: { 'idempotency-key': requestKey },
+      payload: { trigger: 'MANUAL', targetDate: '2026-07-11' },
+    })
+
+    const firstResponse = await create()
+    const duplicateResponse = await create()
+    const firstRunId = firstResponse.json<{ runId: string }>().runId
+    expect(duplicateResponse.json<{ runId: string }>().runId).toBe(firstRunId)
+
+    await executeScanRun(firstRunId, { repository, http, objectStore, maxRunBytes: 10_000_000n })
+    const finalRun = await repository.getRun(firstRunId)
+    expect(finalRun?.status).toBe('COMPLETED')
+    expect(finalRun?.editions.map((edition) => edition.type)).toEqual(['MAIN', 'SUPPLEMENT', 'SUPPLEMENT'])
+    expect(finalRun?.counts.documents).toBe(4)
+    expect(finalRun?.counts.assets).toBe(5)
+
+    const storedRun = await prisma.scanRun.findUniqueOrThrow({ where: { id: firstRunId } })
+    expect(storedRun.manifestObjectKey).toBeTruthy()
+    await expect(s3.send(new HeadObjectCommand({ Bucket: s3Config.bucket, Key: storedRun.manifestObjectKey! }))).resolves.toBeTruthy()
+    const objectsAfterFirstRun = await prisma.storedObject.findMany()
+    expect(objectsAfterFirstRun.length).toBeGreaterThan(0)
+    expect(objectsAfterFirstRun.every((object) => /^[0-9a-f]{64}$/.test(object.sha256))).toBe(true)
+    expect(objectsAfterFirstRun.every((object) => object.objectKey.includes(object.sha256))).toBe(true)
+
+    const secondResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/scan-runs',
+      headers: { 'idempotency-key': crypto.randomUUID() },
+      payload: { trigger: 'MANUAL', targetDate: '2026-07-11' },
+    })
+    const secondRunId = secondResponse.json<{ runId: string }>().runId
+    expect(secondRunId).not.toBe(firstRunId)
+    await executeScanRun(secondRunId, { repository, http, objectStore, maxRunBytes: 10_000_000n })
+
+    expect(await prisma.storedObject.count()).toBe(objectsAfterFirstRun.length)
+    await app.close()
+  })
+})
