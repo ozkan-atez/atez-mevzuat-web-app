@@ -16,13 +16,14 @@ export function useScanRun(runId: string | undefined): ScanRunState {
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
-    if (!runId) return
+  const load = useCallback(async (): Promise<ScanRunDetail | null> => {
+    if (!runId) return null
     try {
       const nextRun = await getScanRun(runId)
       setRun(nextRun)
       setNotFound(false)
       setError(null)
+      return nextRun
     } catch (caught) {
       if (caught instanceof ScanApiError && caught.status === 404) {
         setRun(null)
@@ -30,10 +31,13 @@ export function useScanRun(runId: string | undefined): ScanRunState {
       } else {
         setError(caught instanceof Error ? caught.message : 'Tarama bilgileri alınamadı')
       }
+      return null
     } finally {
       setIsLoading(false)
     }
   }, [runId])
+
+  const refresh = useCallback(async () => { await load() }, [load])
 
   useEffect(() => {
     let disposed = false
@@ -42,12 +46,19 @@ export function useScanRun(runId: string | undefined): ScanRunState {
 
     const startPolling = () => {
       if (pollingTimer || disposed) return
-      pollingTimer = setInterval(() => void refresh(), 5_000)
+      pollingTimer = setInterval(() => {
+        void load().then((nextRun) => {
+          if (nextRun && terminalScanStatuses.has(nextRun.status) && pollingTimer) {
+            clearInterval(pollingTimer)
+            pollingTimer = null
+          }
+        })
+      }, 5_000)
     }
 
     const connect = async () => {
-      await refresh()
-      if (disposed || !runId) return
+      const initialRun = await load()
+      if (disposed || !runId || (initialRun && terminalScanStatuses.has(initialRun.status))) return
       try {
         eventSource = new EventSource(`/api/v1/scan-runs/${runId}/events`)
         eventSource.addEventListener('scan.snapshot', (event) => {
@@ -71,7 +82,7 @@ export function useScanRun(runId: string | undefined): ScanRunState {
       eventSource?.close()
       if (pollingTimer) clearInterval(pollingTimer)
     }
-  }, [refresh, runId])
+  }, [load, runId])
 
   return { run, isLoading, notFound, error, refresh }
 }

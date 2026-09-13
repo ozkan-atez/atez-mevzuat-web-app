@@ -2,12 +2,12 @@ import { AlertCircle, Check, Circle, LoaderCircle } from 'lucide-react'
 import type { ScanRunDetail, ScanStage, StageExecutionStatus } from '../scans/types'
 
 const steps: Array<{ stage: ScanStage; title: string; description: string }> = [
-  { stage: 'DISCOVERING', title: 'Yayınlar keşfediliyor', description: 'Ana sayı ve mükerrer yayın bağlantıları bulunuyor.' },
+  { stage: 'DISCOVERING', title: 'Resmî Gazete yayınları bulunuyor', description: 'Ana sayı ve mükerrer yayın bağlantıları bulunuyor.' },
   { stage: 'DOWNLOADING_DOCUMENTS', title: 'Belgeler indiriliyor', description: 'Resmî Gazete belgeleri güvenli biçimde arşivleniyor.' },
-  { stage: 'DISCOVERING_ASSETS', title: 'Belge varlıkları keşfediliyor', description: 'Belge içindeki resim ve ek dosya bağlantıları çıkarılıyor.' },
+  { stage: 'DISCOVERING_ASSETS', title: 'Belge ekleri bulunuyor', description: 'Belge içindeki resim ve ek dosya bağlantıları çıkarılıyor.' },
   { stage: 'DOWNLOADING_ASSETS', title: 'Varlıklar indiriliyor', description: 'Keşfedilen resim ve ek dosyalar nesne deposuna yazılıyor.' },
-  { stage: 'VALIDATING', title: 'Arşiv doğrulanıyor', description: 'İndirilen içeriklerin türü, boyutu ve bütünlüğü kontrol ediliyor.' },
-  { stage: 'WRITING_MANIFEST', title: 'Manifest hazırlanıyor', description: 'Çalışmanın denetlenebilir dosya envanteri oluşturuluyor.' },
+  { stage: 'VALIDATING', title: 'Dosyalar doğrulanıyor', description: 'İndirilen içeriklerin türü, boyutu ve bütünlüğü kontrol ediliyor.' },
+  { stage: 'WRITING_MANIFEST', title: 'Tarama kaydı tamamlanıyor', description: 'Çalışmanın denetlenebilir dosya envanteri oluşturuluyor.' },
 ]
 
 function resolveStatus(run: ScanRunDetail, stage: ScanStage): StageExecutionStatus {

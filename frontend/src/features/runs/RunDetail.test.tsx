@@ -38,4 +38,21 @@ describe('RunDetail', () => {
     expect(await screen.findByText('Tarama bulunamadı')).toBeVisible()
     expect(screen.queryByText('PET Resin')).not.toBeInTheDocument()
   })
+
+  it('does not open a live connection for an already completed run', async () => {
+    const run = {
+      id: 'run-1', status: 'COMPLETED', currentStage: 'WRITING_MANIFEST', targetDate: '2026-07-11',
+      startedAt: null, completedAt: '2026-07-11T05:00:00.000Z', errorSummary: null,
+      counts: { editions: 0, documents: 0, assets: 0, completedItems: 1, totalItems: 1, failedItems: 0 },
+      stages: [], editions: [],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(run), { status: 200 })))
+    const EventSourceConstructor = vi.fn()
+    vi.stubGlobal('EventSource', EventSourceConstructor)
+
+    renderDetail()
+
+    expect(await screen.findByText('Tamamlandı')).toBeVisible()
+    expect(EventSourceConstructor).not.toHaveBeenCalled()
+  })
 })
