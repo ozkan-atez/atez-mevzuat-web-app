@@ -23,6 +23,7 @@ class MemoryObjectStore implements ObjectStore {
   readonly runFiles: string[] = []
   async ensureBucket(): Promise<void> {}
   async exists(): Promise<boolean> { return false }
+  async getContent(): Promise<Buffer> { throw new Error('Object is not available') }
   async putContent(file: DownloadedFile): Promise<StoredBlob> {
     return { ...file, bucket: 'test', objectKey: `objects/${file.sha256}` }
   }

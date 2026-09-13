@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import {
   CreateBucketCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -101,6 +102,12 @@ export class S3ObjectStore implements ObjectStore {
       if (isMissing(error)) return false
       throw error
     }
+  }
+
+  async getContent(key: string): Promise<Buffer> {
+    const response = await this.client.send(new GetObjectCommand({ Bucket: this.config.bucket, Key: key }))
+    if (!response.Body) throw new Error(`Stored object has no body: ${key}`)
+    return Buffer.from(await response.Body.transformToByteArray())
   }
 }
 

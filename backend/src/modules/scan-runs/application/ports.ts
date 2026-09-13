@@ -194,6 +194,7 @@ export interface ObjectStore {
   putContent(file: DownloadedFile): Promise<StoredBlob>
   putRunFile(key: string, body: Buffer, mediaType: string): Promise<StoredBlob>
   exists(key: string): Promise<boolean>
+  getContent(key: string): Promise<Buffer>
 }
 
 export interface OfficialHttp {
@@ -235,4 +236,6 @@ export interface ScanRepository {
   markFilterRunning(runId: string, jobId: string, totalItems: number): Promise<void>
   markFilterAwaitingRetry(runId: string, jobId: string, error: AiCallFailure): Promise<void>
   completeFilter(runId: string, jobId: string): Promise<void>
+  nextAiCallAttempt(aiJobId: string, phase: 'TITLE' | 'CONTENT', batchKey: string): Promise<number>
+  addDownloadedBytes(runId: string, byteSize: bigint): Promise<void>
 }

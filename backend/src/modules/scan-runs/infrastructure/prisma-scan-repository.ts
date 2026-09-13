@@ -414,6 +414,15 @@ export class PrismaScanRepository {
     ])
   }
 
+  async nextAiCallAttempt(aiJobId: string, phase: 'TITLE' | 'CONTENT', batchKey: string): Promise<number> {
+    const aggregate = await this.prisma.aiCall.aggregate({ where: { aiJobId, phase, batchKey }, _max: { attemptNo: true } })
+    return (aggregate._max.attemptNo ?? 0) + 1
+  }
+
+  async addDownloadedBytes(runId: string, byteSize: bigint): Promise<void> {
+    await this.prisma.scanRun.update({ where: { id: runId }, data: { downloadedBytes: { increment: byteSize } } })
+  }
+
   async completedSnapshot(runId: string): Promise<CompletedRunSnapshot> {
     const run = await this.getRun(runId)
     if (!run) throw new Error(`Scan run not found: ${runId}`)
