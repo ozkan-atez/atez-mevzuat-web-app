@@ -8,6 +8,13 @@ import { scanRunsRoutes } from './modules/scan-runs/scan-runs.routes'
 
 interface BuildAppOptions {
   scanRepository?: PrismaScanRepository
+  healthChecks?: HealthChecks
+}
+
+export interface HealthChecks {
+  database: () => Promise<void>
+  queue: () => Promise<void>
+  objectStore: () => Promise<void>
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -20,9 +27,27 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     credentials: true,
   })
 
-  // Global Health Check
-  app.get('/api/health', async (request, reply) => {
-    return { status: 'ok', timestamp: new Date().toISOString() }
+  app.get('/api/health', async (_request, reply) => {
+    const entries = Object.entries(options.healthChecks ?? {
+      database: async () => undefined,
+      queue: async () => undefined,
+      objectStore: async () => undefined,
+    }) as Array<[keyof HealthChecks, () => Promise<void>]>
+    const results = await Promise.all(entries.map(async ([name, check]) => {
+      try {
+        await check()
+        return [name, 'ready'] as const
+      } catch {
+        return [name, 'unavailable'] as const
+      }
+    }))
+    const dependencies = Object.fromEntries(results)
+    const ready = results.every(([, status]) => status === 'ready')
+    return reply.code(ready ? 200 : 503).send({
+      status: ready ? 'ready' : 'unavailable',
+      dependencies,
+      timestamp: new Date().toISOString(),
+    })
   })
 
   // Register Modules

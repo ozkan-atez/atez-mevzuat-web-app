@@ -1,12 +1,13 @@
 :80 {
-    # 1. Statik dosyaları (Vite çıktısı) sunar
-    root * /srv
     encode gzip
-    
-    # 2. React Router için SPA yönlendirmesi (dosya yoksa index.html'e düşür)
-    try_files {path} /index.html
-    file_server
 
-    # 3. API İsteklerini Fastify Backend'ine Proxy Yapar
-    reverse_proxy /api/* backend:3001
+    handle /api/* {
+        reverse_proxy backend:3001
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
 }

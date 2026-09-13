@@ -1,44 +1,44 @@
-version: '3.8'
-
 services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: atez
-      POSTGRES_PASSWORD: atezpassword
-      POSTGRES_DB: atez_db
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
-
-  gotenberg:
-    image: gotenberg/gotenberg:8
-    command:
-      - "gotenberg"
-    restart: unless-stopped
-
   backend:
     build:
       context: ./backend
-    environment:
-      DATABASE_URL: "postgresql://atez:atezpassword@db:5432/atez_db?schema=public"
-      GOTENBERG_URL: "http://gotenberg:3000"
+    command: ["sh", "-c", "npm run prisma:migrate && npm run start:api"]
+    environment: &backend-environment
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       PORT: "3001"
-    depends_on:
-      - db
-      - gotenberg
+      SCAN_TIMEZONE: ${SCAN_TIMEZONE:-Europe/Istanbul}
+      SOURCE_HOSTS: ${SOURCE_HOSTS:-resmigazete.gov.tr,www.resmigazete.gov.tr}
+      SOURCE_DELAY_MS: ${SOURCE_DELAY_MS:-750}
+      SOURCE_TIMEOUT_MS: ${SOURCE_TIMEOUT_MS:-30000}
+      SOURCE_MAX_ATTEMPTS: ${SOURCE_MAX_ATTEMPTS:-3}
+      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-104857600}
+      MAX_RUN_BYTES: ${MAX_RUN_BYTES:-2147483648}
+      S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT is required}
+      S3_REGION: ${S3_REGION:?S3_REGION is required}
+      S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is required}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID is required}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY is required}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
     restart: unless-stopped
 
-  # Caddy sunucusu (frontend statik dosyaları + backend proxy'si)
+  worker:
+    build:
+      context: ./backend
+    command: ["npm", "run", "start:worker"]
+    environment: *backend-environment
+    restart: unless-stopped
+
   web:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
     ports:
-      - "8888:80" # Port çakışmalarını önlemek için 8888 portunu açıyoruz
+      - "8888:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  pgdata:
