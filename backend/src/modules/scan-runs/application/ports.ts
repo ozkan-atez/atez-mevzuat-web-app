@@ -185,6 +185,18 @@ export interface AiCallFailure {
   message: string
 }
 
+export interface PreviousSourceConfiguration {
+  model: string
+  promptVersion: string
+  configurationHash: string
+}
+
+export interface PreviousSourceJobRecord {
+  id: string
+  documentId: string
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+}
+
 export interface CompletedRunSnapshot {
   run: ScanRunDetailDto
   index: { sourceUrl: string; objectKey: string; sha256: string }
@@ -236,7 +248,7 @@ export interface ScanQueue {
 export interface ScanCommand {
   outboxId: string
   runId: string
-  type: 'START_SCAN' | 'RETRY_AI_FILTER'
+  type: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES'
 }
 
 export interface ScanRepository {
@@ -273,4 +285,5 @@ export interface ScanRepository {
   nextAiCallAttempt(aiJobId: string, phase: 'TITLE' | 'CONTENT', batchKey: string): Promise<number>
   addDownloadedBytes(runId: string, byteSize: bigint): Promise<void>
   requestAiFilterRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }>
+  ensurePreviousSourceJobs(runId: string, configuration: PreviousSourceConfiguration): Promise<PreviousSourceJobRecord[]>
 }

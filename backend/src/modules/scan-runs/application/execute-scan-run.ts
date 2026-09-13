@@ -18,7 +18,7 @@ interface Dependencies {
   gemini: { model: string; maxAttempts: number; maxContentBytes: number }
 }
 
-export async function executeScanRun(runId: string, dependencies: Dependencies, command: 'START_SCAN' | 'RETRY_AI_FILTER' = 'START_SCAN'): Promise<void> {
+export async function executeScanRun(runId: string, dependencies: Dependencies, command: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES' = 'START_SCAN'): Promise<void> {
   const { repository, http, objectStore, maxRunBytes } = dependencies
   const run = await repository.getExecutionRun(runId)
   if (!run) throw new Error(`Scan run not found: ${runId}`)

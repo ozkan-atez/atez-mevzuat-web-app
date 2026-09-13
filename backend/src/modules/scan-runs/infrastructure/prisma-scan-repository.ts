@@ -12,6 +12,8 @@ import type {
   FilterConfiguration,
   FilterDocumentRecord,
   FilterProgress,
+  PreviousSourceConfiguration,
+  PreviousSourceJobRecord,
   ScanRunDetailDto,
   ScanRunSummaryDto,
   StartAiCallInput,
@@ -48,7 +50,7 @@ export class PrismaScanRepository {
     }
   }
 
-  async claimPendingOutbox(limit: number): Promise<Array<{ id: string; scanRunId: string; commandType: 'START_SCAN' | 'RETRY_AI_FILTER'; attempts: number }>> {
+  async claimPendingOutbox(limit: number): Promise<Array<{ id: string; scanRunId: string; commandType: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES'; attempts: number }>> {
     return this.prisma.scanOutbox.findMany({
       where: { dispatchedAt: null, availableAt: { lte: new Date() } },
       orderBy: { createdAt: 'asc' },
@@ -472,6 +474,34 @@ export class PrismaScanRepository {
         tx.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { status: 'PENDING', errorSummary: null } }),
       ])
       return { runId, commandId: command.id, status: 'QUEUED' as const }
+    })
+  }
+
+  async ensurePreviousSourceJobs(runId: string, configuration: PreviousSourceConfiguration): Promise<PreviousSourceJobRecord[]> {
+    const documents = await this.prisma.collectedDocument.findMany({
+      where: {
+        edition: { scanRunId: runId },
+        filterDecisions: { some: { aiJob: { kind: 'DOCUMENT_FILTER' }, finalDecision: 'IN' } },
+      },
+      orderBy: [{ edition: { discoveryOrder: 'asc' } }, { publicationOrder: 'asc' }],
+      select: { id: true },
+    })
+    if (documents.length > 0) {
+      await this.prisma.previousSourceJob.createMany({
+        data: documents.map((document) => ({
+          scanRunId: runId,
+          documentId: document.id,
+          model: configuration.model,
+          promptVersion: configuration.promptVersion,
+          configurationHash: configuration.configurationHash,
+        })),
+        skipDuplicates: true,
+      })
+    }
+    return this.prisma.previousSourceJob.findMany({
+      where: { scanRunId: runId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, documentId: true, status: true },
     })
   }
 

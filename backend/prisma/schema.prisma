@@ -29,6 +29,7 @@ enum ScanStage {
   DISCOVERING_ASSETS
   DOWNLOADING_ASSETS
   VALIDATING
+  DISCOVERING_PREVIOUS_SOURCES
   WRITING_MANIFEST
 }
 
@@ -107,6 +108,30 @@ enum AiErrorCategory {
 enum ScanCommandType {
   START_SCAN
   RETRY_AI_FILTER
+  RETRY_PREVIOUS_SOURCES
+}
+
+enum PreviousSourceJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  AWAITING_RETRY
+  FAILED
+}
+
+enum PreviousSourceOutcome {
+  NOT_REQUIRED
+  VERIFIED
+  NOT_FOUND
+  AMBIGUOUS
+}
+
+enum PreviousSourceRelationship {
+  AMENDS
+  REPEALS
+  EXTENDS
+  IMPLEMENTS
+  NONE
 }
 
 enum FetchAttemptStatus {
@@ -115,32 +140,33 @@ enum FetchAttemptStatus {
 }
 
 model ScanRun {
-  id                String           @id @default(uuid())
-  requestKey        String           @unique
-  trigger           ScanTrigger      @default(MANUAL)
-  targetDate        DateTime         @db.Date
-  timezone          String           @default("Europe/Istanbul")
-  status            ScanRunStatus    @default(QUEUED)
-  currentStage      ScanStage?
-  totalItems        Int              @default(0)
-  completedItems    Int              @default(0)
-  failedItems       Int              @default(0)
-  downloadedBytes   BigInt           @default(0)
-  errorSummary      String?
-  queueJobId        String?
-  indexSourceUrl    String?
-  indexObjectKey    String?
-  indexSha256       String?
-  manifestObjectKey String?
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  editions          GazetteEdition[]
-  stages            StageExecution[]
-  attempts          FetchAttempt[]
-  outbox            ScanOutbox[]
-  aiJobs            AiJob[]
+  id                 String              @id @default(uuid())
+  requestKey         String              @unique
+  trigger            ScanTrigger         @default(MANUAL)
+  targetDate         DateTime            @db.Date
+  timezone           String              @default("Europe/Istanbul")
+  status             ScanRunStatus       @default(QUEUED)
+  currentStage       ScanStage?
+  totalItems         Int                 @default(0)
+  completedItems     Int                 @default(0)
+  failedItems        Int                 @default(0)
+  downloadedBytes    BigInt              @default(0)
+  errorSummary       String?
+  queueJobId         String?
+  indexSourceUrl     String?
+  indexObjectKey     String?
+  indexSha256        String?
+  manifestObjectKey  String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  editions           GazetteEdition[]
+  stages             StageExecution[]
+  attempts           FetchAttempt[]
+  outbox             ScanOutbox[]
+  aiJobs             AiJob[]
+  previousSourceJobs PreviousSourceJob[]
 
   @@index([targetDate, createdAt])
   @@index([status, createdAt])
@@ -177,18 +203,19 @@ model GazetteEdition {
 }
 
 model CollectedDocument {
-  id               String                   @id @default(uuid())
-  editionId        String
-  edition          GazetteEdition           @relation(fields: [editionId], references: [id], onDelete: Cascade)
-  title            String
-  documentType     String?
-  sourceUrl        String
-  publicationOrder Int
-  storedObjectId   String?
-  storedObject     StoredObject?            @relation(fields: [storedObjectId], references: [id])
-  validationStatus ValidationStatus         @default(PENDING)
-  assets           DocumentAsset[]
-  filterDecisions  DocumentFilterDecision[]
+  id                String                   @id @default(uuid())
+  editionId         String
+  edition           GazetteEdition           @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  title             String
+  documentType      String?
+  sourceUrl         String
+  publicationOrder  Int
+  storedObjectId    String?
+  storedObject      StoredObject?            @relation(fields: [storedObjectId], references: [id])
+  validationStatus  ValidationStatus         @default(PENDING)
+  assets            DocumentAsset[]
+  filterDecisions   DocumentFilterDecision[]
+  previousSourceJob PreviousSourceJob?
 
   @@unique([editionId, sourceUrl])
 }
@@ -262,16 +289,18 @@ model DocumentFilterDecision {
 }
 
 model StoredObject {
-  id        String              @id @default(uuid())
-  sha256    String              @unique @db.Char(64)
-  bucket    String
-  objectKey String              @unique
-  mediaType String
-  byteSize  BigInt
-  versionId String?
-  createdAt DateTime            @default(now())
-  documents CollectedDocument[]
-  assets    DocumentAsset[]
+  id                      String                   @id @default(uuid())
+  sha256                  String                   @unique @db.Char(64)
+  bucket                  String
+  objectKey               String                   @unique
+  mediaType               String
+  byteSize                BigInt
+  versionId               String?
+  createdAt               DateTime                 @default(now())
+  documents               CollectedDocument[]
+  assets                  DocumentAsset[]
+  previousSourceDocuments PreviousSourceDocument[]
+  previousSourceAssets    PreviousSourceAsset[]
 }
 
 model DocumentAsset {
@@ -286,6 +315,115 @@ model DocumentAsset {
   validationStatus ValidationStatus  @default(PENDING)
 
   @@unique([documentId, sourceUrl])
+}
+
+model PreviousSourceJob {
+  id                         String                      @id @default(uuid())
+  scanRunId                  String
+  scanRun                    ScanRun                     @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  documentId                 String                      @unique
+  document                   CollectedDocument           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status                     PreviousSourceJobStatus     @default(QUEUED)
+  outcome                    PreviousSourceOutcome?
+  model                      String
+  promptVersion              String
+  configurationHash          String                      @db.Char(64)
+  needsPreviousSource        Boolean?
+  relationship               PreviousSourceRelationship?
+  targetRegulationTitle      String?
+  targetRegulationIdentifier String?
+  targetRegulationType       String?
+  targetInstitution          String?
+  targetArticleReferences    Json?
+  queryCandidates            Json?
+  reason                     String?
+  lastErrorCategory          AiErrorCategory?
+  lastErrorMessage           String?
+  startedAt                  DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  calls                      PreviousSourceCall[]
+  candidates                 PreviousSourceCandidate[]
+  source                     PreviousSourceDocument?
+
+  @@index([scanRunId, status])
+}
+
+model PreviousSourceCall {
+  id                String            @id @default(uuid())
+  jobId             String
+  job               PreviousSourceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  attemptNo         Int
+  status            AiCallStatus      @default(RUNNING)
+  providerRequestId String?
+  inputHash         String            @db.Char(64)
+  latencyMs         Int?
+  inputTokens       Int?
+  outputTokens      Int?
+  errorCategory     AiErrorCategory?
+  providerStatus    Int?
+  errorMessage      String?
+  startedAt         DateTime          @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime          @default(now())
+
+  @@unique([jobId, attemptNo])
+  @@index([jobId, createdAt])
+}
+
+model PreviousSourceCandidate {
+  id                   String            @id @default(uuid())
+  jobId                String
+  job                  PreviousSourceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  query                String
+  title                String
+  publicationDate      DateTime          @db.Date
+  gazetteNo            String?
+  mukerrer             String?
+  url                  String
+  documentUrl          String?
+  regulationType       String?
+  exactIdentifierMatch Boolean           @default(false)
+  titleScore           Float             @default(0)
+  score                Float             @default(0)
+  reasons              Json
+  selected             Boolean           @default(false)
+  createdAt            DateTime          @default(now())
+
+  @@unique([jobId, url])
+  @@index([jobId, score])
+}
+
+model PreviousSourceDocument {
+  id               String                @id @default(uuid())
+  jobId            String                @unique
+  job              PreviousSourceJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  title            String
+  publicationDate  DateTime              @db.Date
+  gazetteNo        String?
+  mukerrer         String?
+  sourceUrl        String
+  storedObjectId   String
+  storedObject     StoredObject          @relation(fields: [storedObjectId], references: [id])
+  validationStatus ValidationStatus      @default(PENDING)
+  createdAt        DateTime              @default(now())
+  assets           PreviousSourceAsset[]
+}
+
+model PreviousSourceAsset {
+  id               String                 @id @default(uuid())
+  previousSourceId String
+  previousSource   PreviousSourceDocument @relation(fields: [previousSourceId], references: [id], onDelete: Cascade)
+  storedObjectId   String
+  storedObject     StoredObject           @relation(fields: [storedObjectId], references: [id])
+  sourceUrl        String
+  referenceText    String?
+  role             AssetRole
+  validationStatus ValidationStatus       @default(PENDING)
+  createdAt        DateTime               @default(now())
+
+  @@unique([previousSourceId, sourceUrl])
 }
 
 model StageExecution {

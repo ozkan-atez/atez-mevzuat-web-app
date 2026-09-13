@@ -18,9 +18,12 @@ describe('scan state machine', () => {
       'DISCOVERING_ASSETS',
       'DOWNLOADING_ASSETS',
       'VALIDATING',
+      'DISCOVERING_PREVIOUS_SOURCES',
       'WRITING_MANIFEST',
     ])
     expect(() => assertStageTransition('DISCOVERING', 'AI_FILTERING')).not.toThrow()
     expect(() => assertStageTransition('AI_FILTERING', 'DOWNLOADING_DOCUMENTS')).not.toThrow()
+    expect(() => assertStageTransition('VALIDATING', 'DISCOVERING_PREVIOUS_SOURCES')).not.toThrow()
+    expect(() => assertStageTransition('DISCOVERING_PREVIOUS_SOURCES', 'WRITING_MANIFEST')).not.toThrow()
   })
 })

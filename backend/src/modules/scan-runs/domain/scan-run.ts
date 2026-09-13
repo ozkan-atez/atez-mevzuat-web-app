@@ -7,6 +7,7 @@ export type ScanStage =
   | 'DISCOVERING_ASSETS'
   | 'DOWNLOADING_ASSETS'
   | 'VALIDATING'
+  | 'DISCOVERING_PREVIOUS_SOURCES'
   | 'WRITING_MANIFEST'
 
 export const scanStages: readonly ScanStage[] = [
@@ -16,6 +17,7 @@ export const scanStages: readonly ScanStage[] = [
   'DISCOVERING_ASSETS',
   'DOWNLOADING_ASSETS',
   'VALIDATING',
+  'DISCOVERING_PREVIOUS_SOURCES',
   'WRITING_MANIFEST',
 ]
 
