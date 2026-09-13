@@ -22,6 +22,8 @@ Uygulama `http://localhost:8888`, API sağlık bilgisi `http://localhost:8888/ap
 
 Yerel nesne deposundaki `resmi-gazete` bucket'ı backend ve worker tarafından idempotent biçimde oluşturulur. Aynı dosyanın tekrar indirilmesi yeni bir byte kopyası üretmez; SHA-256 anahtarıyla mevcut nesne kullanılır.
 
+Resmî Gazete sunucusu ara sertifikasını TLS el sıkışmasında göndermediği için image içinde DigiCert tarafından yayımlanan `GeoTrust TLS RSA CA G1` ara sertifikası bulunur ve Node'a ek güven zinciri olarak tanıtılır. TLS doğrulaması kapatılmaz.
+
 ## Üretim
 
 Sabit digest ile tanımlanan MinIO servisi yalnızca yerel geliştirme içindir. `docker-compose.prod.yml` yerel nesne deposu veya erişim anahtarı içermez. Üretimde `DATABASE_URL`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` ve `S3_SECRET_ACCESS_KEY` değerleri deployment secret store üzerinden verilmeli; standart S3 servisleri için `S3_FORCE_PATH_STYLE=false` kullanılmalıdır.

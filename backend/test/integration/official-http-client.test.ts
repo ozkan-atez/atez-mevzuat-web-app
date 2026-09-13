@@ -54,4 +54,19 @@ describe('OfficialHttpClient', () => {
       .rejects.toThrow('HTTP 404')
     expect(fetch).toHaveBeenCalledTimes(1)
   })
+
+  it('retries temporary network failures without weakening validation', async () => {
+    const fetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(new Response('%PDF-1.7\nvalid', { status: 200, headers: { 'content-type': 'application/pdf' } }))
+    const sleep = vi.fn().mockResolvedValue(undefined)
+    const client = new OfficialHttpClient(policy, options, { fetch, sleep, random: () => 0 })
+
+    const file = await client.download('https://www.resmigazete.gov.tr/file.pdf', await directory())
+
+    expect(file.mediaType).toBe('application/pdf')
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(sleep).toHaveBeenCalledTimes(2)
+  })
 })

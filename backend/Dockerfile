@@ -21,6 +21,7 @@ COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/prisma ./prisma
 COPY --chown=node:node --from=build /app/src ./src
+COPY --chown=node:node certs ./certs
 USER node
 EXPOSE 3001
 CMD ["npm", "run", "start:api"]

@@ -24,6 +24,8 @@ interface Dependencies {
 
 const retryableStatuses = new Set([429, 500, 502, 503, 504])
 
+class NonRetryableRequestError extends Error {}
+
 export class OfficialHttpClient implements OfficialHttp {
   private readonly fetchFn: typeof fetch
   private readonly sleep: (milliseconds: number) => Promise<void>
@@ -47,20 +49,23 @@ export class OfficialHttpClient implements OfficialHttp {
     let lastError: Error | null = null
 
     for (let attempt = 1; attempt <= this.options.maxAttempts; attempt += 1) {
+      let response: Response
       try {
-        const response = await this.requestFollowingOfficialRedirects(initial)
-        if (!response.ok) {
-          const error = new Error(`Official source returned HTTP ${response.status}`)
-          if (!retryableStatuses.has(response.status) || attempt === this.options.maxAttempts) throw error
-          lastError = error
-          await this.backoff(attempt)
-          continue
-        }
-        return await this.persistResponse(response, sourceUrl, tempDirectory)
+        response = await this.requestFollowingOfficialRedirects(initial)
       } catch (error) {
-        if (error instanceof Error && !lastError) lastError = error
-        throw error
+        if (error instanceof NonRetryableRequestError || attempt === this.options.maxAttempts) throw error
+        lastError = error instanceof Error ? error : new Error('Official network request failed')
+        await this.backoff(attempt)
+        continue
       }
+      if (!response.ok) {
+        const error = new Error(`Official source returned HTTP ${response.status}`)
+        if (!retryableStatuses.has(response.status) || attempt === this.options.maxAttempts) throw error
+        lastError = error
+        await this.backoff(attempt)
+        continue
+      }
+      return this.persistResponse(response, sourceUrl, tempDirectory)
     }
 
     throw lastError ?? new Error('Official download failed')
@@ -82,10 +87,14 @@ export class OfficialHttpClient implements OfficialHttp {
 
       if (response.status < 300 || response.status >= 400) return response
       const location = response.headers.get('location')
-      if (!location) throw new Error('Official redirect has no Location header')
-      current = this.policy.assertAllowedUrl(new URL(location, current).toString())
+      if (!location) throw new NonRetryableRequestError('Official redirect has no Location header')
+      try {
+        current = this.policy.assertAllowedUrl(new URL(location, current).toString())
+      } catch (error) {
+        throw new NonRetryableRequestError(error instanceof Error ? error.message : 'Official redirect is not allowed')
+      }
     }
-    throw new Error('Official source exceeded redirect limit')
+    throw new NonRetryableRequestError('Official source exceeded redirect limit')
   }
 
   private async throttle(): Promise<void> {
