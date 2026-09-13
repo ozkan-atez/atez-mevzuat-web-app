@@ -102,6 +102,77 @@ export interface ScanRunSummaryDto {
   counts: { editions: number; documents: number; assets: number }
 }
 
+export interface FilterConfiguration {
+  model: string
+  titlePromptVersion: string
+  contentPromptVersion: string
+  configurationHash: string
+}
+
+export interface AiJobRecord {
+  id: string
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+  configuration: FilterConfiguration
+}
+
+export interface FilterDocumentRecord {
+  id: string
+  title: string
+  sourceUrl: string
+  publicationOrder: number
+  editionLabel: string
+  storedObject: null | {
+    objectKey: string
+    sha256: string
+    mediaType: string
+    byteSize: bigint
+  }
+}
+
+export interface TitleDecision {
+  documentId: string
+  decision: 'IN' | 'OUT' | 'MAYBE'
+  reason: string
+  confidence: number
+}
+
+export interface ContentDecision {
+  documentId: string
+  decision: 'IN' | 'OUT'
+  reason: string
+  confidence: number
+}
+
+export interface StartAiCallInput {
+  aiJobId: string
+  phase: 'TITLE' | 'CONTENT'
+  batchKey: string
+  attemptNo: number
+  inputHash: string
+}
+
+export interface AiCallRecord { id: string }
+
+export interface AiCallCompletion {
+  providerRequestId: string | null
+  inputTokens: number | null
+  outputTokens: number | null
+  latencyMs: number
+}
+
+export interface FilterProgress {
+  titlePassComplete: boolean
+  unresolvedDocumentIds: string[]
+  completedContentBatchKeys: string[]
+  finalCounts: { in: number; out: number; pending: number }
+}
+
+export interface AiCallFailure {
+  category: 'AUTHENTICATION' | 'PERMISSION' | 'QUOTA_EXCEEDED' | 'RATE_LIMITED' | 'PROVIDER_UNAVAILABLE' | 'TIMEOUT' | 'INVALID_RESPONSE' | 'CONTENT_REJECTED' | 'UNKNOWN_PROVIDER_ERROR'
+  providerStatus: number | null
+  message: string
+}
+
 export interface CompletedRunSnapshot {
   run: ScanRunDetailDto
   index: { sourceUrl: string; objectKey: string; sha256: string }
@@ -153,4 +224,15 @@ export interface ScanRepository {
   completeStage(runId: string, stage: ScanStage): Promise<void>
   failStage(runId: string, stage: ScanStage, error: string): Promise<void>
   failRun(runId: string, status: 'PARTIAL' | 'FAILED', error: string): Promise<void>
+  getOrCreateDocumentFilterJob(runId: string, configuration: FilterConfiguration): Promise<AiJobRecord>
+  listFilterDocuments(runId: string): Promise<FilterDocumentRecord[]>
+  startAiCall(input: StartAiCallInput): Promise<AiCallRecord>
+  completeAiCall(callId: string, result: AiCallCompletion): Promise<void>
+  failAiCall(callId: string, error: AiCallFailure): Promise<void>
+  saveTitleDecisions(jobId: string, decisions: TitleDecision[]): Promise<void>
+  saveContentDecisions(jobId: string, batchKey: string, decisions: ContentDecision[]): Promise<void>
+  getFilterProgress(jobId: string): Promise<FilterProgress>
+  markFilterRunning(runId: string, jobId: string, totalItems: number): Promise<void>
+  markFilterAwaitingRetry(runId: string, jobId: string, error: AiCallFailure): Promise<void>
+  completeFilter(runId: string, jobId: string): Promise<void>
 }

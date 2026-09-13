@@ -1,6 +1,23 @@
-import type { PrismaClient } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
 import type { ScanRunStatus, ScanStage } from '../domain/scan-run'
-import type { CompletedRunSnapshot, DiscoveredAsset, DiscoveredEdition, ScanRunDetailDto, ScanRunSummaryDto, StoredBlob } from '../application/ports'
+import type {
+  AiCallCompletion,
+  AiCallFailure,
+  AiCallRecord,
+  AiJobRecord,
+  CompletedRunSnapshot,
+  ContentDecision,
+  DiscoveredAsset,
+  DiscoveredEdition,
+  FilterConfiguration,
+  FilterDocumentRecord,
+  FilterProgress,
+  ScanRunDetailDto,
+  ScanRunSummaryDto,
+  StartAiCallInput,
+  StoredBlob,
+  TitleDecision,
+} from '../application/ports'
 
 export class PrismaScanRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -211,6 +228,192 @@ export class PrismaScanRepository {
     }))
   }
 
+  async getOrCreateDocumentFilterJob(runId: string, configuration: FilterConfiguration): Promise<AiJobRecord> {
+    const job = await this.prisma.aiJob.upsert({
+      where: { scanRunId_kind: { scanRunId: runId, kind: 'DOCUMENT_FILTER' } },
+      create: {
+        scanRunId: runId,
+        kind: 'DOCUMENT_FILTER',
+        model: configuration.model,
+        titlePromptVersion: configuration.titlePromptVersion,
+        contentPromptVersion: configuration.contentPromptVersion,
+        configurationHash: configuration.configurationHash,
+      },
+      update: {},
+    })
+    return {
+      id: job.id,
+      status: job.status,
+      configuration: {
+        model: job.model,
+        titlePromptVersion: job.titlePromptVersion,
+        contentPromptVersion: job.contentPromptVersion,
+        configurationHash: job.configurationHash,
+      },
+    }
+  }
+
+  async listFilterDocuments(runId: string): Promise<FilterDocumentRecord[]> {
+    const documents = await this.prisma.collectedDocument.findMany({
+      where: { edition: { scanRunId: runId } },
+      orderBy: [{ edition: { discoveryOrder: 'asc' } }, { publicationOrder: 'asc' }],
+      include: { edition: true, storedObject: true },
+    })
+    return documents.map((document) => ({
+      id: document.id,
+      title: document.title,
+      sourceUrl: document.sourceUrl,
+      publicationOrder: document.publicationOrder,
+      editionLabel: document.edition.type === 'MAIN' ? 'Ana Sayı' : `${document.edition.supplementNo ?? ''}. Mükerrer Sayı`,
+      storedObject: document.storedObject ? {
+        objectKey: document.storedObject.objectKey,
+        sha256: document.storedObject.sha256,
+        mediaType: document.storedObject.mediaType,
+        byteSize: document.storedObject.byteSize,
+      } : null,
+    }))
+  }
+
+  async startAiCall(input: StartAiCallInput): Promise<AiCallRecord> {
+    const call = await this.prisma.aiCall.create({ data: input, select: { id: true } })
+    return call
+  }
+
+  async completeAiCall(callId: string, result: AiCallCompletion): Promise<void> {
+    await this.prisma.aiCall.update({
+      where: { id: callId },
+      data: {
+        status: 'COMPLETED',
+        providerRequestId: result.providerRequestId,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        latencyMs: result.latencyMs,
+        completedAt: new Date(),
+        errorCategory: null,
+        providerStatus: null,
+        errorMessage: null,
+      },
+    })
+  }
+
+  async failAiCall(callId: string, error: AiCallFailure): Promise<void> {
+    await this.prisma.aiCall.update({
+      where: { id: callId },
+      data: {
+        status: 'FAILED',
+        errorCategory: error.category,
+        providerStatus: error.providerStatus,
+        errorMessage: error.message.slice(0, 1_000),
+        completedAt: new Date(),
+      },
+    })
+  }
+
+  async saveTitleDecisions(jobId: string, decisions: TitleDecision[]): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const job = await tx.aiJob.findUniqueOrThrow({ where: { id: jobId } })
+      const uniqueIds = [...new Set(decisions.map((decision) => decision.documentId))]
+      if (uniqueIds.length !== decisions.length) throw new Error('Title decisions contain duplicate document IDs')
+      const ownedCount = await tx.collectedDocument.count({ where: { id: { in: uniqueIds }, edition: { scanRunId: job.scanRunId } } })
+      if (ownedCount !== uniqueIds.length) throw new Error('One or more title decisions do not belong to the scan run')
+      for (const decision of decisions) {
+        await tx.documentFilterDecision.upsert({
+          where: { aiJobId_documentId: { aiJobId: jobId, documentId: decision.documentId } },
+          create: {
+            aiJobId: jobId,
+            documentId: decision.documentId,
+            titleDecision: decision.decision,
+            titleReason: decision.reason,
+            titleConfidence: decision.confidence,
+            finalDecision: decision.decision === 'MAYBE' ? null : decision.decision,
+          },
+          update: {
+            titleDecision: decision.decision,
+            titleReason: decision.reason,
+            titleConfidence: decision.confidence,
+            contentDecision: null,
+            contentReason: null,
+            contentConfidence: null,
+            finalDecision: decision.decision === 'MAYBE' ? null : decision.decision,
+          },
+        })
+      }
+      await this.syncFilterStageProgress(tx, job.scanRunId, jobId)
+    })
+  }
+
+  async saveContentDecisions(jobId: string, _batchKey: string, decisions: ContentDecision[]): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const job = await tx.aiJob.findUniqueOrThrow({ where: { id: jobId } })
+      const uniqueIds = [...new Set(decisions.map((decision) => decision.documentId))]
+      if (uniqueIds.length !== decisions.length) throw new Error('Content decisions contain duplicate document IDs')
+      const existing = await tx.documentFilterDecision.findMany({ where: { aiJobId: jobId, documentId: { in: uniqueIds } } })
+      if (existing.length !== uniqueIds.length || existing.some((decision) => decision.titleDecision !== 'MAYBE')) {
+        throw new Error('Content decisions must belong to MAYBE documents in the scan run')
+      }
+      for (const decision of decisions) {
+        await tx.documentFilterDecision.update({
+          where: { aiJobId_documentId: { aiJobId: jobId, documentId: decision.documentId } },
+          data: {
+            contentDecision: decision.decision,
+            contentReason: decision.reason,
+            contentConfidence: decision.confidence,
+            finalDecision: decision.decision,
+          },
+        })
+      }
+      await this.syncFilterStageProgress(tx, job.scanRunId, jobId)
+    })
+  }
+
+  async getFilterProgress(jobId: string): Promise<FilterProgress> {
+    const job = await this.prisma.aiJob.findUniqueOrThrow({ where: { id: jobId } })
+    const [documentCount, decisions, completedCalls] = await Promise.all([
+      this.prisma.collectedDocument.count({ where: { edition: { scanRunId: job.scanRunId } } }),
+      this.prisma.documentFilterDecision.findMany({ where: { aiJobId: jobId }, orderBy: { document: { publicationOrder: 'asc' } } }),
+      this.prisma.aiCall.findMany({ where: { aiJobId: jobId, phase: 'CONTENT', status: 'COMPLETED' }, select: { batchKey: true }, orderBy: { createdAt: 'asc' } }),
+    ])
+    return {
+      titlePassComplete: decisions.length === documentCount,
+      unresolvedDocumentIds: decisions.filter((decision) => decision.titleDecision === 'MAYBE' && decision.finalDecision === null).map((decision) => decision.documentId),
+      completedContentBatchKeys: [...new Set(completedCalls.map((call) => call.batchKey))],
+      finalCounts: {
+        in: decisions.filter((decision) => decision.finalDecision === 'IN').length,
+        out: decisions.filter((decision) => decision.finalDecision === 'OUT').length,
+        pending: Math.max(0, documentCount - decisions.filter((decision) => decision.finalDecision !== null).length),
+      },
+    }
+  }
+
+  async markFilterRunning(runId: string, jobId: string, totalItems: number): Promise<void> {
+    const now = new Date()
+    await this.prisma.$transaction([
+      this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'RUNNING', currentStage: 'AI_FILTERING', totalItems, errorSummary: null } }),
+      this.prisma.aiJob.update({ where: { id: jobId }, data: { status: 'RUNNING', startedAt: now, completedAt: null, lastErrorCategory: null, lastErrorMessage: null } }),
+      this.prisma.stageExecution.upsert({
+        where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } },
+        create: { scanRunId: runId, stage: 'AI_FILTERING', status: 'RUNNING', totalItems, startedAt: now },
+        update: { status: 'RUNNING', totalItems, startedAt: now, completedAt: null, errorSummary: null },
+      }),
+    ])
+  }
+
+  async markFilterAwaitingRetry(runId: string, jobId: string, error: AiCallFailure): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'AWAITING_RETRY', currentStage: 'AI_FILTERING', errorSummary: error.message } }),
+      this.prisma.aiJob.update({ where: { id: jobId }, data: { status: 'AWAITING_RETRY', lastErrorCategory: error.category, lastErrorMessage: error.message } }),
+      this.prisma.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { status: 'AWAITING_RETRY', errorSummary: error.message } }),
+    ])
+  }
+
+  async completeFilter(runId: string, jobId: string): Promise<void> {
+    const now = new Date()
+    await this.prisma.$transaction([
+      this.prisma.aiJob.update({ where: { id: jobId }, data: { status: 'COMPLETED', completedAt: now, lastErrorCategory: null, lastErrorMessage: null } }),
+      this.prisma.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { status: 'COMPLETED', completedAt: now, errorSummary: null } }),
+    ])
+  }
+
   async completedSnapshot(runId: string): Promise<CompletedRunSnapshot> {
     const run = await this.getRun(runId)
     if (!run) throw new Error(`Scan run not found: ${runId}`)
@@ -236,5 +439,13 @@ export class PrismaScanRepository {
       update: {}, select: { id: true },
     })
     return saved.id
+  }
+
+  private async syncFilterStageProgress(tx: Prisma.TransactionClient, runId: string, jobId: string): Promise<void> {
+    const completedItems = await tx.documentFilterDecision.count({ where: { aiJobId: jobId, finalDecision: { not: null } } })
+    await Promise.all([
+      tx.scanRun.update({ where: { id: runId }, data: { completedItems } }),
+      tx.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { completedItems } }),
+    ])
   }
 }
