@@ -4,7 +4,7 @@ import { listScanRuns } from '../scans/api'
 import type { ScanRunStatus, ScanRunSummary } from '../scans/types'
 
 const statusLabels: Record<ScanRunStatus, string> = {
-  QUEUED: 'Sırada', RUNNING: 'Çalışıyor', AWAITING_RETRY: 'Yeniden deneme bekliyor', COMPLETED: 'Tamamlandı', PARTIAL: 'Kısmen tamamlandı', FAILED: 'Başarısız', CANCELLED: 'İptal edildi',
+  QUEUED: 'Sırada', RUNNING: 'Çalışıyor', AWAITING_RETRY: 'AI filtresi bekliyor', COMPLETED: 'Tamamlandı', PARTIAL: 'Kısmen tamamlandı', FAILED: 'Başarısız', CANCELLED: 'İptal edildi',
 }
 
 const statusClasses: Record<ScanRunStatus, string> = {

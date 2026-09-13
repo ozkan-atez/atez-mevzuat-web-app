@@ -18,4 +18,17 @@ describe('Dashboard recent scans', () => {
     expect(screen.getByText('a07a03dc')).toBeVisible()
     expect(screen.queryByText('İthalatta Haksız Rekabetin Önlenmesine İlişkin Tebliğ (No: 2026/4)')).not.toBeInTheDocument()
   })
+
+  it('labels a paused Gemini run as waiting for the AI filter', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ runs: [{
+      id: 'bf6f1a0b-11dc-4fee-8847-fc61c2b93ec3',
+      trigger: 'MANUAL', status: 'AWAITING_RETRY', currentStage: 'AI_FILTERING', targetDate: '2026-07-11',
+      createdAt: '2026-09-13T22:44:20.000Z', startedAt: '2026-09-13T22:44:21.000Z', completedAt: null,
+      counts: { editions: 1, documents: 62, assets: 0 },
+    }] }), { status: 200 })))
+
+    render(<MemoryRouter><Dashboard /></MemoryRouter>)
+
+    expect(await screen.findByText('AI filtresi bekliyor')).toBeVisible()
+  })
 })
