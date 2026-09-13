@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { TriggerWorkflowModal } from './TriggerWorkflowModal';
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const [isTriggerOpen, setIsTriggerOpen] = useState(false);
 
   return (
@@ -400,7 +401,12 @@ export function Dashboard() {
         </div>
       </section>
 
-      {isTriggerOpen && <TriggerWorkflowModal onClose={() => setIsTriggerOpen(false)} />}
+      {isTriggerOpen && (
+        <TriggerWorkflowModal
+          onClose={() => setIsTriggerOpen(false)}
+          onTriggered={(runId) => navigate(`/runs/${runId}`)}
+        />
+      )}
     </div>
   )
 }
