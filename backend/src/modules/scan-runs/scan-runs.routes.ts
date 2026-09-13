@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify'
-import type { PrismaScanRepository } from './infrastructure/prisma-scan-repository'
+import { AiFilterRetryConflictError, type PrismaScanRepository } from './infrastructure/prisma-scan-repository'
 import { createScanRunSchema, idempotencyKeySchema } from './scan-runs.schemas'
 
 interface Options {
   repository: PrismaScanRepository
 }
 
-const terminalStatuses = new Set(['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'])
+const terminalStatuses = new Set(['AWAITING_RETRY', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'])
 
 export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
   app.get('/', async (request) => {
@@ -24,6 +24,18 @@ export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
     }
     const run = await options.repository.createManualRun({ requestKey: keyResult.data, targetDate: bodyResult.data.targetDate })
     return reply.code(202).send({ runId: run.id, status: run.status, targetDate: run.targetDate })
+  })
+
+  app.post('/:id/ai-filter/retry', async (request, reply) => {
+    const keyResult = idempotencyKeySchema.safeParse(request.headers['idempotency-key'])
+    if (!keyResult.success) return reply.code(400).send({ message: 'Geçerli Idempotency-Key gereklidir' })
+    const { id } = request.params as { id: string }
+    try {
+      return reply.code(202).send(await options.repository.requestAiFilterRetry(id, keyResult.data))
+    } catch (error) {
+      if (error instanceof AiFilterRetryConflictError) return reply.code(409).send({ message: 'AI filtresi yeniden denenmeye hazır değil' })
+      throw error
+    }
   })
 
   app.get('/:id', async (request, reply) => {

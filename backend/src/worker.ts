@@ -7,6 +7,11 @@ import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-stor
 import { OfficialHttpClient } from './modules/scan-runs/infrastructure/official-http-client'
 import { SourcePolicy } from './modules/scan-runs/domain/source-policy'
 import { executeScanRun } from './modules/scan-runs/application/execute-scan-run'
+import { GoogleGenAI } from '@google/genai'
+import type { AiModelClient } from './modules/ai/application/ai-model-client'
+import { AiProviderError } from './modules/ai/domain/ai-errors'
+import { GeminiAiModelClient, type GeminiTransport } from './modules/ai/infrastructure/gemini-ai-model-client'
+import type { ScanCommand } from './modules/scan-runs/application/ports'
 
 async function startWorker() {
   const queue = await startQueue()
@@ -20,13 +25,14 @@ async function startWorker() {
     maxAttempts: env.sourceMaxAttempts,
     maxFileBytes: env.maxFileBytes,
   })
+  const aiModel = createAiModel(env.gemini.apiKey, env.gemini.timeoutMs)
   await objectStore.ensureBucket()
 
   const dispatch = async () => {
     const rows = await repository.claimPendingOutbox(10)
     for (const row of rows) {
       try {
-        const queueJobId = await scanQueue.enqueue(row.scanRunId)
+        const queueJobId = await scanQueue.enqueue({ outboxId: row.id, runId: row.scanRunId, type: row.commandType })
         await repository.markOutboxDispatched(row.id, queueJobId)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Queue dispatch failed'
@@ -41,10 +47,42 @@ async function startWorker() {
   await queue.work(manualScanQueueName, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs]
     for (const job of jobList) {
-      const runId = String((job.data as { runId: string }).runId)
-      await executeScanRun(runId, { repository, http, objectStore, maxRunBytes: BigInt(env.maxRunBytes) })
+      const command = job.data as ScanCommand
+      await executeScanRun(command.runId, {
+        repository,
+        http,
+        objectStore,
+        maxRunBytes: BigInt(env.maxRunBytes),
+        aiModel,
+        gemini: { model: env.gemini.model, maxAttempts: env.gemini.maxAttempts, maxContentBytes: env.gemini.maxContentBytes },
+      }, command.type)
     }
   })
+}
+
+function createAiModel(apiKey: string | undefined, timeoutMs: number): AiModelClient {
+  if (!apiKey) {
+    return {
+      async generateStructured() {
+        throw new AiProviderError('AUTHENTICATION', false, 'Gemini API anahtarı yapılandırılmamış.')
+      },
+    }
+  }
+  const client = new GoogleGenAI({ apiKey })
+  const transport: GeminiTransport = {
+    async generateContent(request) {
+      const response = await client.models.generateContent(request)
+      return {
+        ...(response.text ? { text: response.text } : {}),
+        ...(response.responseId ? { responseId: response.responseId } : {}),
+        usageMetadata: {
+          ...(typeof response.usageMetadata?.promptTokenCount === 'number' ? { promptTokenCount: response.usageMetadata.promptTokenCount } : {}),
+          ...(typeof response.usageMetadata?.candidatesTokenCount === 'number' ? { candidatesTokenCount: response.usageMetadata.candidatesTokenCount } : {}),
+        },
+      }
+    },
+  }
+  return new GeminiAiModelClient(transport, { timeoutMs })
 }
 
 startWorker().catch(err => {

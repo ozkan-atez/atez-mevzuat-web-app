@@ -52,4 +52,34 @@ describe('scan run HTTP contract', () => {
     expect(response.json<{ runs: Array<{ id: string }> }>().runs.map((run) => run.id)).toEqual([newer.id, older.id])
     await app.close()
   })
+
+  it('queues an idempotent retry only for an AI filter awaiting retry', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
+    const job = await repository.getOrCreateDocumentFilterJob(run.id, {
+      model: 'gemini-3.8-flash', titlePromptVersion: 'title-v1', contentPromptVersion: 'content-v1', configurationHash: 'a'.repeat(64),
+    })
+    await repository.markFilterRunning(run.id, job.id, 1)
+    await repository.markFilterAwaitingRetry(run.id, job.id, { category: 'RATE_LIMITED', providerStatus: 429, message: 'Gemini geçici olarak yoğun.' })
+    const app = await buildApp({ scanRepository: repository })
+    const requestKey = crypto.randomUUID()
+
+    const accepted = await app.inject({ method: 'POST', url: `/api/v1/scan-runs/${run.id}/ai-filter/retry`, headers: { 'idempotency-key': requestKey } })
+    const repeated = await app.inject({ method: 'POST', url: `/api/v1/scan-runs/${run.id}/ai-filter/retry`, headers: { 'idempotency-key': requestKey } })
+    const conflicting = await app.inject({ method: 'POST', url: `/api/v1/scan-runs/${run.id}/ai-filter/retry`, headers: { 'idempotency-key': crypto.randomUUID() } })
+
+    expect(accepted.statusCode).toBe(202)
+    expect(repeated.statusCode).toBe(202)
+    expect(repeated.json()).toEqual(accepted.json())
+    expect(conflicting.statusCode).toBe(409)
+    expect(await prisma.scanOutbox.count({ where: { scanRunId: run.id, commandType: 'RETRY_AI_FILTER' } })).toBe(1)
+    await app.close()
+  })
+
+  it('rejects AI filter retry for a run that is not paused', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
+    const app = await buildApp({ scanRepository: repository })
+    const response = await app.inject({ method: 'POST', url: `/api/v1/scan-runs/${run.id}/ai-filter/retry`, headers: { 'idempotency-key': crypto.randomUUID() } })
+    expect(response.statusCode).toBe(409)
+    await app.close()
+  })
 })

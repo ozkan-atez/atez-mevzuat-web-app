@@ -48,12 +48,12 @@ export class PrismaScanRepository {
     }
   }
 
-  async claimPendingOutbox(limit: number): Promise<Array<{ id: string; scanRunId: string; attempts: number }>> {
+  async claimPendingOutbox(limit: number): Promise<Array<{ id: string; scanRunId: string; commandType: 'START_SCAN' | 'RETRY_AI_FILTER'; attempts: number }>> {
     return this.prisma.scanOutbox.findMany({
       where: { dispatchedAt: null, availableAt: { lte: new Date() } },
       orderBy: { createdAt: 'asc' },
       take: limit,
-      select: { id: true, scanRunId: true, attempts: true },
+      select: { id: true, scanRunId: true, commandType: true, attempts: true },
     })
   }
 
@@ -423,6 +423,28 @@ export class PrismaScanRepository {
     await this.prisma.scanRun.update({ where: { id: runId }, data: { downloadedBytes: { increment: byteSize } } })
   }
 
+  async requestAiFilterRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.scanOutbox.findUnique({ where: { requestKey } })
+      if (existing) {
+        if (existing.scanRunId !== runId || existing.commandType !== 'RETRY_AI_FILTER') throw new AiFilterRetryConflictError('Idempotency key belongs to another command')
+        return { runId, commandId: existing.id, status: 'QUEUED' as const }
+      }
+      const run = await tx.scanRun.findUnique({ where: { id: runId }, include: { aiJobs: { where: { kind: 'DOCUMENT_FILTER' } } } })
+      const job = run?.aiJobs[0]
+      if (!run || !job || run.status !== 'AWAITING_RETRY' || run.currentStage !== 'AI_FILTERING' || job.status !== 'AWAITING_RETRY') {
+        throw new AiFilterRetryConflictError('AI filter is not awaiting retry')
+      }
+      const command = await tx.scanOutbox.create({ data: { scanRunId: runId, commandType: 'RETRY_AI_FILTER', requestKey } })
+      await Promise.all([
+        tx.scanRun.update({ where: { id: runId }, data: { status: 'QUEUED', errorSummary: null } }),
+        tx.aiJob.update({ where: { id: job.id }, data: { status: 'QUEUED', lastErrorCategory: null, lastErrorMessage: null } }),
+        tx.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { status: 'PENDING', errorSummary: null } }),
+      ])
+      return { runId, commandId: command.id, status: 'QUEUED' as const }
+    })
+  }
+
   async completedSnapshot(runId: string): Promise<CompletedRunSnapshot> {
     const run = await this.getRun(runId)
     if (!run) throw new Error(`Scan run not found: ${runId}`)
@@ -457,4 +479,8 @@ export class PrismaScanRepository {
       tx.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { completedItems } }),
     ])
   }
+}
+
+export class AiFilterRetryConflictError extends Error {
+  override readonly name = 'AiFilterRetryConflictError'
 }

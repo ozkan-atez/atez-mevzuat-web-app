@@ -1,20 +1,24 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ObjectStore, OfficialHttp } from './ports'
+import type { AiModelClient } from '../../ai/application/ai-model-client'
 import type { PrismaScanRepository } from '../infrastructure/prisma-scan-repository'
 import { candidateIndexUrls, parseAssets, parseEditions } from '../infrastructure/resmi-gazete-parser'
 import { buildManifest } from './build-manifest'
 import type { ScanStage } from '../domain/scan-run'
+import { AiFilterAwaitingRetryError, executeDocumentFilter } from './execute-document-filter'
 
 interface Dependencies {
   repository: PrismaScanRepository
   http: OfficialHttp
   objectStore: ObjectStore
   maxRunBytes: bigint
+  aiModel: AiModelClient
+  gemini: { model: string; maxAttempts: number; maxContentBytes: number }
 }
 
-export async function executeScanRun(runId: string, dependencies: Dependencies): Promise<void> {
+export async function executeScanRun(runId: string, dependencies: Dependencies, command: 'START_SCAN' | 'RETRY_AI_FILTER' = 'START_SCAN'): Promise<void> {
   const { repository, http, objectStore, maxRunBytes } = dependencies
   const run = await repository.getExecutionRun(runId)
   if (!run) throw new Error(`Scan run not found: ${runId}`)
@@ -24,27 +28,49 @@ export async function executeScanRun(runId: string, dependencies: Dependencies):
 
   try {
     await objectStore.ensureBucket()
-    await repository.startRun(runId)
-    await repository.startStage(runId, currentStage, 1)
-
-    const indexFile = await downloadFirstAvailable(http, candidateIndexUrls(run.targetDate), tempDirectory)
-    bytes = addWithinLimit(bytes, indexFile.byteSize, maxRunBytes)
     const datePath = run.targetDate.replaceAll('-', '/')
-    const indexKey = `runs/${datePath}/${runId}/index.html`
-    const indexBytes = await readFile(indexFile.tempPath)
-    const storedIndex = await objectStore.putRunFile(indexKey, indexBytes, 'text/html')
-    await repository.saveIndex(runId, indexFile.sourceUrl, storedIndex)
-    const editions = parseEditions(indexBytes.toString('utf8'), indexFile.sourceUrl, run.targetDate)
-    if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
-    await repository.saveEditions(runId, run.targetDate, editions)
-    await repository.advanceStage(runId, currentStage, indexFile.byteSize)
-    await repository.completeStage(runId, currentStage)
+    if (command === 'START_SCAN') {
+      await repository.startRun(runId)
+      await repository.startStage(runId, currentStage, 1)
+
+      const indexFile = await downloadFirstAvailable(http, candidateIndexUrls(run.targetDate), tempDirectory)
+      bytes = addWithinLimit(bytes, indexFile.byteSize, maxRunBytes)
+      const indexKey = `runs/${datePath}/${runId}/index.html`
+      const indexBytes = await readFile(indexFile.tempPath)
+      const storedIndex = await objectStore.putRunFile(indexKey, indexBytes, 'text/html')
+      await repository.saveIndex(runId, indexFile.sourceUrl, storedIndex)
+      const editions = parseEditions(indexBytes.toString('utf8'), indexFile.sourceUrl, run.targetDate)
+      if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
+      await repository.saveEditions(runId, run.targetDate, editions)
+      await repository.advanceStage(runId, currentStage, indexFile.byteSize)
+      await repository.completeStage(runId, currentStage)
+    }
+
+    currentStage = 'AI_FILTERING'
+    await executeDocumentFilter(runId, {
+      repository,
+      aiModel: dependencies.aiModel,
+      http,
+      objectStore,
+      model: dependencies.gemini.model,
+      maxAttempts: dependencies.gemini.maxAttempts,
+      maxContentBytes: dependencies.gemini.maxContentBytes,
+      maxRunBytes,
+    })
+    bytes = (await repository.getExecutionRun(runId))?.downloadedBytes ?? bytes
 
     currentStage = 'DOWNLOADING_DOCUMENTS'
-    const documents = await repository.listDocuments(runId)
+    const documents = await repository.listFilterDocuments(runId)
     await repository.startStage(runId, currentStage, documents.length)
     const downloadedDocuments = new Map<string, { tempPath: string; mediaType: string }>()
     for (const document of documents) {
+      if (document.storedObject) {
+        const tempPath = join(tempDirectory, `stored-${document.id}`)
+        await writeFile(tempPath, await objectStore.getContent(document.storedObject.objectKey))
+        downloadedDocuments.set(document.id, { tempPath, mediaType: document.storedObject.mediaType })
+        await repository.advanceStage(runId, currentStage, 0n)
+        continue
+      }
       const file = await http.download(document.sourceUrl, tempDirectory)
       bytes = addWithinLimit(bytes, file.byteSize, maxRunBytes)
       const object = await objectStore.putContent(file)
@@ -94,6 +120,7 @@ export async function executeScanRun(runId: string, dependencies: Dependencies):
     await repository.completeStage(runId, currentStage)
     await repository.completeRun(runId, storedManifest.objectKey)
   } catch (error) {
+    if (error instanceof AiFilterAwaitingRetryError) return
     const message = sanitizeError(error)
     await repository.failStage(runId, currentStage, message).catch(() => undefined)
     const latest = await repository.getExecutionRun(runId)

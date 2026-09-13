@@ -202,7 +202,13 @@ export interface OfficialHttp {
 }
 
 export interface ScanQueue {
-  enqueue(runId: string): Promise<string>
+  enqueue(command: ScanCommand): Promise<string>
+}
+
+export interface ScanCommand {
+  outboxId: string
+  runId: string
+  type: 'START_SCAN' | 'RETRY_AI_FILTER'
 }
 
 export interface ScanRepository {
@@ -238,4 +244,5 @@ export interface ScanRepository {
   completeFilter(runId: string, jobId: string): Promise<void>
   nextAiCallAttempt(aiJobId: string, phase: 'TITLE' | 'CONTENT', batchKey: string): Promise<number>
   addDownloadedBytes(runId: string, byteSize: bigint): Promise<void>
+  requestAiFilterRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }>
 }
