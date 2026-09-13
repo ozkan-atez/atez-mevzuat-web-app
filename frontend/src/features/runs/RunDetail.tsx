@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, CalendarDays, Database, FileText, Image, RefreshCw } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CalendarDays, RefreshCw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { useScanRun } from '../scans/useScanRun'
 import type { ScanRunStatus } from '../scans/types'
@@ -45,16 +45,38 @@ export function RunDetail() {
     <div className="space-y-6">
       <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-700"><ArrowLeft className="h-4 w-4" />Taramalara dön</Link>
 
-      <section className="rounded-3xl border border-slate-800 bg-slate-950 p-6 text-white shadow-xl sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-5">
-          <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-300"><CalendarDays className="h-4 w-4" />{formatDate(run.targetDate)}</div>
-            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Resmî Gazete Veri Toplama</h1>
-            <p className="mt-2 text-sm text-slate-400">Çalışma: {run.id}</p>
+      <div
+        data-testid="run-overview"
+        className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(480px,0.85fr)]"
+      >
+        <section className="hero-gradient relative overflow-hidden rounded-3xl border border-[#1a2e4d] p-6 text-white shadow-xl sm:p-8">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-indigo-500/15 blur-3xl" />
+          <div className="relative flex h-full flex-wrap items-start justify-between gap-5">
+            <div>
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-300"><CalendarDays className="h-4 w-4" />{formatDate(run.targetDate)}</div>
+              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Tarama İnceleme Masası</h1>
+              <p className="mt-2 text-sm text-slate-400">Resmî Gazete veri toplama çalışması · {run.id}</p>
+            </div>
+            <span className="rounded-full border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-200">{statusLabels[run.status]}</span>
           </div>
-          <span className="rounded-full border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-200">{statusLabels[run.status]}</span>
-        </div>
-      </section>
+        </section>
+
+        <section aria-label="Operasyon özeti" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <article className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300/70 hover:shadow-lg hover:shadow-blue-500/10">
+            <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-blue-500/10 blur-2xl transition-transform duration-500 group-hover:scale-125" />
+            <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Taranan madde</p>
+            <p className="relative mt-2 text-4xl font-black tracking-tight text-slate-900">{run.counts.documents}</p>
+            <p className="relative mt-2 text-xs font-medium leading-relaxed text-slate-500">T.C. Resmî Gazete mevzuat kaydı</p>
+          </article>
+
+          <article className="group relative overflow-hidden rounded-3xl border border-indigo-200/70 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-500/10">
+            <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-gradient-to-br from-indigo-500/15 to-purple-500/5 blur-2xl transition-transform duration-500 group-hover:scale-125" />
+            <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-600">Belirlenen gümrük mevzuatı tespiti</p>
+            <p className="relative mt-2 text-4xl font-black tracking-tight text-indigo-600">{run.counts.completedItems}</p>
+            <p className="relative mt-2 text-xs font-medium leading-relaxed text-slate-500">Şirket operasyonlarını ilgilendiren değişiklik</p>
+          </article>
+        </section>
+      </div>
 
       {run.errorSummary && (
         <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>{run.errorSummary}</span></div>
@@ -62,14 +84,6 @@ export function RunDetail() {
       {error && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"><span>{error}</span><button type="button" onClick={() => void refresh()} className="font-semibold underline">Yenile</button></div>
       )}
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {[
-          { label: 'Sayı', value: run.counts.editions, icon: Database },
-          { label: 'Belge', value: run.counts.documents, icon: FileText },
-          { label: 'Bağlı dosya', value: run.counts.assets, icon: Image },
-        ].map((item) => <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><item.icon className="h-5 w-5 text-blue-600" /><div className="mt-3 text-2xl font-extrabold text-slate-900">{item.value}</div><div className="text-sm text-slate-500">{item.label}</div></div>)}
-      </div>
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <OperationSteps run={run} />
