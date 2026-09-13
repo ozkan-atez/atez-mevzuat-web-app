@@ -96,6 +96,7 @@ export interface CompletedRunSnapshot {
   objects: Array<{
     documentId?: string
     assetId?: string
+    parentDocumentId?: string
     sourceUrl: string
     role?: AssetRole
     objectKey: string
@@ -123,6 +124,17 @@ export interface ScanQueue {
 export interface ScanRepository {
   createManualRun(input: { requestKey: string; targetDate: string }): Promise<{ id: string; status: ScanRunStatus; targetDate: string }>
   getRun(runId: string): Promise<ScanRunDetailDto | null>
+  getExecutionRun(runId: string): Promise<{ id: string; targetDate: string; downloadedBytes: bigint } | null>
+  saveIndex(runId: string, sourceUrl: string, object: StoredBlob): Promise<void>
+  saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<void>
+  listDocuments(runId: string): Promise<Array<{ id: string; sourceUrl: string; title: string }>>
+  saveAssets(documentId: string, assets: DiscoveredAsset[]): Promise<void>
+  listAssets(runId: string): Promise<Array<{ id: string; documentId: string; sourceUrl: string }>>
+  attachDocumentObject(documentId: string, object: StoredBlob): Promise<void>
+  attachAssetObject(assetId: string, object: StoredBlob): Promise<void>
+  completedSnapshot(runId: string): Promise<CompletedRunSnapshot>
+  verifyManifestCounts(runId: string): Promise<void>
+  completeRun(runId: string, manifestObjectKey: string): Promise<void>
   startRun(runId: string): Promise<void>
   startStage(runId: string, stage: ScanStage, totalItems: number): Promise<void>
   advanceStage(runId: string, stage: ScanStage, downloadedBytes: bigint): Promise<void>

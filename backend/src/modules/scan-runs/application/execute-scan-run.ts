@@ -1,0 +1,127 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { ObjectStore, OfficialHttp } from './ports'
+import type { PrismaScanRepository } from '../infrastructure/prisma-scan-repository'
+import { candidateIndexUrls, parseAssets, parseEditions } from '../infrastructure/resmi-gazete-parser'
+import { buildManifest } from './build-manifest'
+import type { ScanStage } from '../domain/scan-run'
+
+interface Dependencies {
+  repository: PrismaScanRepository
+  http: OfficialHttp
+  objectStore: ObjectStore
+  maxRunBytes: bigint
+}
+
+export async function executeScanRun(runId: string, dependencies: Dependencies): Promise<void> {
+  const { repository, http, objectStore, maxRunBytes } = dependencies
+  const run = await repository.getExecutionRun(runId)
+  if (!run) throw new Error(`Scan run not found: ${runId}`)
+  const tempDirectory = await mkdtemp(join(tmpdir(), `atez-scan-${runId}-`))
+  let currentStage: ScanStage = 'DISCOVERING'
+  let bytes = run.downloadedBytes
+
+  try {
+    await objectStore.ensureBucket()
+    await repository.startRun(runId)
+    await repository.startStage(runId, currentStage, 1)
+
+    const indexFile = await downloadFirstAvailable(http, candidateIndexUrls(run.targetDate), tempDirectory)
+    bytes = addWithinLimit(bytes, indexFile.byteSize, maxRunBytes)
+    const datePath = run.targetDate.replaceAll('-', '/')
+    const indexKey = `runs/${datePath}/${runId}/index.html`
+    const indexBytes = await readFile(indexFile.tempPath)
+    const storedIndex = await objectStore.putRunFile(indexKey, indexBytes, 'text/html')
+    await repository.saveIndex(runId, indexFile.sourceUrl, storedIndex)
+    const editions = parseEditions(indexBytes.toString('utf8'), indexFile.sourceUrl, run.targetDate)
+    if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
+    await repository.saveEditions(runId, run.targetDate, editions)
+    await repository.advanceStage(runId, currentStage, indexFile.byteSize)
+    await repository.completeStage(runId, currentStage)
+
+    currentStage = 'DOWNLOADING_DOCUMENTS'
+    const documents = await repository.listDocuments(runId)
+    await repository.startStage(runId, currentStage, documents.length)
+    const downloadedDocuments = new Map<string, { tempPath: string; mediaType: string }>()
+    for (const document of documents) {
+      const file = await http.download(document.sourceUrl, tempDirectory)
+      bytes = addWithinLimit(bytes, file.byteSize, maxRunBytes)
+      const object = await objectStore.putContent(file)
+      await repository.attachDocumentObject(document.id, object)
+      downloadedDocuments.set(document.id, { tempPath: file.tempPath, mediaType: file.mediaType })
+      await repository.advanceStage(runId, currentStage, file.byteSize)
+    }
+    await repository.completeStage(runId, currentStage)
+
+    currentStage = 'DISCOVERING_ASSETS'
+    await repository.startStage(runId, currentStage, documents.length)
+    for (const document of documents) {
+      const downloaded = downloadedDocuments.get(document.id)
+      if (downloaded?.mediaType === 'text/html') {
+        const html = await readFile(downloaded.tempPath, 'utf8')
+        await repository.saveAssets(document.id, parseAssets(html, document.sourceUrl))
+      }
+      await repository.advanceStage(runId, currentStage, 0n)
+    }
+    await repository.completeStage(runId, currentStage)
+
+    currentStage = 'DOWNLOADING_ASSETS'
+    const assets = await repository.listAssets(runId)
+    await repository.startStage(runId, currentStage, assets.length)
+    for (const asset of assets) {
+      const file = await http.download(asset.sourceUrl, tempDirectory)
+      bytes = addWithinLimit(bytes, file.byteSize, maxRunBytes)
+      const object = await objectStore.putContent(file)
+      await repository.attachAssetObject(asset.id, object)
+      await repository.advanceStage(runId, currentStage, file.byteSize)
+    }
+    await repository.completeStage(runId, currentStage)
+
+    currentStage = 'VALIDATING'
+    await repository.startStage(runId, currentStage, 1)
+    await repository.verifyManifestCounts(runId)
+    await repository.advanceStage(runId, currentStage, 0n)
+    await repository.completeStage(runId, currentStage)
+
+    currentStage = 'WRITING_MANIFEST'
+    await repository.startStage(runId, currentStage, 1)
+    const manifest = buildManifest(await repository.completedSnapshot(runId))
+    const manifestKey = `runs/${datePath}/${runId}/manifest.json`
+    const storedManifest = await objectStore.putRunFile(manifestKey, manifest, 'application/json')
+    await repository.verifyManifestCounts(runId)
+    await repository.advanceStage(runId, currentStage, storedManifest.byteSize)
+    await repository.completeStage(runId, currentStage)
+    await repository.completeRun(runId, storedManifest.objectKey)
+  } catch (error) {
+    const message = sanitizeError(error)
+    await repository.failStage(runId, currentStage, message).catch(() => undefined)
+    const latest = await repository.getExecutionRun(runId)
+    await repository.failRun(runId, (latest?.downloadedBytes ?? 0n) > 0n ? 'PARTIAL' : 'FAILED', message)
+    throw error
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true })
+  }
+}
+
+async function downloadFirstAvailable(http: OfficialHttp, urls: string[], tempDirectory: string) {
+  let lastError: unknown
+  for (const url of urls) {
+    try {
+      return await http.download(url, tempDirectory)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError ?? new Error('No official index URL is available')
+}
+
+function addWithinLimit(current: bigint, addition: bigint, maximum: bigint): bigint {
+  const next = current + addition
+  if (next > maximum) throw new Error('Scan exceeds the configured total byte limit')
+  return next
+}
+
+function sanitizeError(error: unknown): string {
+  return error instanceof Error ? error.message.slice(0, 1_000) : 'Unknown scan error'
+}
