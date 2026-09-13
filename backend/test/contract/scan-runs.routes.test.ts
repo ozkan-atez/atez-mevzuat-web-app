@@ -53,6 +53,39 @@ describe('scan run HTTP contract', () => {
     await app.close()
   })
 
+  it('returns filter decisions without exposing confidence scores', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
+    const edition = await prisma.gazetteEdition.create({
+      data: {
+        scanRunId: run.id, publicationDate: new Date('2026-09-14T00:00:00.000Z'), type: 'MAIN',
+        indexUrl: 'https://www.resmigazete.gov.tr/14.09.2026', discoveryOrder: 0,
+        documents: { create: { title: 'İthalat Tebliği', sourceUrl: 'https://www.resmigazete.gov.tr/doc.htm', publicationOrder: 0 } },
+      },
+      include: { documents: true },
+    })
+    const job = await repository.getOrCreateDocumentFilterJob(run.id, {
+      model: 'gemini-3.8-flash', titlePromptVersion: 'title-v1', contentPromptVersion: 'content-v1', configurationHash: 'a'.repeat(64),
+    })
+    await prisma.documentFilterDecision.create({
+      data: {
+        aiJobId: job.id, documentId: edition.documents[0]!.id, titleDecision: 'IN', titleReason: 'Başlık doğrudan ithalatla ilgili.',
+        titleConfidence: 0.97, finalDecision: 'IN',
+      },
+    })
+    await prisma.aiJob.update({ where: { id: job.id }, data: { status: 'COMPLETED' } })
+    const app = await buildApp({ scanRepository: repository })
+
+    const response = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${run.id}` })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({
+      filter: { status: 'COMPLETED', counts: { in: 1, out: 0, pending: 0 }, retryAvailable: false },
+      editions: [{ documents: [{ filter: { titleDecision: 'IN', finalDecision: 'IN', reason: 'Başlık doğrudan ithalatla ilgili.' } }] }],
+    })
+    expect(JSON.stringify(response.json())).not.toMatch(/confidence/i)
+    await app.close()
+  })
+
   it('queues an idempotent retry only for an AI filter awaiting retry', async () => {
     const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
     const job = await repository.getOrCreateDocumentFilterJob(run.id, {

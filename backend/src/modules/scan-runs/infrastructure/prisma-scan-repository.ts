@@ -191,17 +191,47 @@ export class PrismaScanRepository {
   async getRun(runId: string): Promise<ScanRunDetailDto | null> {
     const run = await this.prisma.scanRun.findUnique({
       where: { id: runId },
-      include: { stages: { orderBy: { createdAt: 'asc' } }, editions: { orderBy: { discoveryOrder: 'asc' }, include: { documents: { orderBy: { publicationOrder: 'asc' }, include: { _count: { select: { assets: true } } } } } } },
+      include: {
+        stages: { orderBy: { createdAt: 'asc' } },
+        aiJobs: { where: { kind: 'DOCUMENT_FILTER' }, include: { decisions: true } },
+        editions: { orderBy: { discoveryOrder: 'asc' }, include: { documents: { orderBy: { publicationOrder: 'asc' }, include: { _count: { select: { assets: true } } } } } },
+      },
     })
     if (!run) return null
     const assets = await this.prisma.documentAsset.count({ where: { document: { edition: { scanRunId: runId } } } })
+    const filterJob = run.aiJobs[0] ?? null
+    const filterDecisions = new Map(filterJob?.decisions.map((decision) => [decision.documentId, decision]) ?? [])
+    const finalIn = filterJob?.decisions.filter((decision) => decision.finalDecision === 'IN').length ?? 0
+    const finalOut = filterJob?.decisions.filter((decision) => decision.finalDecision === 'OUT').length ?? 0
+    const documentCount = run.editions.reduce((count, edition) => count + edition.documents.length, 0)
     return {
       id: run.id, status: run.status, currentStage: run.currentStage,
       targetDate: run.targetDate.toISOString().slice(0, 10), startedAt: run.startedAt?.toISOString() ?? null,
       completedAt: run.completedAt?.toISOString() ?? null, errorSummary: run.errorSummary,
+      filter: filterJob ? {
+        status: filterJob.status,
+        counts: { in: finalIn, out: finalOut, pending: Math.max(0, documentCount - finalIn - finalOut) },
+        retryAvailable: filterJob.status === 'AWAITING_RETRY',
+        errorCategory: filterJob.lastErrorCategory,
+        errorMessage: filterJob.lastErrorMessage,
+      } : null,
       counts: { editions: run.editions.length, documents: run.editions.reduce((n, e) => n + e.documents.length, 0), assets, completedItems: run.completedItems, totalItems: run.totalItems, failedItems: run.failedItems },
       stages: run.stages.map((stage) => ({ stage: stage.stage, status: stage.status, completedItems: stage.completedItems, totalItems: stage.totalItems, failedItems: stage.failedItems })),
-      editions: run.editions.map((edition) => ({ id: edition.id, type: edition.type, supplementNo: edition.supplementNo, documents: edition.documents.map((document) => ({ id: document.id, title: document.title, sourceUrl: document.sourceUrl, validationStatus: document.validationStatus, assetCount: document._count.assets })) })),
+      editions: run.editions.map((edition) => ({
+        id: edition.id, type: edition.type, supplementNo: edition.supplementNo,
+        documents: edition.documents.map((document) => {
+          const decision = filterDecisions.get(document.id)
+          return {
+            id: document.id, title: document.title, sourceUrl: document.sourceUrl,
+            validationStatus: document.validationStatus, assetCount: document._count.assets,
+            filter: decision ? {
+              titleDecision: decision.titleDecision,
+              finalDecision: decision.finalDecision,
+              reason: decision.contentReason ?? decision.titleReason,
+            } : null,
+          }
+        }),
+      })),
     }
   }
 
@@ -460,7 +490,27 @@ export class PrismaScanRepository {
         objects.push({ assetId: asset.id, parentDocumentId: document.id, sourceUrl: asset.sourceUrl, role: asset.role, objectKey: asset.storedObject.objectKey, sha256: asset.storedObject.sha256, mediaType: asset.storedObject.mediaType, byteSize: asset.storedObject.byteSize })
       }
     }
-    return { run, index: { sourceUrl: raw.indexSourceUrl, objectKey: raw.indexObjectKey, sha256: raw.indexSha256 }, objects }
+    const filterJob = await this.prisma.aiJob.findUnique({
+      where: { scanRunId_kind: { scanRunId: runId, kind: 'DOCUMENT_FILTER' } },
+      include: { decisions: { orderBy: { document: { publicationOrder: 'asc' } } } },
+    })
+    const filterAudit: CompletedRunSnapshot['filterAudit'] = filterJob ? {
+      model: filterJob.model,
+      titlePromptVersion: filterJob.titlePromptVersion,
+      contentPromptVersion: filterJob.contentPromptVersion,
+      configurationHash: filterJob.configurationHash,
+      decisions: filterJob.decisions.map((decision) => ({
+        documentId: decision.documentId,
+        titleDecision: decision.titleDecision,
+        titleReason: decision.titleReason,
+        titleConfidence: decision.titleConfidence,
+        contentDecision: decision.contentDecision,
+        contentReason: decision.contentReason,
+        contentConfidence: decision.contentConfidence,
+        finalDecision: decision.finalDecision,
+      })),
+    } : null
+    return { run, index: { sourceUrl: raw.indexSourceUrl, objectKey: raw.indexObjectKey, sha256: raw.indexSha256 }, objects, filterAudit }
   }
 
   private async upsertObject(object: StoredBlob): Promise<string> {

@@ -15,6 +15,7 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
         sha256: object.sha256,
         mediaType: object.mediaType,
         byteSize: object.byteSize.toString(),
+        filter: document.filter,
         assets: objects
           .filter((item) => item.parentDocumentId === document.id)
           .map((asset) => ({
@@ -32,13 +33,14 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
   const assets = objects.filter((object) => object.assetId)
 
   return Buffer.from(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     runId: snapshot.run.id,
     source: 'RESMI_GAZETE',
     targetDate: snapshot.run.targetDate,
     createdAt: snapshot.run.completedAt ?? snapshot.run.startedAt,
     index: snapshot.index,
     editions,
+    filterAudit: snapshot.filterAudit,
     totals: {
       editions: editions.length,
       documents: editions.reduce((total, edition) => total + edition.documents.length, 0),

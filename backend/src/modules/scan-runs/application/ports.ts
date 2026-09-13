@@ -61,6 +61,13 @@ export interface ScanRunDetailDto {
   startedAt: string | null
   completedAt: string | null
   errorSummary: string | null
+  filter: null | {
+    status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+    counts: { in: number; out: number; pending: number }
+    retryAvailable: boolean
+    errorCategory: AiCallFailure['category'] | null
+    errorMessage: string | null
+  }
   counts: {
     editions: number
     documents: number
@@ -86,6 +93,11 @@ export interface ScanRunDetailDto {
       sourceUrl: string
       validationStatus: ValidationStatus
       assetCount: number
+      filter: null | {
+        titleDecision: 'IN' | 'OUT' | 'MAYBE'
+        finalDecision: 'IN' | 'OUT' | null
+        reason: string
+      }
     }>
   }>
 }
@@ -187,6 +199,22 @@ export interface CompletedRunSnapshot {
     mediaType: string
     byteSize: bigint
   }>
+  filterAudit: null | {
+    model: string
+    titlePromptVersion: string
+    contentPromptVersion: string
+    configurationHash: string
+    decisions: Array<{
+      documentId: string
+      titleDecision: 'IN' | 'OUT' | 'MAYBE'
+      titleReason: string
+      titleConfidence: number
+      contentDecision: 'IN' | 'OUT' | null
+      contentReason: string | null
+      contentConfidence: number | null
+      finalDecision: 'IN' | 'OUT' | null
+    }>
+  }
 }
 
 export interface ObjectStore {
