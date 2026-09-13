@@ -8,6 +8,7 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
     documents: edition.documents.map((document) => {
       const object = objects.find((item) => item.documentId === document.id)
       if (!object) throw new Error(`Stored object is missing for document ${document.id}`)
+      const decision = snapshot.filterAudit?.decisions.find((item) => item.documentId === document.id)
       return {
         title: document.title,
         sourceUrl: document.sourceUrl,
@@ -15,7 +16,19 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
         sha256: object.sha256,
         mediaType: object.mediaType,
         byteSize: object.byteSize.toString(),
-        filter: document.filter,
+        filter: decision && snapshot.filterAudit ? {
+          titleDecision: decision.titleDecision,
+          titleReason: decision.titleReason,
+          titleConfidence: decision.titleConfidence,
+          contentDecision: decision.contentDecision,
+          contentReason: decision.contentReason,
+          contentConfidence: decision.contentConfidence,
+          finalDecision: decision.finalDecision,
+          model: snapshot.filterAudit.model,
+          titlePromptVersion: snapshot.filterAudit.titlePromptVersion,
+          contentPromptVersion: snapshot.filterAudit.contentPromptVersion,
+          configurationHash: snapshot.filterAudit.configurationHash,
+        } : null,
         assets: objects
           .filter((item) => item.parentDocumentId === document.id)
           .map((asset) => ({

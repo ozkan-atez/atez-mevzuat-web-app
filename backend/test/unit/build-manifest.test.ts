@@ -39,6 +39,10 @@ describe('buildManifest', () => {
     expect(manifest.editions[0].documents[0].assets[0].byteSize).toBe('7')
     expect(manifest.filterAudit.model).toBe('gemini-3.8-flash')
     expect(manifest.filterAudit.decisions[0]).toMatchObject({ titleConfidence: 0.51, contentConfidence: 0.94, finalDecision: 'IN' })
-    expect(manifest.editions[0].documents[0].filter).toEqual({ titleDecision: 'MAYBE', finalDecision: 'IN', reason: 'İçerikte ithalat düzenlemesi var.' })
+    expect(manifest.editions[0].documents[0].filter).toEqual({
+      titleDecision: 'MAYBE', titleReason: 'Başlık belirsiz.', titleConfidence: 0.51,
+      contentDecision: 'IN', contentReason: 'İçerikte ithalat düzenlemesi var.', contentConfidence: 0.94,
+      finalDecision: 'IN', model: 'gemini-3.8-flash', titlePromptVersion: 'title-v1', contentPromptVersion: 'content-v1', configurationHash: 'd'.repeat(64),
+    })
   })
 })

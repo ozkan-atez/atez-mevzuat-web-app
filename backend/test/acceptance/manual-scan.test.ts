@@ -1,4 +1,4 @@
-import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { PrismaClient } from '@prisma/client'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -47,11 +47,23 @@ class FixtureOfficialHttp implements OfficialHttp {
   }
 }
 
-class AllInAi implements AiModelClient {
+class MixedDecisionAi implements AiModelClient {
   async generateStructured(request: StructuredAiRequest): Promise<StructuredAiResult> {
-    const payload = JSON.parse((request.parts[0] as { text: string }).text) as { documents: Array<{ id: string }> }
+    const isTitlePass = request.systemInstruction.includes('Başlık aşamasında')
+    const decisions = isTitlePass
+      ? (JSON.parse((request.parts[0] as { text: string }).text) as { documents: Array<{ id: string }> }).documents.map((document, index) => ({
+          documentId: document.id,
+          decision: index === 0 ? 'MAYBE' : index === 1 ? 'IN' : 'OUT',
+          reason: index === 0 ? 'Başlık içerik incelemesi gerektiriyor.' : index === 1 ? 'Başlık dış ticaretle ilgili.' : 'Başlık kapsam dışı.',
+          confidence: index === 0 ? 0.55 : 0.95,
+        }))
+      : request.parts
+          .filter((part): part is { text: string } => 'text' in part)
+          .map((part) => part.text.match(/Belge kimliği: ([^\n]+)/)?.[1])
+          .filter((id): id is string => Boolean(id))
+          .map((documentId) => ({ documentId, decision: 'IN', reason: 'İçerik ithalat düzenlemesi içeriyor.', confidence: 0.91 }))
     return {
-      json: { decisions: payload.documents.map((document) => ({ documentId: document.id, decision: 'IN', reason: 'Fixture ilgili.', confidence: 0.95 })) },
+      json: { decisions },
       providerRequestId: 'fixture-response', usage: { inputTokens: 10, outputTokens: 5 },
     }
   }
@@ -67,7 +79,7 @@ const s3 = new S3Client({
   credentials: { accessKeyId: s3Config.accessKeyId, secretAccessKey: s3Config.secretAccessKey },
 })
 let http: FixtureOfficialHttp
-const aiModel = new AllInAi()
+const aiModel = new MixedDecisionAi()
 const gemini = { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000 }
 
 describe('manual scan acceptance', () => {
@@ -111,10 +123,25 @@ describe('manual scan acceptance', () => {
     expect(finalRun?.editions.map((edition) => edition.type)).toEqual(['MAIN', 'SUPPLEMENT', 'SUPPLEMENT'])
     expect(finalRun?.counts.documents).toBe(4)
     expect(finalRun?.counts.assets).toBe(5)
+    expect(finalRun?.filter?.counts).toEqual({ in: 2, out: 2, pending: 0 })
+    expect(JSON.stringify(finalRun)).not.toMatch(/confidence/i)
+
+    const decisions = await prisma.documentFilterDecision.findMany({ orderBy: { document: { publicationOrder: 'asc' } } })
+    expect(decisions).toHaveLength(4)
+    expect(decisions.every((decision) => decision.finalDecision === 'IN' || decision.finalDecision === 'OUT')).toBe(true)
+    expect(decisions.filter((decision) => decision.titleDecision === 'MAYBE')).toHaveLength(1)
+    expect(decisions.find((decision) => decision.titleDecision === 'MAYBE')).toMatchObject({ contentDecision: 'IN', finalDecision: 'IN' })
+    expect(await prisma.collectedDocument.count({ where: { edition: { scanRunId: firstRunId }, storedObjectId: null } })).toBe(0)
+    expect(await prisma.documentAsset.count({ where: { document: { edition: { scanRunId: firstRunId } }, storedObjectId: null } })).toBe(0)
 
     const storedRun = await prisma.scanRun.findUniqueOrThrow({ where: { id: firstRunId } })
     expect(storedRun.manifestObjectKey).toBeTruthy()
     await expect(s3.send(new HeadObjectCommand({ Bucket: s3Config.bucket, Key: storedRun.manifestObjectKey! }))).resolves.toBeTruthy()
+    const manifestObject = await s3.send(new GetObjectCommand({ Bucket: s3Config.bucket, Key: storedRun.manifestObjectKey! }))
+    const manifest = JSON.parse(await manifestObject.Body!.transformToString())
+    expect(manifest.schemaVersion).toBe(2)
+    expect(manifest.filterAudit.decisions).toHaveLength(4)
+    expect(manifest.editions.flatMap((edition: { documents: unknown[] }) => edition.documents).every((document: { filter: { finalDecision: string } }) => ['IN', 'OUT'].includes(document.filter.finalDecision))).toBe(true)
     const objectsAfterFirstRun = await prisma.storedObject.findMany()
     expect(objectsAfterFirstRun.length).toBeGreaterThan(0)
     expect(objectsAfterFirstRun.every((object) => /^[0-9a-f]{64}$/.test(object.sha256))).toBe(true)
