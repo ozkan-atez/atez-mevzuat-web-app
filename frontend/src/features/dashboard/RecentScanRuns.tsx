@@ -4,12 +4,13 @@ import { listScanRuns } from '../scans/api'
 import type { ScanRunStatus, ScanRunSummary } from '../scans/types'
 
 const statusLabels: Record<ScanRunStatus, string> = {
-  QUEUED: 'Sırada', RUNNING: 'Çalışıyor', COMPLETED: 'Tamamlandı', PARTIAL: 'Kısmen tamamlandı', FAILED: 'Başarısız', CANCELLED: 'İptal edildi',
+  QUEUED: 'Sırada', RUNNING: 'Çalışıyor', AWAITING_RETRY: 'Yeniden deneme bekliyor', COMPLETED: 'Tamamlandı', PARTIAL: 'Kısmen tamamlandı', FAILED: 'Başarısız', CANCELLED: 'İptal edildi',
 }
 
 const statusClasses: Record<ScanRunStatus, string> = {
   QUEUED: 'border-slate-200 bg-slate-50 text-slate-700',
   RUNNING: 'border-blue-200 bg-blue-50 text-blue-700',
+  AWAITING_RETRY: 'border-amber-200 bg-amber-50 text-amber-700',
   COMPLETED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   PARTIAL: 'border-amber-200 bg-amber-50 text-amber-700',
   FAILED: 'border-red-200 bg-red-50 text-red-700',

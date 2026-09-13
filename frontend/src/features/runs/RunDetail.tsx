@@ -1,12 +1,14 @@
+import { useState } from 'react'
 import { AlertCircle, ArrowLeft, CalendarDays, RefreshCw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
+import { retryAiFilter } from '../scans/api'
 import { useScanRun } from '../scans/useScanRun'
 import type { ScanRunStatus } from '../scans/types'
 import { CollectedDocuments } from './CollectedDocuments'
 import { OperationSteps } from './OperationSteps'
 
 const statusLabels: Record<ScanRunStatus, string> = {
-  QUEUED: 'Sırada', RUNNING: 'Çalışıyor', COMPLETED: 'Tamamlandı', PARTIAL: 'Kısmen tamamlandı', FAILED: 'Başarısız', CANCELLED: 'İptal edildi',
+  QUEUED: 'Sırada', RUNNING: 'Çalışıyor', AWAITING_RETRY: 'Yeniden deneme bekliyor', COMPLETED: 'Tamamlandı', PARTIAL: 'Kısmen tamamlandı', FAILED: 'Başarısız', CANCELLED: 'İptal edildi',
 }
 
 function formatDate(value: string) {
@@ -15,7 +17,23 @@ function formatDate(value: string) {
 
 export function RunDetail() {
   const { id } = useParams<{ id: string }>()
-  const { run, isLoading, notFound, error, refresh } = useScanRun(id)
+  const { run, isLoading, notFound, error, refresh, reconnect } = useScanRun(id)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
+
+  const handleRetry = async () => {
+    if (!id || isRetrying) return
+    setIsRetrying(true)
+    setRetryError(null)
+    try {
+      await retryAiFilter(id)
+      await reconnect()
+    } catch (caught) {
+      setRetryError(caught instanceof Error ? caught.message : 'AI filtresi yeniden başlatılamadı')
+    } finally {
+      setIsRetrying(false)
+    }
+  }
 
   if (isLoading) {
     return <div className="flex min-h-72 items-center justify-center text-sm text-slate-500"><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Tarama yükleniyor…</div>
@@ -72,7 +90,7 @@ export function RunDetail() {
           <article className="group relative overflow-hidden rounded-3xl border border-indigo-200/70 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-500/10">
             <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-gradient-to-br from-indigo-500/15 to-purple-500/5 blur-2xl transition-transform duration-500 group-hover:scale-125" />
             <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-600">Belirlenen gümrük mevzuatı tespiti</p>
-            <p className="relative mt-2 text-4xl font-black tracking-tight text-indigo-600">{run.counts.completedItems}</p>
+            <p className="relative mt-2 text-4xl font-black tracking-tight text-indigo-600">{run.filter?.counts.in ?? 0}</p>
             <p className="relative mt-2 text-xs font-medium leading-relaxed text-slate-500">Şirket operasyonlarını ilgilendiren değişiklik</p>
           </article>
         </section>
@@ -86,7 +104,7 @@ export function RunDetail() {
       )}
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <OperationSteps run={run} />
+        <OperationSteps run={run} onRetry={() => void handleRetry()} isRetrying={isRetrying} retryError={retryError} />
         <CollectedDocuments editions={run.editions} />
       </div>
     </div>

@@ -1,14 +1,15 @@
-export type ScanRunStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
+export type ScanRunStatus = 'QUEUED' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
 
 export type ScanStage =
   | 'DISCOVERING'
+  | 'AI_FILTERING'
   | 'DOWNLOADING_DOCUMENTS'
   | 'DISCOVERING_ASSETS'
   | 'DOWNLOADING_ASSETS'
   | 'VALIDATING'
   | 'WRITING_MANIFEST'
 
-export type StageExecutionStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+export type StageExecutionStatus = 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'FAILED'
 
 export interface ScanRunDetail {
   id: string
@@ -18,6 +19,13 @@ export interface ScanRunDetail {
   startedAt: string | null
   completedAt: string | null
   errorSummary: string | null
+  filter: null | {
+    status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+    counts: { in: number; out: number; pending: number }
+    retryAvailable: boolean
+    errorCategory: string | null
+    errorMessage: string | null
+  }
   counts: {
     editions: number
     documents: number
@@ -43,6 +51,11 @@ export interface ScanRunDetail {
       sourceUrl: string
       validationStatus: 'PENDING' | 'VALID' | 'INVALID'
       assetCount: number
+      filter: null | {
+        titleDecision: 'IN' | 'OUT' | 'MAYBE'
+        finalDecision: 'IN' | 'OUT' | null
+        reason: string
+      }
     }>
   }>
 }
@@ -60,6 +73,7 @@ export interface ScanRunSummary {
 }
 
 export const terminalScanStatuses = new Set<ScanRunStatus>([
+  'AWAITING_RETRY',
   'COMPLETED',
   'PARTIAL',
   'FAILED',

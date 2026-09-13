@@ -8,6 +8,7 @@ interface ScanRunState {
   notFound: boolean
   error: string | null
   refresh: () => Promise<void>
+  reconnect: () => Promise<void>
 }
 
 export function useScanRun(runId: string | undefined): ScanRunState {
@@ -15,6 +16,7 @@ export function useScanRun(runId: string | undefined): ScanRunState {
   const [isLoading, setIsLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [connectionVersion, setConnectionVersion] = useState(0)
 
   const load = useCallback(async (): Promise<ScanRunDetail | null> => {
     if (!runId) return null
@@ -38,6 +40,10 @@ export function useScanRun(runId: string | undefined): ScanRunState {
   }, [runId])
 
   const refresh = useCallback(async () => { await load() }, [load])
+  const reconnect = useCallback(async () => {
+    await load()
+    setConnectionVersion((version) => version + 1)
+  }, [load])
 
   useEffect(() => {
     let disposed = false
@@ -82,7 +88,7 @@ export function useScanRun(runId: string | undefined): ScanRunState {
       eventSource?.close()
       if (pollingTimer) clearInterval(pollingTimer)
     }
-  }, [load, runId])
+  }, [connectionVersion, load, runId])
 
-  return { run, isLoading, notFound, error, refresh }
+  return { run, isLoading, notFound, error, refresh, reconnect }
 }

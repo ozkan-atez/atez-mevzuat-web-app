@@ -46,6 +46,17 @@ export async function getScanRun(runId: string): Promise<ScanRunDetail> {
   return response.json() as Promise<ScanRunDetail>
 }
 
+export async function retryAiFilter(runId: string): Promise<{ runId: string; status: 'QUEUED' }> {
+  const response = await fetch(`/api/v1/scan-runs/${runId}/ai-filter/retry`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+  })
+  if (!response.ok) {
+    throw new ScanApiError(response.status, await readError(response, 'AI filtresi yeniden başlatılamadı'))
+  }
+  return response.json() as Promise<{ runId: string; status: 'QUEUED' }>
+}
+
 export async function listScanRuns(limit = 10): Promise<ScanRunSummary[]> {
   const response = await fetch(`/api/v1/scan-runs?limit=${limit}`)
   if (!response.ok) {

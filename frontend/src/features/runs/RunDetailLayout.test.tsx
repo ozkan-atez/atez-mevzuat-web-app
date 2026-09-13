@@ -11,6 +11,7 @@ const run = {
   startedAt: '2026-09-13T07:00:00.000Z',
   completedAt: '2026-09-13T07:02:00.000Z',
   errorSummary: null,
+  filter: { status: 'COMPLETED', counts: { in: 2, out: 2, pending: 0 }, retryAvailable: false, errorCategory: null, errorMessage: null },
   counts: { editions: 1, documents: 4, assets: 2, completedItems: 2, totalItems: 4, failedItems: 0 },
   stages: [
     {
