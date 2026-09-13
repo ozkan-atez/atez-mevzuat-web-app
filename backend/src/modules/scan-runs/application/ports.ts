@@ -197,6 +197,24 @@ export interface PreviousSourceJobRecord {
   status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
 }
 
+export interface PreviousSourceSearchCandidate {
+  query: string
+  title: string
+  publicationDate: string
+  gazetteNo: string | null
+  mukerrer: string | null
+  url: string
+  regulationType: string | null
+}
+
+export interface PreviousSourceSearch {
+  search(input: { query: string; endDate: string; limit: number }): Promise<PreviousSourceSearchCandidate[]>
+  resolveDocumentUrl(
+    candidate: PreviousSourceSearchCandidate,
+    intent: { targetRegulationIdentifier: string | null; targetRegulationTitle: string | null },
+  ): Promise<string>
+}
+
 export interface CompletedRunSnapshot {
   run: ScanRunDetailDto
   index: { sourceUrl: string; objectKey: string; sha256: string }
