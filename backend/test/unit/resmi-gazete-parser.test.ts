@@ -30,6 +30,27 @@ describe('Resmî Gazete parser', () => {
     expect(editions.flatMap((item) => item.documents)).toHaveLength(4)
   })
 
+  it('extracts same-date announcement pages from the official legacy wrapper', () => {
+    const html = `<!doctype html><html><body>
+      <a href="20260914-1.htm">Yönetmelik</a>
+      <a href="http://www.resmigazete.gov.tr/main.aspx?home=x&amp;main=http://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260914-2.htm">a - Yargı İlânı</a>
+      <a href="http://www.resmigazete.gov.tr/main.aspx?main=http://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260914-3.htm">b - İhale İlânları</a>
+      <a href="http://www.resmigazete.gov.tr/main.aspx?main=https://example.com/20260914-4.htm">Haricî</a>
+    </body></html>`
+
+    const documents = parseEditions(
+      html,
+      'https://www.resmigazete.gov.tr/eskiler/2026/09/20260914.htm',
+      '2026-09-14',
+    ).flatMap((edition) => edition.documents)
+
+    expect(documents.map((document) => document.title)).toEqual(['Yönetmelik', 'a - Yargı İlânı', 'b - İhale İlânları'])
+    expect(documents.slice(1).map((document) => document.sourceUrl)).toEqual([
+      'https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260914-2.htm',
+      'https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/09/20260914-3.htm',
+    ])
+  })
+
   it('discovers five supported official assets and rejects unsafe ones', () => {
     const assets = parseAssets(documentFixture, documentUrl)
     expect(assets).toHaveLength(5)

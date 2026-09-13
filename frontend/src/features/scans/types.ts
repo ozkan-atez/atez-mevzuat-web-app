@@ -47,6 +47,18 @@ export interface ScanRunDetail {
   }>
 }
 
+export interface ScanRunSummary {
+  id: string
+  trigger: 'MANUAL' | 'CRON'
+  status: ScanRunStatus
+  currentStage: ScanStage | null
+  targetDate: string
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  counts: { editions: number; documents: number; assets: number }
+}
+
 export const terminalScanStatuses = new Set<ScanRunStatus>([
   'COMPLETED',
   'PARTIAL',

@@ -9,6 +9,13 @@ interface Options {
 const terminalStatuses = new Set(['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'])
 
 export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
+  app.get('/', async (request) => {
+    const query = request.query as { limit?: string }
+    const parsedLimit = Number(query.limit ?? 10)
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 50) : 10
+    return { runs: await options.repository.listRuns(limit) }
+  })
+
   app.post('/', async (request, reply) => {
     const keyResult = idempotencyKeySchema.safeParse(request.headers['idempotency-key'])
     const bodyResult = createScanRunSchema.safeParse(request.body)

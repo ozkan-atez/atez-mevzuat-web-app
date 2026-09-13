@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { TriggerWorkflowModal } from './TriggerWorkflowModal';
+import { RecentScanRuns } from './RecentScanRuns';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -298,108 +299,7 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* Recent Bulletins Section */}
-      <section className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden" data-purpose="recent-reports-table">
-        <div className="p-5 sm:px-6 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900">Son Oluşturulan Mevzuat Bültenleri & Değişiklik Özeti</h2>
-            <p className="text-xs sm:text-sm text-slate-500">Mevzuat ajanının son 24 saat içinde tespit ettiği, ayrıştırdığı ve e-posta servisine sunduğu başlıklar</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50" type="button">Tümünü Dışa Aktar (.xlsx)</button>
-          </div>
-        </div>
-        
-        <div className="overflow-x-auto custom-scroll">
-          <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50/80 text-xs uppercase font-semibold text-slate-500 border-b border-slate-200/80">
-              <tr>
-                <th className="py-3.5 px-6" scope="col">Tarih / Sayı</th>
-                <th className="py-3.5 px-6" scope="col">Mevzuat Başlığı & Konu</th>
-                <th className="py-3.5 px-6" scope="col">Kaynak / Tür</th>
-                <th className="py-3.5 px-6" scope="col">Durum</th>
-                <th className="py-3.5 px-6 text-right" scope="col">Aksiyon</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {/* Row 1 */}
-              <tr className="hover:bg-slate-50/60 transition">
-                <td className="py-4 px-6 font-medium text-slate-900 whitespace-nowrap">
-                  <div>Bugün, 09:00</div>
-                  <div className="text-xs text-slate-400 font-mono">Sayı: 32841 (1. Mükerrer)</div>
-                </td>
-                <td className="py-4 px-6 max-w-sm">
-                  <div className="font-semibold text-slate-900 line-clamp-1">İthalatta Haksız Rekabetin Önlenmesine İlişkin Tebliğ (No: 2026/4)</div>
-                  <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">Belirli menşeli sıcak haddelenmiş rulo sac ürünlerinde dampinge karşı kesin önlem revizyonu.</div>
-                </td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <Link
-                    to="/runs/CRON-02"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-                    Cron Job (#CRON-02)
-                  </Link>
-                </td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-                    Bülten Dağıtıldı
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-right whitespace-nowrap">
-                  <div className="inline-flex items-center gap-2 justify-end">
-                    <Link
-                      to="/runs/325b2514-0e2e-499d-b268-060b0373f33c"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm"
-                    >
-                      <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" strokeLinecap="round" strokeLinejoin="round"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-                      İncele
-                    </Link>
-                  </div>
-                </td>
-              </tr>
-              {/* Row 4: Pending Approval */}
-              <tr className="hover:bg-slate-50/60 transition">
-                <td className="py-4 px-6 font-medium text-slate-900 whitespace-nowrap">
-                  <div>Bugün, 04:00</div>
-                  <div className="text-xs text-slate-400 font-mono">Sayı: 32841 (Normal)</div>
-                </td>
-                <td className="py-4 px-6 max-w-sm">
-                  <div className="font-semibold text-slate-900 line-clamp-1">Bazı Tekstil ve Konfeksiyon Ürünlerinin İthalatında Tarife Kontenjanı</div>
-                  <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">Avrupa Birliği menşeli olmayan pamuk ipliklerinde gümrük vergisi muafiyet kotaları.</div>
-                </td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <Link
-                    to="/runs/325b2514-0e2e-499d-b268-060b0373f33c"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-                    Cron Job (#CRON-01)
-                  </Link>
-                </td>
-                <td className="py-4 px-6 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                    Onay & Dağıtım Bekliyor
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-right whitespace-nowrap">
-                  <div className="inline-flex items-center gap-2 justify-end">
-                    <Link
-                      to="/runs/325b2514-0e2e-499d-b268-060b0373f33c"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm"
-                    >
-                      <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" strokeLinecap="round" strokeLinejoin="round"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-                      İncele
-                    </Link>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <RecentScanRuns />
 
       {isTriggerOpen && (
         <TriggerWorkflowModal

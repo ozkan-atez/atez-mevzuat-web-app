@@ -90,6 +90,18 @@ export interface ScanRunDetailDto {
   }>
 }
 
+export interface ScanRunSummaryDto {
+  id: string
+  trigger: 'MANUAL' | 'CRON'
+  status: ScanRunStatus
+  currentStage: ScanStage | null
+  targetDate: string
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  counts: { editions: number; documents: number; assets: number }
+}
+
 export interface CompletedRunSnapshot {
   run: ScanRunDetailDto
   index: { sourceUrl: string; objectKey: string; sha256: string }

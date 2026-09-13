@@ -1,4 +1,4 @@
-import type { ScanRunDetail, ScanRunStatus } from './types'
+import type { ScanRunDetail, ScanRunStatus, ScanRunSummary } from './types'
 
 export class ScanApiError extends Error {
   readonly status: number
@@ -44,4 +44,13 @@ export async function getScanRun(runId: string): Promise<ScanRunDetail> {
     throw new ScanApiError(response.status, await readError(response, 'Tarama bilgileri alınamadı'))
   }
   return response.json() as Promise<ScanRunDetail>
+}
+
+export async function listScanRuns(limit = 10): Promise<ScanRunSummary[]> {
+  const response = await fetch(`/api/v1/scan-runs?limit=${limit}`)
+  if (!response.ok) {
+    throw new ScanApiError(response.status, await readError(response, 'Taramalar alınamadı'))
+  }
+  const body = await response.json() as { runs: ScanRunSummary[] }
+  return body.runs
 }

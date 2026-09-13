@@ -24,7 +24,9 @@ export function parseEditions(html: string, indexUrl: string, targetDate: string
   if (!parsedDate.isValid) throw new Error('target date is invalid')
   const stem = parsedDate.toFormat('yyyyMMdd')
   const expectedDirectory = `/eskiler/${parsedDate.toFormat('yyyy/MM')}/`
+  const announcementDirectory = `/ilanlar/eskiilanlar/${parsedDate.toFormat('yyyy/MM')}/`
   const filenamePattern = new RegExp(`^${stem}(?:M([1-9][0-9]*))?-[1-9][0-9]*(?:-[1-9][0-9]*)?\\.(?:html?|pdf)$`, 'i')
+  const announcementPattern = new RegExp(`^${stem}-[1-9][0-9]*\\.html?$`, 'i')
   const $ = load(html)
   const grouped = new Map<number | null, DiscoveredEdition>()
   const seen = new Set<string>()
@@ -34,16 +36,18 @@ export function parseEditions(html: string, indexUrl: string, targetDate: string
     if (!href || hasTraversal(href)) return
     let url: URL
     try {
-      url = policy.assertAllowedUrl(new URL(href, indexUrl).toString())
+      url = resolveOfficialDocumentUrl(href, indexUrl)
     } catch {
       return
     }
-    if (!url.pathname.startsWith(expectedDirectory) || seen.has(url.toString())) return
+    const isPublication = url.pathname.startsWith(expectedDirectory)
+    const isAnnouncement = url.pathname.startsWith(announcementDirectory)
+    if ((!isPublication && !isAnnouncement) || seen.has(url.toString())) return
     const filename = url.pathname.slice(url.pathname.lastIndexOf('/') + 1)
-    const match = filenamePattern.exec(filename)
-    if (!match) return
+    const match = isPublication ? filenamePattern.exec(filename) : null
+    if ((isPublication && !match) || (isAnnouncement && !announcementPattern.test(filename))) return
     seen.add(url.toString())
-    const supplementNo = match[1] ? Number(match[1]) : null
+    const supplementNo = match?.[1] ? Number(match[1]) : null
     const edition = grouped.get(supplementNo) ?? {
       type: supplementNo === null ? 'MAIN' : 'SUPPLEMENT',
       supplementNo,
@@ -64,6 +68,21 @@ export function parseEditions(html: string, indexUrl: string, targetDate: string
   return [...grouped.values()]
     .sort((a, b) => (a.supplementNo ?? 0) - (b.supplementNo ?? 0))
     .map((edition, discoveryOrder) => ({ ...edition, discoveryOrder }))
+}
+
+function resolveOfficialDocumentUrl(href: string, indexUrl: string): URL {
+  const outer = new URL(href, indexUrl)
+  if (outer.pathname.toLowerCase() !== '/main.aspx') {
+    return policy.assertAllowedUrl(outer.toString())
+  }
+  if (!hosts.includes(outer.hostname.toLowerCase())) {
+    throw new Error('Legacy wrapper host is not allowed')
+  }
+  const nestedValue = outer.searchParams.get('main')
+  if (!nestedValue) throw new Error('Legacy wrapper has no document URL')
+  const nested = new URL(nestedValue)
+  if (nested.protocol === 'http:') nested.protocol = 'https:'
+  return policy.assertAllowedUrl(nested.toString())
 }
 
 export function parseAssets(html: string, documentUrl: string): DiscoveredAsset[] {

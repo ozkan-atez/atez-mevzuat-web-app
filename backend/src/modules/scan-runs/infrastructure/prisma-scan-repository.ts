@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 import type { ScanRunStatus, ScanStage } from '../domain/scan-run'
-import type { CompletedRunSnapshot, DiscoveredAsset, DiscoveredEdition, ScanRunDetailDto, StoredBlob } from '../application/ports'
+import type { CompletedRunSnapshot, DiscoveredAsset, DiscoveredEdition, ScanRunDetailDto, ScanRunSummaryDto, StoredBlob } from '../application/ports'
 
 export class PrismaScanRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -186,6 +186,29 @@ export class PrismaScanRepository {
       stages: run.stages.map((stage) => ({ stage: stage.stage, status: stage.status, completedItems: stage.completedItems, totalItems: stage.totalItems, failedItems: stage.failedItems })),
       editions: run.editions.map((edition) => ({ id: edition.id, type: edition.type, supplementNo: edition.supplementNo, documents: edition.documents.map((document) => ({ id: document.id, title: document.title, sourceUrl: document.sourceUrl, validationStatus: document.validationStatus, assetCount: document._count.assets })) })),
     }
+  }
+
+  async listRuns(limit: number): Promise<ScanRunSummaryDto[]> {
+    const runs = await this.prisma.scanRun.findMany({
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      include: { editions: { include: { documents: { include: { _count: { select: { assets: true } } } } } } },
+    })
+    return runs.map((run) => ({
+      id: run.id,
+      trigger: run.trigger,
+      status: run.status,
+      currentStage: run.currentStage,
+      targetDate: run.targetDate.toISOString().slice(0, 10),
+      createdAt: run.createdAt.toISOString(),
+      startedAt: run.startedAt?.toISOString() ?? null,
+      completedAt: run.completedAt?.toISOString() ?? null,
+      counts: {
+        editions: run.editions.length,
+        documents: run.editions.reduce((total, edition) => total + edition.documents.length, 0),
+        assets: run.editions.reduce((total, edition) => total + edition.documents.reduce((documentTotal, document) => documentTotal + document._count.assets, 0), 0),
+      },
+    }))
   }
 
   async completedSnapshot(runId: string): Promise<CompletedRunSnapshot> {

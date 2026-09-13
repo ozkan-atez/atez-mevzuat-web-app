@@ -40,4 +40,16 @@ describe('scan run HTTP contract', () => {
     expect(response.json()).toEqual({ message: 'Tarama bulunamadı' })
     await app.close()
   })
+
+  it('lists recent real runs newest first', async () => {
+    const older = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-13' })
+    const newer = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
+    const app = await buildApp({ scanRepository: repository })
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/scan-runs?limit=10' })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json<{ runs: Array<{ id: string }> }>().runs.map((run) => run.id)).toEqual([newer.id, older.id])
+    await app.close()
+  })
 })
