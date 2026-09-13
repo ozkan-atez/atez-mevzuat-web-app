@@ -7,6 +7,197 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ScanTrigger {
+  MANUAL
+  CRON
+}
+
+enum ScanRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum ScanStage {
+  DISCOVERING
+  DOWNLOADING_DOCUMENTS
+  DISCOVERING_ASSETS
+  DOWNLOADING_ASSETS
+  VALIDATING
+  WRITING_MANIFEST
+}
+
+enum EditionType {
+  MAIN
+  SUPPLEMENT
+}
+
+enum ValidationStatus {
+  PENDING
+  VALID
+  INVALID
+}
+
+enum AssetRole {
+  ATTACHMENT
+  IMAGE
+  STYLESHEET_ASSET
+  OTHER_SUPPORTED
+}
+
+enum StageExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum FetchAttemptStatus {
+  SUCCESS
+  FAILED
+}
+
+model ScanRun {
+  id                String           @id @default(uuid())
+  requestKey        String           @unique
+  trigger           ScanTrigger      @default(MANUAL)
+  targetDate        DateTime         @db.Date
+  timezone          String           @default("Europe/Istanbul")
+  status            ScanRunStatus    @default(QUEUED)
+  currentStage      ScanStage?
+  totalItems        Int              @default(0)
+  completedItems    Int              @default(0)
+  failedItems       Int              @default(0)
+  downloadedBytes   BigInt           @default(0)
+  errorSummary      String?
+  queueJobId        String?
+  indexSourceUrl    String?
+  indexObjectKey    String?
+  indexSha256       String?
+  manifestObjectKey String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  editions          GazetteEdition[]
+  stages            StageExecution[]
+  attempts          FetchAttempt[]
+  outbox            ScanOutbox?
+
+  @@index([targetDate, createdAt])
+  @@index([status, createdAt])
+}
+
+model ScanOutbox {
+  id           String    @id @default(uuid())
+  scanRunId    String    @unique
+  scanRun      ScanRun   @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  attempts     Int       @default(0)
+  availableAt  DateTime  @default(now())
+  dispatchedAt DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+
+  @@index([dispatchedAt, availableAt])
+}
+
+model GazetteEdition {
+  id              String              @id @default(uuid())
+  scanRunId       String
+  scanRun         ScanRun             @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  publicationDate DateTime            @db.Date
+  type            EditionType
+  supplementNo    Int?
+  indexUrl        String
+  discoveryOrder  Int
+  documents       CollectedDocument[]
+
+  @@unique([scanRunId, indexUrl])
+}
+
+model CollectedDocument {
+  id               String           @id @default(uuid())
+  editionId        String
+  edition          GazetteEdition   @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  title            String
+  documentType     String?
+  sourceUrl        String
+  publicationOrder Int
+  storedObjectId   String?
+  storedObject     StoredObject?    @relation(fields: [storedObjectId], references: [id])
+  validationStatus ValidationStatus @default(PENDING)
+  assets           DocumentAsset[]
+
+  @@unique([editionId, sourceUrl])
+}
+
+model StoredObject {
+  id        String              @id @default(uuid())
+  sha256    String              @unique @db.Char(64)
+  bucket    String
+  objectKey String              @unique
+  mediaType String
+  byteSize  BigInt
+  versionId String?
+  createdAt DateTime            @default(now())
+  documents CollectedDocument[]
+  assets    DocumentAsset[]
+}
+
+model DocumentAsset {
+  id               String            @id @default(uuid())
+  documentId       String
+  document         CollectedDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  storedObjectId   String?
+  storedObject     StoredObject?     @relation(fields: [storedObjectId], references: [id])
+  sourceUrl        String
+  referenceText    String?
+  role             AssetRole
+  validationStatus ValidationStatus  @default(PENDING)
+
+  @@unique([documentId, sourceUrl])
+}
+
+model StageExecution {
+  id             String               @id @default(uuid())
+  scanRunId      String
+  scanRun        ScanRun              @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  stage          ScanStage
+  status         StageExecutionStatus @default(PENDING)
+  totalItems     Int                  @default(0)
+  completedItems Int                  @default(0)
+  failedItems    Int                  @default(0)
+  errorSummary   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([scanRunId, stage])
+}
+
+model FetchAttempt {
+  id           String             @id @default(uuid())
+  scanRunId    String
+  scanRun      ScanRun            @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  sourceUrl    String
+  attemptNo    Int
+  status       FetchAttemptStatus
+  httpStatus   Int?
+  redirectUrl  String?
+  byteSize     BigInt?
+  errorClass   String?
+  errorMessage String?
+  startedAt    DateTime           @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime           @default(now())
+
+  @@index([scanRunId, createdAt])
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -28,22 +219,22 @@ model Source {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  documents     Document[]
+  documents Document[]
 }
 
 model Document {
-  id             String    @id @default(uuid())
-  sourceId       String
-  externalId     String?
-  canonicalUrl   String    @unique
-  title          String
-  publishedOn    DateTime  @db.Date
-  institution    String?
-  regulationNum  String?
-  createdAt      DateTime  @default(now())
+  id            String   @id @default(uuid())
+  sourceId      String
+  externalId    String?
+  canonicalUrl  String   @unique
+  title         String
+  publishedOn   DateTime @db.Date
+  institution   String?
+  regulationNum String?
+  createdAt     DateTime @default(now())
 
-  source         Source    @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  versions       DocumentVersion[]
+  source   Source            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  versions DocumentVersion[]
 
   @@unique([sourceId, externalId])
 }
@@ -57,21 +248,21 @@ model DocumentVersion {
   mimeType         String   @default("application/pdf")
   createdAt        DateTime @default(now())
 
-  document         Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
 
   @@unique([documentId, contentHash])
 }
 
 model Job {
-  id             String    @id @default(uuid())
+  id             String   @id @default(uuid())
   kind           String
   entityId       String
   actorId        String?
-  idempotencyKey String    @unique
-  status         String    @default("QUEUED")
+  idempotencyKey String   @unique
+  status         String   @default("QUEUED")
   errorDetails   String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model ChatSession {
