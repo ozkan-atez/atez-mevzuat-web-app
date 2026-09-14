@@ -139,6 +139,68 @@ enum FetchAttemptStatus {
   FAILED
 }
 
+enum TopicProcessStatus {
+  QUEUED
+  ANALYZING
+  ANALYZED
+  RENDERING
+  VALIDATING
+  COMPLETED
+  AWAITING_RETRY
+  BLOCKED
+  FAILED
+}
+
+enum AnalysisRevisionStatus {
+  PASS
+  PASS_NO_RELEVANT_CONTENT
+}
+
+enum ReportRevisionStatus {
+  GENERATED
+  VALIDATED
+  FAILED
+}
+
+enum ReportCard {
+  K1
+  K2
+  K3
+  K4
+  K5
+  K6
+}
+
+enum ChatRole {
+  SYSTEM
+  USER
+  ASSISTANT
+}
+
+enum ChatMessageKind {
+  AUTOMATED_ANALYSIS
+  REVISION_REQUEST
+  REVISION_RESULT
+  ERROR
+}
+
+enum RevisionKind {
+  ANALYSIS
+  PUBLICATION
+}
+
+enum TopicOutboxCommand {
+  RETRY_ANALYSIS
+  REVISE_ANALYSIS
+  REVISE_PUBLICATION
+}
+
+enum TopicAiExecutionKind {
+  INITIAL_ANALYSIS
+  ANALYSIS_REVISION
+  PUBLICATION_REVISION
+}
+
 model ScanRun {
   id                 String              @id @default(uuid())
   requestKey         String              @unique
@@ -167,6 +229,8 @@ model ScanRun {
   outbox             ScanOutbox[]
   aiJobs             AiJob[]
   previousSourceJobs PreviousSourceJob[]
+  topicProcesses     TopicProcess[]
+  topicReports       TopicReport[]
 
   @@index([targetDate, createdAt])
   @@index([status, createdAt])
@@ -216,6 +280,7 @@ model CollectedDocument {
   assets            DocumentAsset[]
   filterDecisions   DocumentFilterDecision[]
   previousSourceJob PreviousSourceJob?
+  topicProcess      TopicProcess?
 
   @@unique([editionId, sourceUrl])
 }
@@ -461,6 +526,163 @@ model FetchAttempt {
   createdAt    DateTime           @default(now())
 
   @@index([scanRunId, createdAt])
+}
+
+model TopicProcess {
+  id                String             @id @default(uuid())
+  scanRunId         String
+  scanRun           ScanRun            @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  documentId        String             @unique
+  document          CollectedDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status            TopicProcessStatus @default(QUEUED)
+  lastErrorCategory AiErrorCategory?
+  lastErrorMessage  String?
+  evidenceBundle    EvidenceBundle?
+  thread            AnalysisThread?
+  analyses          AnalysisRevision[]
+  reports           TopicReport[]
+  executions        TopicAiExecution[]
+  outbox            TopicOutbox[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([scanRunId, status])
+}
+
+model EvidenceBundle {
+  id                String       @id @default(uuid())
+  topicId           String       @unique
+  topic             TopicProcess @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  manifestObjectKey String?
+  sourceSignature   String?      @db.Char(64)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model AnalysisThread {
+  id        String        @id @default(uuid())
+  topicId   String        @unique
+  topic     TopicProcess  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title     String?
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model ChatMessage {
+  id           String          @id @default(uuid())
+  threadId     String
+  thread       AnalysisThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role         ChatRole
+  kind         ChatMessageKind
+  revisionKind RevisionKind?
+  requestKey   String?         @unique
+  content      String
+  createdAt    DateTime        @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+model AnalysisRevision {
+  id                String                 @id @default(uuid())
+  topicId           String
+  topic             TopicProcess           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  version           Int
+  status            AnalysisRevisionStatus
+  analysisObjectKey String                 @unique
+  markdownObjectKey String                 @unique
+  model             String
+  promptVersion     String
+  schemaVersion     Int
+  inputTokens       Int?
+  outputTokens      Int?
+  reports           ReportRevision[]
+  executions        TopicAiExecution[]
+  createdAt         DateTime               @default(now())
+
+  @@unique([topicId, version])
+  @@index([topicId, createdAt])
+}
+
+model TopicReport {
+  id            String           @id @default(uuid())
+  scanRunId     String
+  scanRun       ScanRun          @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  topicId       String?
+  topic         TopicProcess?    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title         String
+  basename      String
+  card          ReportCard
+  latestVersion Int              @default(0)
+  revisions     ReportRevision[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([topicId])
+  @@index([scanRunId, createdAt])
+}
+
+model ReportRevision {
+  id                 String               @id @default(uuid())
+  reportId           String
+  report             TopicReport          @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  analysisRevisionId String?
+  analysisRevision   AnalysisRevision?    @relation(fields: [analysisRevisionId], references: [id], onDelete: Restrict)
+  version            Int
+  status             ReportRevisionStatus
+  card               ReportCard
+  specObjectKey      String               @unique
+  htmlObjectKey      String               @unique
+  validationError    String?
+  createdAt          DateTime             @default(now())
+
+  @@unique([reportId, version])
+  @@index([analysisRevisionId])
+}
+
+model TopicAiExecution {
+  id                 String               @id @default(uuid())
+  topicId            String
+  topic              TopicProcess         @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  analysisRevisionId String?
+  analysisRevision   AnalysisRevision?    @relation(fields: [analysisRevisionId], references: [id], onDelete: SetNull)
+  kind               TopicAiExecutionKind
+  attemptNo          Int
+  status             AiCallStatus         @default(RUNNING)
+  model              String
+  promptVersion      String
+  schemaVersion      Int
+  providerRequestId  String?
+  inputHash          String               @db.Char(64)
+  latencyMs          Int?
+  inputTokens        Int?
+  outputTokens       Int?
+  errorCategory      AiErrorCategory?
+  providerStatus     Int?
+  errorMessage       String?
+  startedAt          DateTime             @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime             @default(now())
+
+  @@unique([topicId, kind, attemptNo])
+  @@index([topicId, createdAt])
+}
+
+model TopicOutbox {
+  id           String             @id @default(uuid())
+  topicId      String
+  topic        TopicProcess       @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  command      TopicOutboxCommand
+  requestKey   String             @unique
+  messageId    String?
+  attempts     Int                @default(0)
+  availableAt  DateTime           @default(now())
+  dispatchedAt DateTime?
+  lastError    String?
+  createdAt    DateTime           @default(now())
+
+  @@index([dispatchedAt, availableAt])
+  @@index([topicId, createdAt])
 }
 
 model User {
