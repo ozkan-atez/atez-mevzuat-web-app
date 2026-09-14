@@ -174,7 +174,7 @@ describe('executePreviousSourceDiscovery', () => {
       model: 'gemini-3.7-flash', maxAttempts: 1, concurrency: 1, maxRunBytes: 10_000_000n,
     })).rejects.toBeInstanceOf(PreviousSourceAwaitingRetryError)
 
-    const afterFailure = await prisma.previousSourceJob.findMany({ orderBy: { createdAt: 'asc' }, include: { calls: true } })
+    const afterFailure = await prisma.previousSourceJob.findMany({ orderBy: { document: { publicationOrder: 'asc' } }, include: { calls: true } })
     expect(afterFailure.map((job) => job.status)).toEqual(['COMPLETED', 'AWAITING_RETRY'])
     expect(afterFailure[0]?.calls).toHaveLength(1)
 
@@ -184,7 +184,7 @@ describe('executePreviousSourceDiscovery', () => {
       model: 'gemini-3.7-flash', maxAttempts: 1, concurrency: 1, maxRunBytes: 10_000_000n,
     })
 
-    const completed = await prisma.previousSourceJob.findMany({ orderBy: { createdAt: 'asc' }, include: { calls: true } })
+    const completed = await prisma.previousSourceJob.findMany({ orderBy: { document: { publicationOrder: 'asc' } }, include: { calls: true } })
     expect(completed.map((job) => job.status)).toEqual(['COMPLETED', 'COMPLETED'])
     expect(completed[0]?.calls).toHaveLength(1)
     expect(completed[1]?.calls).toHaveLength(2)

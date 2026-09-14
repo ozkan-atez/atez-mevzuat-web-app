@@ -32,6 +32,7 @@ describe('loadEnv', () => {
       maxAttempts: 3,
       maxContentBytes: 8_000_000,
       previousSourceConcurrency: 3,
+      topicConcurrency: 3,
     })
   })
 })
