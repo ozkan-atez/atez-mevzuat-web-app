@@ -110,6 +110,9 @@ function mapCandidate(raw: unknown, query: string): PreviousSourceSearchCandidat
 }
 
 function decodeHtml(bytes: Buffer, contentType: string | null): string {
-  const charset = contentType?.match(/charset=([^;]+)/i)?.[1]?.trim().toLowerCase()
+  const declared = contentType?.match(/charset=([^;]+)/i)?.[1]?.trim().toLowerCase()
+  const htmlHead = bytes.subarray(0, Math.min(bytes.length, 2_000)).toString('latin1')
+  const embedded = htmlHead.match(/charset\s*=\s*["']?([^\s"';>]+)/i)?.[1]?.trim().toLowerCase()
+  const charset = declared ?? embedded
   return new TextDecoder(charset === 'windows-1254' ? 'windows-1254' : 'utf-8').decode(bytes)
 }

@@ -33,4 +33,17 @@ describe('ResmiGazeteSearch', () => {
     expect(resolved).toBe('https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf')
     expect(fetchFn.mock.calls[1]![0]).toBe('https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4.htm')
   })
+
+  it('uses the legacy HTML meta charset when the server header omits it', async () => {
+    const html = '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1254"></head><body><a href="20251231M4-39.pdf">İthalatta Gözetim Uygulanmasına İlişkin Tebliğ (Tebliğ No: 2018/5)</a></body></html>'
+    const cp1254 = Buffer.from(html.replace(/[İıŞşĞğ]/g, (character) => String.fromCharCode(({ İ: 0xdd, ı: 0xfd, Ş: 0xde, ş: 0xfe, Ğ: 0xd0, ğ: 0xf0 } as Record<string, number>)[character]!)), 'latin1')
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(cp1254, { status: 200, headers: { 'content-type': 'text/html' } }))
+    const gateway = new ResmiGazeteSearch(new SourcePolicy(['resmigazete.gov.tr', 'www.resmigazete.gov.tr']), { fetch: fetchFn, timeoutMs: 5_000 })
+
+    await expect(gateway.resolveDocumentUrl({
+      query: '2018/5', title: 'İthalatta Gözetim Uygulanmasına İlişkin Tebliğ', publicationDate: '2025-12-31',
+      gazetteNo: '33124', mukerrer: 'EVET4', url: 'https://www.resmigazete.gov.tr/fihrist?tarih=2025-12-31&mukerrer=4', regulationType: 'TEBLİĞLER',
+    }, { targetRegulationIdentifier: '2018/5', targetRegulationTitle: 'İthalatta Gözetim Uygulanmasına İlişkin Tebliğ' }))
+      .resolves.toBe('https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf')
+  })
 })
