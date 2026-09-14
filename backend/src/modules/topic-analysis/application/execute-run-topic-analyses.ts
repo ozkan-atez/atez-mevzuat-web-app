@@ -12,6 +12,7 @@ export interface TopicAnalysisOutput {
   analysisObjectKey: string
   markdownObjectKey: string
   analysis: AnalysisResult
+  requestMessageId?: string
 }
 
 export interface TopicPublicationRepository {
@@ -159,6 +160,7 @@ export async function publishTopicAnalysis(
     version,
     specObjectKey,
     htmlObjectKey,
+    ...(output.requestMessageId ? { requestMessageId: output.requestMessageId } : {}),
   })
 }
 

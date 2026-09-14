@@ -231,6 +231,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
           card: input.card,
           specObjectKey: input.specObjectKey,
           htmlObjectKey: input.htmlObjectKey,
+          requestMessageId: input.requestMessageId ?? null,
         },
       })
       await tx.topicReport.update({
@@ -277,6 +278,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
           schemaVersion: input.schemaVersion,
           inputTokens: input.inputTokens ?? null,
           outputTokens: input.outputTokens ?? null,
+          requestMessageId: input.requestMessageId ?? null,
         },
       })
       await tx.topicProcess.update({
@@ -401,6 +403,10 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     const message = topic?.thread?.messages.find((item) => item.id === messageId)
     const analysis = topic?.analyses[0]
     if (!topic || !message || !analysis) return null
+    const [requestAnalysis, requestReport] = await Promise.all([
+      this.prisma.analysisRevision.findUnique({ where: { requestMessageId: messageId } }),
+      this.prisma.reportRevision.findUnique({ where: { requestMessageId: messageId }, include: { report: true } }),
+    ])
     const latestReport = topic.reports.flatMap((report) => report.revisions.map((revision) => ({ report, revision })))[0] ?? null
     return {
       topicId: topic.id,
@@ -416,6 +422,11 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         basename: latestReport.report.basename,
         specObjectKey: latestReport.revision.specObjectKey,
       } : null,
+      requestAnalysis: requestAnalysis ? {
+        id: requestAnalysis.id, version: requestAnalysis.version, status: requestAnalysis.status,
+        analysisObjectKey: requestAnalysis.analysisObjectKey, markdownObjectKey: requestAnalysis.markdownObjectKey,
+      } : null,
+      requestReport: requestReport ? { version: requestReport.version, basename: requestReport.report.basename } : null,
     }
   }
 
@@ -449,10 +460,14 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     })
   }
 
-  async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: 'ANALYSIS' | 'PUBLICATION'; content: string }): Promise<void> {
+  async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: 'ANALYSIS' | 'PUBLICATION'; content: string; requestKey?: string }): Promise<void> {
     const thread = await this.prisma.analysisThread.findUnique({ where: { topicId } })
     if (!thread) throw new TopicNotFoundError('Topic konuşması bulunamadı.')
-    await this.prisma.chatMessage.create({ data: { threadId: thread.id, ...input } })
+    if (input.requestKey) {
+      await this.prisma.chatMessage.upsert({ where: { requestKey: input.requestKey }, create: { threadId: thread.id, ...input }, update: {} })
+    } else {
+      await this.prisma.chatMessage.create({ data: { threadId: thread.id, ...input } })
+    }
   }
 
   async claimPendingTopicOutbox(limit: number) {

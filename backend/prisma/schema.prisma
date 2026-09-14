@@ -598,6 +598,7 @@ model AnalysisRevision {
   schemaVersion     Int
   inputTokens       Int?
   outputTokens      Int?
+  requestMessageId  String?                  @unique
   reports           ReportRevision[]
   executions        TopicAiExecution[]
   createdAt         DateTime               @default(now())
@@ -636,6 +637,7 @@ model ReportRevision {
   specObjectKey      String               @unique
   htmlObjectKey      String               @unique
   validationError    String?
+  requestMessageId   String?              @unique
   createdAt          DateTime             @default(now())
 
   @@unique([reportId, version])

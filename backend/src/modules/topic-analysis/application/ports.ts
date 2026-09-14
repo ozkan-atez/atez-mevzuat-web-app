@@ -73,6 +73,7 @@ export interface CreateTopicAnalysisRevisionInput {
   schemaVersion: number
   inputTokens: number | null
   outputTokens: number | null
+  requestMessageId?: string
 }
 
 export interface TopicAnalysisRepository {
@@ -120,6 +121,7 @@ export interface CreateTopicReportRevisionInput {
   version: number
   specObjectKey: string
   htmlObjectKey: string
+  requestMessageId?: string
 }
 
 export interface StoredTopicReport {

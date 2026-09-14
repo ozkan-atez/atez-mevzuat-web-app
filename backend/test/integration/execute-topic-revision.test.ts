@@ -26,7 +26,10 @@ function analysis(topicId: string, summary = 'İthalat kuralı değişti.'): Ana
 }
 
 describe('executeTopicRevision', () => {
-  beforeEach(() => prisma.scanRun.deleteMany())
+  beforeEach(async () => {
+    await prisma.scanRun.deleteMany()
+    await prisma.storedObject.deleteMany()
+  })
   afterAll(() => prisma.$disconnect())
 
   it('creates a new immutable analysis and report revision in the same topic thread', async () => {
@@ -47,12 +50,17 @@ describe('executeTopicRevision', () => {
     store.values.set('analysis-r1.json', Buffer.from(JSON.stringify(initial)))
     store.values.set('analysis-r1.md', Buffer.from('# İlk analiz'))
     const revised = { ...analysis(topic.id, 'İthalatçıların beyan süreçleri değişti.'), affectedParties: [{ name: 'İthalatçılar', impact: 'Beyan süreçleri değişir.', evidenceIds: ['e1'] }] }
-    const ai: AiModelClient = { async generateStructured() { return { json: revised, providerRequestId: 'revision-response', usage: { inputTokens: 40, outputTokens: 20 } } } }
+    let aiCalls = 0
+    const ai: AiModelClient = { async generateStructured() { aiCalls += 1; return { json: revised, providerRequestId: 'revision-response', usage: { inputTokens: 40, outputTokens: 20 } } } }
 
+    await executeTopicRevision({ topicId: topic.id, messageId: request.messageId }, { repository, objectStore: store, aiModel: ai, model: 'gemini-3.7-flash', maxContextBytes: 1_000_000 })
     await executeTopicRevision({ topicId: topic.id, messageId: request.messageId }, { repository, objectStore: store, aiModel: ai, model: 'gemini-3.7-flash', maxContextBytes: 1_000_000 })
 
     expect(await prisma.analysisRevision.count({ where: { topicId: topic.id } })).toBe(2)
     expect(await prisma.reportRevision.count({ where: { report: { topicId: topic.id } } })).toBe(1)
-    expect((await repository.getTopicDetail(topic.id))?.thread.messages.at(-1)).toMatchObject({ role: 'ASSISTANT', kind: 'REVISION_RESULT' })
+    expect(aiCalls).toBe(1)
+    const detail = await repository.getTopicDetail(topic.id)
+    expect(detail?.thread.messages.at(-1)).toMatchObject({ role: 'ASSISTANT', kind: 'REVISION_RESULT' })
+    expect(detail?.thread.messages.filter((message: { kind: string }) => message.kind === 'REVISION_RESULT')).toHaveLength(1)
   })
 })

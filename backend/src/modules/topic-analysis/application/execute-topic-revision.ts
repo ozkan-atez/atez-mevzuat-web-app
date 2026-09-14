@@ -25,6 +25,26 @@ interface Dependencies {
 export async function executeTopicRevision(command: { topicId: string; messageId: string }, dependencies: Dependencies): Promise<void> {
   const work = await dependencies.repository.getTopicRevisionWorkItem(command.topicId, command.messageId)
   if (!work) throw new Error('Topic revizyon bağlamı bulunamadı.')
+  if (work.requestReport) {
+    await appendSuccessResult(work, work.requestReport.version, dependencies)
+    return
+  }
+  if (work.message.revisionKind === 'ANALYSIS' && work.requestAnalysis) {
+    const analysis = AnalysisResultSchema.parse(JSON.parse((await dependencies.objectStore.getContent(work.requestAnalysis.analysisObjectKey)).toString('utf8')))
+    if (analysis.status === 'PASS') {
+      const context = await dependencies.repository.getRunReportContext(work.runId)
+      if (!context) throw new Error('Run rapor bağlamı bulunamadı.')
+      await publishTopicAnalysis(context, {
+        ...work.requestAnalysis,
+        analysis,
+        requestMessageId: work.message.id,
+      }, await dependencies.repository.getTopicSequence(work.topicId), dependencies)
+    } else {
+      await dependencies.repository.markTopicCompleted(work.topicId)
+    }
+    await appendSuccessResult(work, work.requestAnalysis.version, dependencies)
+    return
+  }
   if (work.message.revisionKind === 'PUBLICATION') await executePublicationRevision(work, dependencies)
   else await executeAnalysisRevision(work, dependencies)
 }
@@ -64,6 +84,7 @@ async function executeAnalysisRevision(work: NonNullable<Awaited<ReturnType<Pris
       topicId: work.topicId, version, status: analysis.status, analysisObjectKey, markdownObjectKey,
       model: dependencies.model, promptVersion: `${TOPIC_ANALYSIS_PROMPT_VERSION}-revision`, schemaVersion: 1,
       inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens,
+      requestMessageId: work.message.id,
     })
     await dependencies.repository.completeTopicAiExecution(execution.id, {
       analysisRevisionId: revision.id, providerRequestId: response.providerRequestId, latencyMs: Date.now() - startedAt,
@@ -72,11 +93,11 @@ async function executeAnalysisRevision(work: NonNullable<Awaited<ReturnType<Pris
     if (analysis.status === 'PASS') {
       const context = await dependencies.repository.getRunReportContext(topic.runId)
       if (!context) throw new Error('Run rapor bağlamı bulunamadı.')
-      await publishTopicAnalysis(context, { ...revision, analysisObjectKey, markdownObjectKey, analysis }, await dependencies.repository.getTopicSequence(work.topicId), dependencies)
+      await publishTopicAnalysis(context, { ...revision, analysisObjectKey, markdownObjectKey, analysis, requestMessageId: work.message.id }, await dependencies.repository.getTopicSequence(work.topicId), dependencies)
     } else {
       await dependencies.repository.markTopicCompleted(work.topicId)
     }
-    await dependencies.repository.appendRevisionResult(work.topicId, { role: 'ASSISTANT', kind: 'REVISION_RESULT', revisionKind: 'ANALYSIS', content: `Analiz revizyonu r${String(version).padStart(2, '0')} oluşturuldu.` })
+    await appendSuccessResult(work, version, dependencies)
   } catch (error) {
     await failRevision(work.topicId, execution.id, 'ANALYSIS', error, dependencies)
     throw error
@@ -115,16 +136,30 @@ async function executePublicationRevision(work: NonNullable<Awaited<ReturnType<P
     const report = await dependencies.repository.createReportRevision({
       scanRunId: work.runId, topicId: work.topicId, analysisRevisionId: work.latestAnalysis.id,
       title: revised.documentTitle, basename: work.latestReport.basename, card: revised.card, version, specObjectKey, htmlObjectKey,
+      requestMessageId: work.message.id,
     })
     await dependencies.repository.completeTopicAiExecution(execution.id, {
       analysisRevisionId: work.latestAnalysis.id, providerRequestId: response.providerRequestId, latencyMs: Date.now() - startedAt,
       inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens,
     })
-    await dependencies.repository.appendRevisionResult(work.topicId, { role: 'ASSISTANT', kind: 'REVISION_RESULT', revisionKind: 'PUBLICATION', content: `Rapor revizyonu r${String(report.version).padStart(2, '0')} oluşturuldu.` })
+    await appendSuccessResult(work, report.version, dependencies)
   } catch (error) {
     await failRevision(work.topicId, execution.id, 'PUBLICATION', error, dependencies)
     throw error
   }
+}
+
+async function appendSuccessResult(
+  work: NonNullable<Awaited<ReturnType<PrismaTopicAnalysisRepository['getTopicRevisionWorkItem']>>>,
+  version: number,
+  dependencies: Dependencies,
+): Promise<void> {
+  const publication = work.message.revisionKind === 'PUBLICATION'
+  await dependencies.repository.appendRevisionResult(work.topicId, {
+    role: 'ASSISTANT', kind: 'REVISION_RESULT', revisionKind: work.message.revisionKind,
+    content: `${publication ? 'Rapor' : 'Analiz'} revizyonu r${String(version).padStart(2, '0')} oluşturuldu.`,
+    requestKey: `revision-result:${work.message.id}`,
+  })
 }
 
 async function failRevision(topicId: string, executionId: string, revisionKind: 'ANALYSIS' | 'PUBLICATION', error: unknown, dependencies: Dependencies) {
