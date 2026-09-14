@@ -1,5 +1,5 @@
 const SUPPORTED_SCHEMA_KEYS = new Set([
-  '$id', '$defs', '$ref', '$anchor', 'type', 'format', 'title', 'description', 'enum',
+  '$id', '$defs', '$ref', '$anchor', 'type', 'title', 'description', 'enum',
   'items', 'prefixItems', 'minItems', 'maxItems', 'minimum', 'maximum', 'anyOf', 'oneOf',
   'properties', 'additionalProperties', 'required', 'propertyOrdering',
 ])

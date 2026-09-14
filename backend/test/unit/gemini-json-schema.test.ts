@@ -6,7 +6,7 @@ describe('toGeminiJsonSchema', () => {
     expect(toGeminiJsonSchema({
       type: 'object', additionalProperties: false, properties: {
         version: { type: 'integer', const: 1 },
-        code: { type: 'string', pattern: '^A$', minLength: 1 },
+        code: { type: 'string', pattern: '^A$', minLength: 1, format: 'uri' },
       }, required: ['version', 'code'],
     })).toEqual({
       type: 'object', additionalProperties: false, properties: {
