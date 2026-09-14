@@ -1,4 +1,4 @@
-import { startQueue, manualScanQueueName } from './platform/queue'
+import { startQueue, manualScanQueueName, topicAnalysisQueueName } from './platform/queue'
 import { prisma } from './platform/database'
 import { loadEnv } from './config/env'
 import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-scan-repository'
@@ -14,6 +14,10 @@ import { GeminiAiModelClient, type GeminiTransport } from './modules/ai/infrastr
 import type { ScanCommand } from './modules/scan-runs/application/ports'
 import { ResmiGazeteSearch } from './modules/scan-runs/infrastructure/resmi-gazete-search'
 import { PrismaTopicAnalysisRepository } from './modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import { PgBossTopicAnalysisQueue, type TopicAnalysisCommand } from './modules/topic-analysis/infrastructure/topic-analysis-queue'
+import { executeTopicAnalysis } from './modules/topic-analysis/application/execute-topic-analysis'
+import { executeTopicRevision } from './modules/topic-analysis/application/execute-topic-revision'
+import { publishTopicAnalysis } from './modules/topic-analysis/application/execute-run-topic-analyses'
 
 async function startWorker() {
   const queue = await startQueue()
@@ -21,6 +25,7 @@ async function startWorker() {
   const repository = new PrismaScanRepository(prisma)
   const topicRepository = new PrismaTopicAnalysisRepository(prisma)
   const scanQueue = new PgBossScanQueue(queue)
+  const topicQueue = new PgBossTopicAnalysisQueue(queue)
   const objectStore = new S3ObjectStore(env.s3)
   const http = new OfficialHttpClient(new SourcePolicy(env.sourceHosts), {
     delayMs: env.sourceDelayMs,
@@ -42,6 +47,17 @@ async function startWorker() {
         const message = error instanceof Error ? error.message : 'Queue dispatch failed'
         const delay = Math.min(60_000, 1_000 * 2 ** row.attempts)
         await repository.deferOutbox(row.id, message, new Date(Date.now() + delay))
+      }
+    }
+    const topicRows = await topicRepository.claimPendingTopicOutbox(10)
+    for (const row of topicRows) {
+      try {
+        await topicQueue.enqueue({ outboxId: row.id, topicId: row.topicId, command: row.command, messageId: row.messageId })
+        await topicRepository.markTopicOutboxDispatched(row.id)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Topic queue dispatch failed'
+        const delay = Math.min(60_000, 1_000 * 2 ** row.attempts)
+        await topicRepository.deferTopicOutbox(row.id, message, new Date(Date.now() + delay))
       }
     }
   }
@@ -68,6 +84,29 @@ async function startWorker() {
           topicConcurrency: env.gemini.topicConcurrency,
         },
       }, command.type)
+    }
+  })
+
+  await queue.work(topicAnalysisQueueName, async (jobs) => {
+    const jobList = Array.isArray(jobs) ? jobs : [jobs]
+    for (const job of jobList) {
+      const command = job.data as TopicAnalysisCommand
+      if (command.command === 'RETRY_ANALYSIS') {
+        const result = await executeTopicAnalysis(command.topicId, {
+          repository: topicRepository, objectStore, aiModel, model: env.gemini.model,
+          maxAttempts: env.gemini.maxAttempts, maxContextBytes: env.gemini.maxContentBytes,
+        })
+        if (result.analysis.status === 'PASS') {
+          const context = await topicRepository.getRunReportContext((await topicRepository.getTopicDetail(command.topicId))!.runId)
+          if (!context) throw new Error('Run rapor bağlamı bulunamadı.')
+          await publishTopicAnalysis(context, result, await topicRepository.getTopicSequence(command.topicId), { repository: topicRepository, objectStore })
+        } else await topicRepository.markTopicCompleted(command.topicId)
+      } else {
+        if (!command.messageId) throw new Error('Revizyon komutunda messageId eksik.')
+        await executeTopicRevision({ topicId: command.topicId, messageId: command.messageId }, {
+          repository: topicRepository, objectStore, aiModel, model: env.gemini.model, maxContextBytes: env.gemini.maxContentBytes,
+        })
+      }
     }
   })
 }

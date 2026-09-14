@@ -298,6 +298,146 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
       },
     })
   }
+
+  async getTopicDetail(topicId: string) {
+    const topic = await this.prisma.topicProcess.findUnique({
+      where: { id: topicId },
+      include: {
+        document: { select: { title: true, sourceUrl: true } },
+        thread: { include: { messages: { orderBy: { createdAt: 'asc' } } } },
+        analyses: { orderBy: { version: 'asc' } },
+        reports: { include: { revisions: { orderBy: { version: 'asc' } } } },
+      },
+    })
+    return topic ? mapTopicDetail(topic) : null
+  }
+
+  async listRunTopicDetails(runId: string) {
+    const topics = await this.prisma.topicProcess.findMany({
+      where: { scanRunId: runId },
+      orderBy: [{ document: { edition: { discoveryOrder: 'asc' } } }, { document: { publicationOrder: 'asc' } }],
+      include: {
+        document: { select: { title: true, sourceUrl: true } },
+        thread: { include: { messages: { orderBy: { createdAt: 'asc' } } } },
+        analyses: { orderBy: { version: 'asc' } },
+        reports: { include: { revisions: { orderBy: { version: 'asc' } } } },
+      },
+    })
+    return topics.map(mapTopicDetail)
+  }
+
+  async appendRevisionRequest(input: { topicId: string; requestKey: string; message: string; revisionKind: 'ANALYSIS' | 'PUBLICATION' }) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.chatMessage.findUnique({ where: { requestKey: input.requestKey } })
+      if (existing) {
+        if (existing.threadId !== (await tx.analysisThread.findUnique({ where: { topicId: input.topicId } }))?.id) throw new TopicCommandConflictError('Idempotency key başka bir topic için kullanılmış.')
+        return { messageId: existing.id, status: 'QUEUED' as const, revisionKind: existing.revisionKind ?? input.revisionKind }
+      }
+      const thread = await tx.analysisThread.findUnique({ where: { topicId: input.topicId } })
+      if (!thread) throw new TopicNotFoundError('Topic bulunamadı.')
+      const message = await tx.chatMessage.create({
+        data: { threadId: thread.id, role: 'USER', kind: 'REVISION_REQUEST', revisionKind: input.revisionKind, requestKey: input.requestKey, content: input.message },
+      })
+      await tx.topicOutbox.create({
+        data: {
+          topicId: input.topicId,
+          command: input.revisionKind === 'ANALYSIS' ? 'REVISE_ANALYSIS' : 'REVISE_PUBLICATION',
+          requestKey: `message:${input.requestKey}`,
+          messageId: message.id,
+        },
+      })
+      return { messageId: message.id, status: 'QUEUED' as const, revisionKind: input.revisionKind }
+    })
+  }
+
+  async requestTopicRetry(topicId: string, requestKey: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.topicOutbox.findUnique({ where: { requestKey: `retry:${requestKey}` } })
+      if (existing) {
+        if (existing.topicId !== topicId || existing.command !== 'RETRY_ANALYSIS') throw new TopicCommandConflictError('Idempotency key başka bir komuta ait.')
+        return { topicId, commandId: existing.id, status: 'QUEUED' as const }
+      }
+      const topic = await tx.topicProcess.findUnique({ where: { id: topicId } })
+      if (!topic) throw new TopicNotFoundError('Topic bulunamadı.')
+      if (topic.status !== 'AWAITING_RETRY') throw new TopicRetryConflictError('Topic yeniden denenmeye hazır değil.')
+      const command = await tx.topicOutbox.create({ data: { topicId, command: 'RETRY_ANALYSIS', requestKey: `retry:${requestKey}` } })
+      await tx.topicProcess.update({ where: { id: topicId }, data: { status: 'QUEUED', lastErrorCategory: null, lastErrorMessage: null } })
+      return { topicId, commandId: command.id, status: 'QUEUED' as const }
+    })
+  }
+
+  async getTopicReportHtmlKey(topicId: string, version: number): Promise<string | null> {
+    const revision = await this.prisma.reportRevision.findFirst({
+      where: { report: { topicId }, version, status: 'VALIDATED' },
+      select: { htmlObjectKey: true },
+    })
+    return revision?.htmlObjectKey ?? null
+  }
+
+  async getTopicRevisionWorkItem(topicId: string, messageId: string) {
+    const topic = await this.prisma.topicProcess.findUnique({
+      where: { id: topicId },
+      include: {
+        analyses: { orderBy: { version: 'desc' }, take: 1 },
+        thread: { include: { messages: { orderBy: { createdAt: 'asc' } } } },
+        reports: { include: { revisions: { orderBy: { version: 'desc' }, take: 1 } } },
+      },
+    })
+    const message = topic?.thread?.messages.find((item) => item.id === messageId)
+    const analysis = topic?.analyses[0]
+    if (!topic || !message || !analysis) return null
+    const latestReport = topic.reports.flatMap((report) => report.revisions.map((revision) => ({ report, revision })))[0] ?? null
+    return {
+      topicId: topic.id,
+      runId: topic.scanRunId,
+      message: { id: message.id, content: message.content, revisionKind: message.revisionKind ?? 'ANALYSIS' },
+      recentMessages: topic.thread!.messages.map((item) => ({ role: item.role, content: item.content })),
+      latestAnalysis: {
+        id: analysis.id, version: analysis.version, status: analysis.status,
+        analysisObjectKey: analysis.analysisObjectKey, markdownObjectKey: analysis.markdownObjectKey,
+      },
+      latestReport: latestReport ? {
+        version: latestReport.revision.version,
+        basename: latestReport.report.basename,
+        specObjectKey: latestReport.revision.specObjectKey,
+      } : null,
+    }
+  }
+
+  async getTopicSequence(topicId: string): Promise<number> {
+    const topic = await this.prisma.topicProcess.findUnique({ where: { id: topicId }, select: { scanRunId: true } })
+    if (!topic) throw new TopicNotFoundError('Topic bulunamadı.')
+    const topics = await this.prisma.topicProcess.findMany({
+      where: { scanRunId: topic.scanRunId },
+      orderBy: [{ document: { edition: { discoveryOrder: 'asc' } } }, { document: { publicationOrder: 'asc' } }],
+      select: { id: true },
+    })
+    const index = topics.findIndex((item) => item.id === topicId)
+    if (index < 0) throw new TopicNotFoundError('Topic sırası bulunamadı.')
+    return index + 1
+  }
+
+  async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: 'ANALYSIS' | 'PUBLICATION'; content: string }): Promise<void> {
+    const thread = await this.prisma.analysisThread.findUnique({ where: { topicId } })
+    if (!thread) throw new TopicNotFoundError('Topic konuşması bulunamadı.')
+    await this.prisma.chatMessage.create({ data: { threadId: thread.id, ...input } })
+  }
+
+  async claimPendingTopicOutbox(limit: number) {
+    return this.prisma.topicOutbox.findMany({
+      where: { dispatchedAt: null, availableAt: { lte: new Date() } },
+      orderBy: { createdAt: 'asc' }, take: limit,
+      select: { id: true, topicId: true, command: true, messageId: true, attempts: true },
+    })
+  }
+
+  async markTopicOutboxDispatched(id: string): Promise<void> {
+    await this.prisma.topicOutbox.update({ where: { id }, data: { dispatchedAt: new Date(), lastError: null } })
+  }
+
+  async deferTopicOutbox(id: string, error: string, availableAt: Date): Promise<void> {
+    await this.prisma.topicOutbox.update({ where: { id }, data: { attempts: { increment: 1 }, lastError: error, availableAt } })
+  }
 }
 
 function mapStoredObject(object: { objectKey: string; sha256: string; mediaType: string; byteSize: bigint }): TopicStoredObject {
@@ -316,3 +456,45 @@ function mapAsset(asset: {
 function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10)
 }
+
+function mapTopicDetail(topic: any) {
+  const analyses = topic.analyses.map((analysis: any) => ({
+    id: analysis.id, version: analysis.version, status: analysis.status,
+    analysisObjectKey: analysis.analysisObjectKey, markdownObjectKey: analysis.markdownObjectKey,
+    model: analysis.model, promptVersion: analysis.promptVersion, schemaVersion: analysis.schemaVersion,
+    inputTokens: analysis.inputTokens, outputTokens: analysis.outputTokens, createdAt: analysis.createdAt.toISOString(),
+  }))
+  const reportRevisions = topic.reports.flatMap((report: any) => report.revisions.map((revision: any) => ({
+    id: revision.id, reportId: report.id, version: revision.version, status: revision.status, card: revision.card,
+    basename: report.basename, analysisRevisionId: revision.analysisRevisionId,
+    specObjectKey: revision.specObjectKey, htmlObjectKey: revision.htmlObjectKey, createdAt: revision.createdAt.toISOString(),
+  }))).sort((left: any, right: any) => left.version - right.version)
+  const latestAnalysis = analyses.at(-1) ?? null
+  const latestReport = reportRevisions.at(-1) ?? null
+  return {
+    id: topic.id,
+    runId: topic.scanRunId,
+    documentId: topic.documentId,
+    title: topic.document.title,
+    sourceUrl: topic.document.sourceUrl,
+    status: topic.status,
+    retryAvailable: topic.status === 'AWAITING_RETRY',
+    errorCategory: topic.lastErrorCategory,
+    errorMessage: topic.lastErrorMessage,
+    latestAnalysis,
+    latestReport,
+    analyses,
+    reports: reportRevisions,
+    thread: {
+      id: topic.thread?.id ?? null,
+      messages: (topic.thread?.messages ?? []).map((message: any) => ({
+        id: message.id, role: message.role, kind: message.kind, revisionKind: message.revisionKind,
+        content: message.content, createdAt: message.createdAt.toISOString(),
+      })),
+    },
+  }
+}
+
+export class TopicNotFoundError extends Error { override readonly name = 'TopicNotFoundError' }
+export class TopicRetryConflictError extends Error { override readonly name = 'TopicRetryConflictError' }
+export class TopicCommandConflictError extends Error { override readonly name = 'TopicCommandConflictError' }

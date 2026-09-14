@@ -5,9 +5,14 @@ import { chatRoutes } from './modules/chat/chat.routes'
 import { prisma } from './platform/database'
 import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-scan-repository'
 import { scanRunsRoutes } from './modules/scan-runs/scan-runs.routes'
+import { PrismaTopicAnalysisRepository } from './modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import { topicAnalysisRoutes } from './modules/topic-analysis/topic-analysis.routes'
+import type { TopicObjectStore } from './modules/topic-analysis/application/ports'
 
 interface BuildAppOptions {
   scanRepository?: PrismaScanRepository
+  topicRepository?: PrismaTopicAnalysisRepository
+  objectStore?: Pick<TopicObjectStore, 'getContent'>
   healthChecks?: HealthChecks
 }
 
@@ -53,10 +58,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // Register Modules
   app.register(authRoutes, { prefix: '/api/auth' })
   app.register(chatRoutes, { prefix: '/api/chat' })
+  const topicRepository = options.topicRepository ?? new PrismaTopicAnalysisRepository(prisma)
   app.register(scanRunsRoutes, {
     prefix: '/api/v1/scan-runs',
     repository: options.scanRepository ?? new PrismaScanRepository(prisma),
+    topicRepository,
   })
+  app.register(topicAnalysisRoutes, { prefix: '/api/v1/topics', repository: topicRepository, ...(options.objectStore ? { objectStore: options.objectStore } : {}) })
 
   return app
 }

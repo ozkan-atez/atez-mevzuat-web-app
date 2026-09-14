@@ -201,6 +201,11 @@ export class PrismaScanRepository {
         stages: { orderBy: { createdAt: 'asc' } },
         aiJobs: { where: { kind: 'DOCUMENT_FILTER' }, include: { decisions: true } },
         previousSourceJobs: { include: { source: true } },
+        topicProcesses: {
+          orderBy: [{ document: { edition: { discoveryOrder: 'asc' } } }, { document: { publicationOrder: 'asc' } }],
+          include: { document: true, analyses: { orderBy: { version: 'desc' }, take: 1 }, reports: { include: { revisions: { orderBy: { version: 'desc' }, take: 1 } } } },
+        },
+        topicReports: { include: { revisions: { where: { status: 'VALIDATED' }, orderBy: { version: 'desc' }, take: 1 } } },
         editions: { orderBy: { discoveryOrder: 'asc' }, include: { documents: { orderBy: { publicationOrder: 'asc' }, include: { _count: { select: { assets: true } } } } } },
       },
     })
@@ -225,6 +230,13 @@ export class PrismaScanRepository {
     const finalIn = filterJob?.decisions.filter((decision) => decision.finalDecision === 'IN').length ?? 0
     const finalOut = filterJob?.decisions.filter((decision) => decision.finalDecision === 'OUT').length ?? 0
     const documentCount = run.editions.reduce((count, edition) => count + edition.documents.length, 0)
+    const analysisCompleted = run.topicProcesses.filter((topic) => topic.status === 'COMPLETED').length
+    const analysisAwaitingRetry = run.topicProcesses.filter((topic) => topic.status === 'AWAITING_RETRY').length
+    const analysisFailed = run.topicProcesses.filter((topic) => topic.status === 'FAILED' || topic.status === 'BLOCKED').length
+    const reports = run.topicReports.flatMap((report) => {
+      const revision = report.revisions[0]
+      return revision ? [{ id: report.id, topicId: report.topicId, title: report.title, basename: report.basename, card: revision.card, version: revision.version, htmlObjectKey: revision.htmlObjectKey }] : []
+    })
     return {
       id: run.id, status: run.status, currentStage: run.currentStage,
       targetDate: run.targetDate.toISOString().slice(0, 10), startedAt: run.startedAt?.toISOString() ?? null,
@@ -250,6 +262,21 @@ export class PrismaScanRepository {
         retryAvailable: run.status === 'AWAITING_RETRY' && previousStatus === 'AWAITING_RETRY',
         errorMessage: run.previousSourceJobs.find((job) => job.lastErrorMessage)?.lastErrorMessage ?? null,
       } : null,
+      analysis: run.topicProcesses.length > 0 || run.stages.some((stage) => stage.stage === 'ANALYZING_TOPICS') ? {
+        counts: { total: run.topicProcesses.length, completed: analysisCompleted, awaitingRetry: analysisAwaitingRetry, failed: analysisFailed },
+        topics: run.topicProcesses.map((topic) => {
+          const analysis = topic.analyses[0]
+          const report = topic.reports[0]
+          const reportRevision = report?.revisions[0]
+          return {
+            id: topic.id, documentId: topic.documentId, title: topic.document.title, status: topic.status,
+            retryAvailable: topic.status === 'AWAITING_RETRY', errorCategory: topic.lastErrorCategory, errorMessage: topic.lastErrorMessage,
+            analysisVersion: analysis?.version ?? null, reportVersion: reportRevision?.version ?? null,
+            reportCard: reportRevision?.card ?? null, reportBasename: report?.basename ?? null,
+          }
+        }),
+      } : null,
+      reports,
       counts: { editions: run.editions.length, documents: run.editions.reduce((n, e) => n + e.documents.length, 0), assets, completedItems: run.completedItems, totalItems: run.totalItems, failedItems: run.failedItems },
       stages: run.stages.map((stage) => ({ stage: stage.stage, status: stage.status, completedItems: stage.completedItems, totalItems: stage.totalItems, failedItems: stage.failedItems })),
       editions: run.editions.map((edition) => ({

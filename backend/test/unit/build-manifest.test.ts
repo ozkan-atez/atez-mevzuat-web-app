@@ -10,6 +10,8 @@ describe('buildManifest', () => {
         startedAt: '2026-09-11T04:00:00.000Z', completedAt: null, errorSummary: null,
         counts: { editions: 1, documents: 1, assets: 1, completedItems: 1, totalItems: 1, failedItems: 0 },
         stages: [],
+        analysis: null,
+        reports: [],
         previousSources: null,
         editions: [{ id: 'edition-1', type: 'MAIN', supplementNo: null, documents: [{
           id: 'document-1', title: 'Karar', sourceUrl: 'https://www.resmigazete.gov.tr/b.htm', validationStatus: 'VALID', assetCount: 1,

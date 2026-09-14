@@ -14,7 +14,7 @@ export interface TopicAnalysisOutput {
   analysis: AnalysisResult
 }
 
-interface OrchestrationRepository {
+export interface TopicPublicationRepository {
   ensureTopics(runId: string): Promise<Array<{ id: string; documentId: string; status: string }>>
   getRunReportContext(runId: string): Promise<RunReportContext | null>
   nextReportVersion(runId: string, topicId: string | null): Promise<number>
@@ -26,7 +26,7 @@ interface OrchestrationRepository {
 }
 
 interface Dependencies {
-  repository: OrchestrationRepository
+  repository: TopicPublicationRepository
   objectStore: TopicObjectStore
   concurrency: number
   executeTopic(topicId: string): Promise<TopicAnalysisOutput>
@@ -87,7 +87,7 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
   for (const item of passAnalyses) {
     const sequence = topics.findIndex((topic) => topic.id === item.analysis.topicId) + 1
     try {
-      topicReports.push(await publishTopic(context, item, sequence, dependencies))
+      topicReports.push(await publishTopicAnalysis(context, item, sequence, dependencies))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Rapor üretimi başarısız.'
       await dependencies.repository.markTopicBlocked(item.analysis.topicId, message)
@@ -121,7 +121,12 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
   }
 }
 
-async function publishTopic(context: RunReportContext, output: TopicAnalysisOutput, sequence: number, dependencies: Dependencies): Promise<StoredTopicReport> {
+export async function publishTopicAnalysis(
+  context: RunReportContext,
+  output: TopicAnalysisOutput,
+  sequence: number,
+  dependencies: { repository: TopicPublicationRepository; objectStore: TopicObjectStore },
+): Promise<StoredTopicReport> {
   const topicId = output.analysis.topicId
   await dependencies.repository.markTopicRendering(topicId)
   const spec = buildReportSpec(output.analysis, { sequence })

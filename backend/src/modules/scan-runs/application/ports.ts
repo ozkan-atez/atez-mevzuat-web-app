@@ -74,6 +74,31 @@ export interface ScanRunDetailDto {
     retryAvailable: boolean
     errorMessage: string | null
   }
+  analysis: null | {
+    counts: { total: number; completed: number; awaitingRetry: number; failed: number }
+    topics: Array<{
+      id: string
+      documentId: string
+      title: string
+      status: 'QUEUED' | 'ANALYZING' | 'ANALYZED' | 'RENDERING' | 'VALIDATING' | 'COMPLETED' | 'AWAITING_RETRY' | 'BLOCKED' | 'FAILED'
+      retryAvailable: boolean
+      errorCategory: AiCallFailure['category'] | null
+      errorMessage: string | null
+      analysisVersion: number | null
+      reportVersion: number | null
+      reportCard: 'K1' | 'K2' | 'K3' | 'K4' | 'K5' | 'K6' | null
+      reportBasename: string | null
+    }>
+  }
+  reports: Array<{
+    id: string
+    topicId: string | null
+    title: string
+    basename: string
+    card: 'K1' | 'K2' | 'K3' | 'K4' | 'K5' | 'K6'
+    version: number
+    htmlObjectKey: string
+  }>
   counts: {
     editions: number
     documents: number

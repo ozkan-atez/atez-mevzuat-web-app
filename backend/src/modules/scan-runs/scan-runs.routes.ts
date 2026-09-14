@@ -1,14 +1,24 @@
 import type { FastifyInstance } from 'fastify'
 import { AiFilterRetryConflictError, PreviousSourceRetryConflictError, type PrismaScanRepository } from './infrastructure/prisma-scan-repository'
 import { createScanRunSchema, idempotencyKeySchema } from './scan-runs.schemas'
+import type { PrismaTopicAnalysisRepository } from '../topic-analysis/infrastructure/prisma-topic-analysis-repository'
 
 interface Options {
   repository: PrismaScanRepository
+  topicRepository?: PrismaTopicAnalysisRepository
 }
 
 const terminalStatuses = new Set(['AWAITING_RETRY', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'])
 
 export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
+  app.get('/:id/topics', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    if (!options.topicRepository) return reply.code(503).send({ message: 'Topic servisi kullanılamıyor' })
+    const run = await options.repository.getExecutionRun(id)
+    if (!run) return reply.code(404).send({ message: 'Tarama bulunamadı' })
+    return reply.send({ topics: await options.topicRepository.listRunTopicDetails(id) })
+  })
+
   app.get('/', async (request) => {
     const query = request.query as { limit?: string }
     const parsedLimit = Number(query.limit ?? 10)

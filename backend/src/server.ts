@@ -7,6 +7,7 @@ async function start() {
   const env = loadEnv()
   const objectStore = new S3ObjectStore(env.s3)
   const app = await buildApp({
+    objectStore,
     healthChecks: {
       database: async () => { await prisma.$queryRawUnsafe('SELECT 1') },
       queue: async () => {

@@ -1,6 +1,7 @@
 import { PgBoss } from 'pg-boss'
 
 export const manualScanQueueName = 'resmi-gazete-manual-scan'
+export const topicAnalysisQueueName = 'resmi-gazete-topic-analysis'
 
 let boss: PgBoss | null = null
 
@@ -18,6 +19,7 @@ export async function startQueue() {
   await queue.start()
   
   await queue.createQueue(manualScanQueueName)
+  await queue.createQueue(topicAnalysisQueueName)
 
   console.log('📦 pg-boss kuyruk sistemi başlatıldı.')
   return queue
