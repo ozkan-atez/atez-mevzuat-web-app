@@ -83,7 +83,10 @@ function mapGeminiError(error: unknown): AiProviderError {
       : new AiProviderError('RATE_LIMITED', true, 'Gemini geçici olarak yoğun; istek sınırlandı.', status)
   }
   if (status !== null && status >= 500) return new AiProviderError('PROVIDER_UNAVAILABLE', true, 'Gemini servisi geçici olarak kullanılamıyor.', status)
-  if (status === 400) return new AiProviderError('CONTENT_REJECTED', false, 'Gemini gönderilen içeriği kabul etmedi.', status)
+  if (status === 400) {
+    const detail = sanitizeProviderMessage(readProviderMessage(error))
+    return new AiProviderError('CONTENT_REJECTED', false, detail ? `Gemini isteği reddetti: ${detail}` : 'Gemini gönderilen içeriği kabul etmedi.', status)
+  }
   return new AiProviderError('UNKNOWN_PROVIDER_ERROR', false, 'Gemini isteği bilinmeyen bir nedenle başarısız oldu.', status)
 }
 
@@ -97,4 +100,13 @@ function readProviderMessage(error: unknown): string {
   if (!error || typeof error !== 'object') return ''
   const message = Reflect.get(error, 'message')
   return typeof message === 'string' ? message : ''
+}
+
+function sanitizeProviderMessage(message: string): string {
+  return message
+    .replace(/(?:api[_-]?key|key)\s*[=:]\s*[^\s,;]+/gi, 'key=[REDACTED]')
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[REDACTED]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500)
 }

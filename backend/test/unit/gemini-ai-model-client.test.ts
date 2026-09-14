@@ -3,7 +3,7 @@ import { AiProviderError, executeWithAiRetries } from '../../src/modules/ai/doma
 import { GeminiAiModelClient, type GeminiTransport } from '../../src/modules/ai/infrastructure/gemini-ai-model-client'
 
 const request = {
-  model: 'gemini-3.8-flash',
+  model: 'gemini-3.7-flash',
   systemInstruction: 'Sınıflandır.',
   parts: [{ text: '{"documents":[]}' }],
   responseJsonSchema: { type: 'object' },
@@ -59,6 +59,16 @@ describe('GeminiAiModelClient', () => {
   it('reports invalid structured JSON as retryable', async () => {
     const client = new GeminiAiModelClient(transportWith({ text: 'not-json' }), { timeoutMs: 100 })
     await expect(client.generateStructured(request)).rejects.toMatchObject({ category: 'INVALID_RESPONSE', retryable: true })
+  })
+
+  it('keeps safe 400 diagnostics while redacting credentials', async () => {
+    const client = new GeminiAiModelClient({
+      generateContent: vi.fn().mockRejectedValue({ status: 400, message: 'response schema is too complex; api_key=super-secret' }),
+    }, { timeoutMs: 100 })
+    const error = await client.generateStructured(request).catch((caught) => caught)
+    expect(error).toMatchObject({ category: 'CONTENT_REJECTED', providerStatus: 400 })
+    expect(String(error)).toContain('response schema is too complex')
+    expect(String(error)).not.toContain('super-secret')
   })
 
   it('retries rate limits and succeeds on the third attempt without real waiting', async () => {
