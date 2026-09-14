@@ -136,4 +136,3 @@
 - [ ] Rebuild Docker services and confirm health.
 - [ ] Run the approved 2026-07-11 case and verify `2018/5` resolves to `20251231M4-39.pdf`, with archived current `image002.jpg` and preceding PDF.
 - [ ] Inspect git diff for scope, secrets, generated noise, and unrelated changes.
-

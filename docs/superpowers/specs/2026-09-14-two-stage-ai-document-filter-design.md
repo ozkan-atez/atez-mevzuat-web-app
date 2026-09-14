@@ -1,7 +1,7 @@
 # Two-Stage AI Document Filter Design
 
-**Date:** 2026-09-14  
-**Status:** Approved in conversation  
+**Date:** 2026-09-14
+**Status:** Approved in conversation
 **Scope:** Add the second operation step to manual Resmî Gazete runs. The step classifies collected documents for customs and foreign-trade relevance with Gemini 3.8 Flash.
 
 ## Goals

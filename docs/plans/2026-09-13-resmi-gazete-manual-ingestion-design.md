@@ -1,7 +1,7 @@
 # Resmî Gazete Manuel Veri Toplama Tasarımı
 
-**Tarih:** 2026-09-13  
-**Durum:** Kullanıcı tarafından onaylanan tasarım  
+**Tarih:** 2026-09-13
+**Durum:** Kullanıcı tarafından onaylanan tasarım
 **Kapsam:** Yalnızca manuel Resmî Gazete veri toplama akışı
 
 ## 1. Amaç

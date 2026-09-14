@@ -109,7 +109,7 @@ it('places AI filtering immediately after discovery', () => {
 
 - [ ] **Step 2: Run the test and verify RED**
 
-Run: `cd backend && npm test -- test/unit/scan-run.test.ts`  
+Run: `cd backend && npm test -- test/unit/scan-run.test.ts`
 Expected: FAIL because `AI_FILTERING` is not a `ScanStage`.
 
 - [ ] **Step 3: Add the domain and Prisma enums**
@@ -144,12 +144,12 @@ The SQL migration must preserve existing outbox rows by setting `requestKey` fro
 
 - [ ] **Step 4: Generate Prisma client and apply the migration**
 
-Run: `cd backend && npx prisma generate && DATABASE_URL='postgresql://atez:atezpassword@localhost:5432/atez_db?schema=public' npx prisma migrate deploy`  
+Run: `cd backend && npx prisma generate && DATABASE_URL='postgresql://atez:atezpassword@localhost:5432/atez_db?schema=public' npx prisma migrate deploy`
 Expected: migration applies without deleting existing runs.
 
 - [ ] **Step 5: Implement the TypeScript stage order and verify GREEN**
 
-Update `scanStages` so the array exactly matches the test. Run: `cd backend && npm test -- test/unit/scan-run.test.ts && npm run build`  
+Update `scanStages` so the array exactly matches the test. Run: `cd backend && npm test -- test/unit/scan-run.test.ts && npm run build`
 Expected: PASS and TypeScript build exits 0.
 
 - [ ] **Step 6: Commit the state foundation**
@@ -200,7 +200,7 @@ Also assert that the title prompt contains every stable ID/title and explicitly 
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `cd backend && npm test -- test/unit/env.test.ts test/unit/document-filter-prompts.test.ts`  
+Run: `cd backend && npm test -- test/unit/env.test.ts test/unit/document-filter-prompts.test.ts`
 Expected: FAIL because Gemini config and filter modules do not exist.
 
 - [ ] **Step 3: Install dependencies and copy the approved keyword guide**
@@ -266,7 +266,7 @@ An absent key must not prevent the API or worker from starting; attempting the A
 
 - [ ] **Step 8: Verify GREEN and commit**
 
-Run: `cd backend && npm test -- test/unit/env.test.ts test/unit/document-filter-prompts.test.ts && npm run build`  
+Run: `cd backend && npm test -- test/unit/env.test.ts test/unit/document-filter-prompts.test.ts && npm run build`
 Expected: all selected tests pass.
 
 ```bash
@@ -303,7 +303,7 @@ Inject `sleep(ms)` and `random()` so retry tests assert delays without actually 
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `cd backend && npm test -- test/unit/gemini-ai-model-client.test.ts`  
+Run: `cd backend && npm test -- test/unit/gemini-ai-model-client.test.ts`
 Expected: FAIL because the adapter is absent.
 
 - [ ] **Step 3: Implement stable errors and retry policy**
@@ -346,7 +346,7 @@ Parse `response.text` as JSON, map usage metadata, and use only sanitized status
 
 - [ ] **Step 5: Verify GREEN and commit**
 
-Run: `cd backend && npm test -- test/unit/gemini-ai-model-client.test.ts && npm run build`  
+Run: `cd backend && npm test -- test/unit/gemini-ai-model-client.test.ts && npm run build`
 Expected: adapter tests and build pass.
 
 ```bash
@@ -454,7 +454,7 @@ Create a run and two documents, then verify:
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `cd backend && DATABASE_URL='postgresql://atez:atezpassword@localhost:5432/atez_db?schema=public' npm test -- test/integration/document-filter-repository.test.ts`  
+Run: `cd backend && DATABASE_URL='postgresql://atez:atezpassword@localhost:5432/atez_db?schema=public' npm test -- test/integration/document-filter-repository.test.ts`
 Expected: FAIL because repository methods are absent.
 
 - [ ] **Step 3: Implement repository transactions**
@@ -504,7 +504,7 @@ Assert exact AI call counts, stable IDs, final decisions, stored document object
 
 - [ ] **Step 3: Run tests and verify RED**
 
-Run: `cd backend && npm test -- test/unit/normalize-document-content.test.ts test/integration/execute-document-filter.test.ts`  
+Run: `cd backend && npm test -- test/unit/normalize-document-content.test.ts test/integration/execute-document-filter.test.ts`
 Expected: FAIL because the service and normalizer are absent.
 
 - [ ] **Step 4: Implement archived-object reads**
@@ -588,7 +588,7 @@ Assert:
 
 - [ ] **Step 3: Run tests and verify RED**
 
-Run: `cd backend && DATABASE_URL='postgresql://atez:atezpassword@localhost:5432/atez_db?schema=public' npm test -- test/integration/execute-scan-run.test.ts test/contract/scan-runs.routes.test.ts`  
+Run: `cd backend && DATABASE_URL='postgresql://atez:atezpassword@localhost:5432/atez_db?schema=public' npm test -- test/integration/execute-scan-run.test.ts test/contract/scan-runs.routes.test.ts`
 Expected: FAIL on missing stage and endpoint.
 
 - [ ] **Step 4: Refactor the outbox and queue payload**
@@ -721,7 +721,7 @@ Add tests that render an `AWAITING_RETRY` run and assert:
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `cd frontend && npm test -- src/features/runs/RunDetail.test.tsx src/features/dashboard/Dashboard.test.tsx`  
+Run: `cd frontend && npm test -- src/features/runs/RunDetail.test.tsx src/features/dashboard/Dashboard.test.tsx`
 Expected: FAIL because new types and UI are absent.
 
 - [ ] **Step 3: Add safe frontend types and retry API**
@@ -778,7 +778,7 @@ Run a fixture scan containing title `IN`, `OUT`, and `MAYBE`; resolve the ambigu
 
 - [ ] **Step 2: Run the acceptance test and verify RED, then implement only missing wiring**
 
-Run: `cd backend && npm test -- test/acceptance/manual-scan.test.ts`  
+Run: `cd backend && npm test -- test/acceptance/manual-scan.test.ts`
 Expected before wiring: FAIL on the missing filter dependency or result. Add the fake provider to the acceptance composition and run again until PASS.
 
 - [ ] **Step 3: Pass Gemini settings only to server containers**
