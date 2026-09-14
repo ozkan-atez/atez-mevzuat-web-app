@@ -1,9 +1,11 @@
 import { PrismaClient } from '@prisma/client'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
 
 const prisma = new PrismaClient()
 const repository = new PrismaTopicAnalysisRepository(prisma)
+const scanRepository = new PrismaScanRepository(prisma)
 
 describe('topic analysis repository', () => {
   beforeEach(async () => {
@@ -103,5 +105,18 @@ describe('topic analysis repository', () => {
     await prisma.topicOutbox.create({ data: { topicId: topic.id, command: 'RETRY_ANALYSIS', requestKey: crypto.randomUUID() } })
     const [first, second] = await Promise.all([repository.claimPendingTopicOutbox(10), repository.claimPendingTopicOutbox(10)])
     expect([...first, ...second].filter((row) => row.topicId === topic.id)).toHaveLength(1)
+  })
+
+  it('completes a retried run manifest only once under concurrent finalization', async () => {
+    const run = await prisma.scanRun.create({
+      data: { requestKey: crypto.randomUUID(), targetDate: new Date('2026-09-11T00:00:00.000Z'), status: 'AWAITING_RETRY' },
+    })
+    const results = await Promise.all([
+      scanRepository.completeRunAfterTopicRetry(run.id, `runs/${run.id}/manifest.json`),
+      scanRepository.completeRunAfterTopicRetry(run.id, `runs/${run.id}/manifest.json`),
+    ])
+    expect(results.sort()).toEqual([false, true])
+    const stage = await prisma.stageExecution.findUniqueOrThrow({ where: { scanRunId_stage: { scanRunId: run.id, stage: 'WRITING_MANIFEST' } } })
+    expect(stage).toMatchObject({ totalItems: 1, completedItems: 1, status: 'COMPLETED' })
   })
 })

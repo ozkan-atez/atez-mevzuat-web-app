@@ -116,24 +116,35 @@ async function processJob(
   const sourceUrl = await dependencies.search.resolveDocumentUrl(match.selected, intent)
   const tempDirectory = await mkdtemp(join(tmpdir(), `atez-previous-${runId}-`))
   try {
-    const file = await dependencies.http.download(sourceUrl, tempDirectory)
-    reserve(file.byteSize)
-    const object = await dependencies.objectStore.putContent(file)
-    await dependencies.repository.addDownloadedBytes(runId, file.byteSize)
-    const assets: Array<{ sourceUrl: string; referenceText?: string; role: 'ATTACHMENT' | 'IMAGE' | 'STYLESHEET_ASSET' | 'OTHER_SUPPORTED'; object: StoredBlob }> = []
-    if (file.mediaType === 'text/html') {
-      const html = decodeHtml(await readFile(file.tempPath))
+    let object = item.archivedSource?.sourceUrl === sourceUrl ? item.archivedSource.object : null
+    let sourceBytes: Buffer
+    if (object) {
+      sourceBytes = await dependencies.objectStore.getContent(object.objectKey)
+    } else {
+      const file = await dependencies.http.download(sourceUrl, tempDirectory)
+      reserve(file.byteSize)
+      object = await dependencies.objectStore.putContent(file)
+      sourceBytes = await readFile(file.tempPath)
+      await dependencies.repository.savePreviousSourceDocument(item.id, { ...match.selected, documentUrl: sourceUrl, selected: true }, sourceUrl, object)
+    }
+    const assets = item.archivedSource?.sourceUrl === sourceUrl ? [...item.archivedSource.assets] : []
+    const archivedAssetUrls = new Set(assets.map((asset) => asset.sourceUrl))
+    if (object.mediaType === 'text/html') {
+      const html = decodeHtml(sourceBytes)
       for (const discovered of parseAssets(html, sourceUrl)) {
+        if (archivedAssetUrls.has(discovered.sourceUrl)) continue
         const assetFile = await dependencies.http.download(discovered.sourceUrl, tempDirectory)
         reserve(assetFile.byteSize)
         const assetObject = await dependencies.objectStore.putContent(assetFile)
-        await dependencies.repository.addDownloadedBytes(runId, assetFile.byteSize)
-        assets.push({
+        const archivedAsset = {
           sourceUrl: discovered.sourceUrl,
           ...(discovered.referenceText ? { referenceText: discovered.referenceText } : {}),
           role: discovered.role,
           object: assetObject,
-        })
+        }
+        await dependencies.repository.savePreviousSourceAsset(item.id, archivedAsset)
+        assets.push(archivedAsset)
+        archivedAssetUrls.add(discovered.sourceUrl)
       }
     }
     await dependencies.repository.completePreviousSourceVerified(item.id, {

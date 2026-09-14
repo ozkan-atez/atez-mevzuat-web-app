@@ -213,8 +213,13 @@ export async function resumeRunAfterTopicRetry(
   dependencies: Pick<Dependencies, 'repository' | 'topicRepository' | 'objectStore'>,
 ): Promise<boolean> {
   if (!(await dependencies.topicRepository.canFinalizeRunAfterTopicRetry(runId))) return false
-  await finalizeScanRun(runId, dependencies)
-  return true
+  const run = await dependencies.repository.getExecutionRun(runId)
+  if (!run) throw new Error(`Scan run not found: ${runId}`)
+  const manifest = buildManifest(await dependencies.repository.completedSnapshot(runId))
+  const manifestKey = `runs/${run.targetDate.replaceAll('-', '/')}/${runId}/manifest.json`
+  const storedManifest = await dependencies.objectStore.putRunFile(manifestKey, manifest, 'application/json')
+  await dependencies.repository.verifyManifestCounts(runId)
+  return dependencies.repository.completeRunAfterTopicRetry(runId, storedManifest.objectKey)
 }
 
 export async function finalizeScanRun(

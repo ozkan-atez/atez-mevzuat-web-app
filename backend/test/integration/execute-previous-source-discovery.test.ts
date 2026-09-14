@@ -89,6 +89,19 @@ class SourceHttp implements OfficialHttp {
   }
 }
 
+class FailFirstAssetHttp extends SourceHttp {
+  readonly calls: string[] = []
+  private failed = false
+  override async download(url: string): Promise<DownloadedFile> {
+    this.calls.push(url)
+    if (url.endsWith('image001.png') && !this.failed) {
+      this.failed = true
+      throw new Error('Temporary asset failure')
+    }
+    return super.download(url)
+  }
+}
+
 class MemoryStore implements ObjectStore {
   readonly objects = new Map<string, Buffer>()
   async ensureBucket(): Promise<void> {}
@@ -220,5 +233,40 @@ describe('executePreviousSourceDiscovery', () => {
     })
     expect(retryAi.calls).toBe(0)
     expect(search.resolveAttempts).toBe(2)
+  })
+
+  it('reuses an archived previous document when a later asset download is retried', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-07-11' })
+    await repository.saveEditions(run.id, run.targetDate, [{
+      type: 'MAIN', supplementNo: null, indexUrl: 'https://www.resmigazete.gov.tr/11.07.2026', discoveryOrder: 0,
+      documents: [{ title: '2018/5 değişikliği', sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31.htm', publicationOrder: 1 }],
+    }])
+    const [document] = await repository.listFilterDocuments(run.id)
+    const store = new MemoryStore()
+    await repository.attachDocumentObject(document!.id, await store.putContent(await fixtureFile('<html><body>2018/5</body></html>', 'text/html')))
+    const filterJob = await repository.getOrCreateDocumentFilterJob(run.id, {
+      model: 'gemini-3.7-flash', titlePromptVersion: 'title-v1', contentPromptVersion: 'content-v1', configurationHash: 'a'.repeat(64),
+    })
+    await repository.markFilterRunning(run.id, filterJob.id, 1)
+    await repository.saveTitleDecisions(filterJob.id, [{ documentId: document!.id, decision: 'IN', reason: 'İlgili.', confidence: 0.9 }])
+    const http = new FailFirstAssetHttp()
+
+    await expect(executePreviousSourceDiscovery(run.id, {
+      repository, aiModel: new FixedAi(), search: new FixedSearch(), http, objectStore: store,
+      model: 'gemini-3.7-flash', maxAttempts: 1, concurrency: 1, maxRunBytes: 10_000_000n,
+    })).rejects.toBeInstanceOf(PreviousSourceAwaitingRetryError)
+    const bytesAfterSource = (await repository.getExecutionRun(run.id))!.downloadedBytes
+
+    await executePreviousSourceDiscovery(run.id, {
+      repository, aiModel: new NeverAi(), search: new FixedSearch(), http, objectStore: store,
+      model: 'gemini-3.7-flash', maxAttempts: 1, concurrency: 1, maxRunBytes: 10_000_000n,
+    })
+
+    const sourceUrl = 'https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.htm'
+    expect(http.calls.filter((url) => url === sourceUrl)).toHaveLength(1)
+    expect((await repository.getExecutionRun(run.id))!.downloadedBytes).toBeGreaterThan(bytesAfterSource)
+    const job = await prisma.previousSourceJob.findFirstOrThrow({ include: { source: { include: { assets: true } } } })
+    expect(job).toMatchObject({ status: 'COMPLETED', outcome: 'VERIFIED' })
+    expect(job.source?.assets).toHaveLength(1)
   })
 })

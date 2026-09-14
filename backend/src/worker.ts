@@ -6,7 +6,7 @@ import { PgBossScanQueue } from './modules/scan-runs/infrastructure/scan-run-que
 import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-store'
 import { OfficialHttpClient } from './modules/scan-runs/infrastructure/official-http-client'
 import { SourcePolicy } from './modules/scan-runs/domain/source-policy'
-import { executeScanRun, resumeRunAfterTopicRetry } from './modules/scan-runs/application/execute-scan-run'
+import { executeScanRun } from './modules/scan-runs/application/execute-scan-run'
 import { GoogleGenAI } from '@google/genai'
 import type { AiModelClient } from './modules/ai/application/ai-model-client'
 import { AiProviderError } from './modules/ai/domain/ai-errors'
@@ -15,9 +15,8 @@ import type { ScanCommand } from './modules/scan-runs/application/ports'
 import { ResmiGazeteSearch } from './modules/scan-runs/infrastructure/resmi-gazete-search'
 import { PrismaTopicAnalysisRepository } from './modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
 import { PgBossTopicAnalysisQueue, type TopicAnalysisCommand } from './modules/topic-analysis/infrastructure/topic-analysis-queue'
-import { executeTopicAnalysis } from './modules/topic-analysis/application/execute-topic-analysis'
 import { executeTopicRevision } from './modules/topic-analysis/application/execute-topic-revision'
-import { publishTopicAnalysis } from './modules/topic-analysis/application/execute-run-topic-analyses'
+import { retryTopicAnalysis } from './modules/topic-analysis/application/retry-topic-analysis'
 
 async function startWorker() {
   const queue = await startQueue()
@@ -92,16 +91,10 @@ async function startWorker() {
     for (const job of jobList) {
       const command = job.data as TopicAnalysisCommand
       if (command.command === 'RETRY_ANALYSIS') {
-        const result = await executeTopicAnalysis(command.topicId, {
-          repository: topicRepository, objectStore, aiModel, model: env.gemini.model,
+        await retryTopicAnalysis(command.topicId, {
+          repository: topicRepository, scanRepository: repository, objectStore, aiModel, model: env.gemini.model,
           maxAttempts: env.gemini.maxAttempts, maxContextBytes: env.gemini.maxContentBytes,
         })
-        if (result.analysis.status === 'PASS') {
-          const context = await topicRepository.getRunReportContext((await topicRepository.getTopicDetail(command.topicId))!.runId)
-          if (!context) throw new Error('Run rapor bağlamı bulunamadı.')
-          await publishTopicAnalysis(context, result, await topicRepository.getTopicSequence(command.topicId), { repository: topicRepository, objectStore })
-        } else await topicRepository.markTopicCompleted(command.topicId)
-        await resumeRunAfterTopicRetry((await topicRepository.getTopicDetail(command.topicId))!.runId, { repository, topicRepository, objectStore })
       } else {
         if (!command.messageId) throw new Error('Revizyon komutunda messageId eksik.')
         await executeTopicRevision({ topicId: command.topicId, messageId: command.messageId }, {

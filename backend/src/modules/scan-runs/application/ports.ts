@@ -240,6 +240,11 @@ export interface PreviousSourceJobRecord {
 
 export interface PreviousSourceWorkItem extends PreviousSourceJobRecord {
   intent: PreviousSourceIntentRecord | null
+  archivedSource: null | {
+    sourceUrl: string
+    object: StoredBlob
+    assets: PreviousSourceAssetInput[]
+  }
   document: {
     title: string
     sourceUrl: string
@@ -501,6 +506,8 @@ export interface ScanRepository {
     object: StoredBlob
     assets: PreviousSourceAssetInput[]
   }): Promise<void>
+  savePreviousSourceDocument(jobId: string, candidate: PreviousSourceCandidateRecord, sourceUrl: string, object: StoredBlob): Promise<void>
+  savePreviousSourceAsset(jobId: string, asset: PreviousSourceAssetInput): Promise<void>
   markPreviousSourceAwaitingRetry(jobId: string, error: AiCallFailure): Promise<void>
   getPreviousSourceProgress(runId: string): Promise<{ total: number; completed: number; awaitingRetry: number }>
   markPreviousSourceStageAwaitingRetry(runId: string, message: string): Promise<void>

@@ -13,6 +13,7 @@ import type {
   FilterDocumentRecord,
   FilterProgress,
   PreviousSourceConfiguration,
+  PreviousSourceAssetInput,
   PreviousSourceCallInput,
   PreviousSourceCandidateRecord,
   PreviousSourceIntentRecord,
@@ -215,6 +216,25 @@ export class PrismaScanRepository {
 
   async completeRun(runId: string, manifestObjectKey: string): Promise<void> {
     await this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'COMPLETED', manifestObjectKey, completedAt: new Date() } })
+  }
+
+  async completeRunAfterTopicRetry(runId: string, manifestObjectKey: string): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.scanRun.updateMany({
+        where: { id: runId, status: 'AWAITING_RETRY' },
+        data: {
+          status: 'COMPLETED', currentStage: 'WRITING_MANIFEST', totalItems: 1, completedItems: 1,
+          failedItems: 0, manifestObjectKey, completedAt: new Date(), errorSummary: null,
+        },
+      })
+      if (claimed.count === 0) return false
+      await tx.stageExecution.upsert({
+        where: { scanRunId_stage: { scanRunId: runId, stage: 'WRITING_MANIFEST' } },
+        create: { scanRunId: runId, stage: 'WRITING_MANIFEST', status: 'COMPLETED', totalItems: 1, completedItems: 1, startedAt: new Date(), completedAt: new Date() },
+        update: { status: 'COMPLETED', totalItems: 1, completedItems: 1, failedItems: 0, errorSummary: null, completedAt: new Date() },
+      })
+      return true
+    })
   }
 
   async failRun(runId: string, status: 'PARTIAL' | 'FAILED', error: string): Promise<void> {
@@ -607,7 +627,10 @@ export class PrismaScanRepository {
     const jobs = await this.prisma.previousSourceJob.findMany({
       where: { scanRunId: runId, status: { not: 'COMPLETED' } },
       orderBy: { createdAt: 'asc' },
-      include: { document: { include: { edition: true, storedObject: true } } },
+      include: {
+        document: { include: { edition: true, storedObject: true } },
+        source: { include: { storedObject: true, assets: { include: { storedObject: true } } } },
+      },
     })
     return jobs.map((job) => {
       if (!job.document.storedObject) throw new Error(`Current document object is missing: ${job.documentId}`)
@@ -615,6 +638,16 @@ export class PrismaScanRepository {
         id: job.id,
         documentId: job.documentId,
         status: job.status,
+        archivedSource: job.source ? {
+          sourceUrl: job.source.sourceUrl,
+          object: mapStoredBlob(job.source.storedObject),
+          assets: job.source.assets.map((asset) => ({
+            sourceUrl: asset.sourceUrl,
+            ...(asset.referenceText ? { referenceText: asset.referenceText } : {}),
+            role: asset.role,
+            object: mapStoredBlob(asset.storedObject),
+          })),
+        } : null,
         intent: job.needsPreviousSource === null ? null : {
           needsPreviousSource: job.needsPreviousSource,
           relationship: job.relationship ?? 'NONE',
@@ -750,6 +783,54 @@ export class PrismaScanRepository {
         })
       }
       await tx.previousSourceJob.update({ where: { id: jobId }, data: { status: 'COMPLETED', outcome: 'VERIFIED', completedAt: new Date() } })
+    })
+  }
+
+  async savePreviousSourceDocument(jobId: string, candidate: PreviousSourceCandidateRecord, sourceUrl: string, object: StoredBlob): Promise<void> {
+    const storedObjectId = await this.upsertObject(object)
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.previousSourceDocument.findUnique({ where: { jobId }, select: { storedObjectId: true, sourceUrl: true } })
+      await tx.previousSourceDocument.upsert({
+        where: { jobId },
+        create: {
+          jobId, title: candidate.title,
+          publicationDate: new Date(`${candidate.publicationDate}T00:00:00.000Z`),
+          gazetteNo: candidate.gazetteNo, mukerrer: candidate.mukerrer,
+          sourceUrl, storedObjectId, validationStatus: 'PENDING',
+        },
+        update: {
+          title: candidate.title,
+          publicationDate: new Date(`${candidate.publicationDate}T00:00:00.000Z`),
+          gazetteNo: candidate.gazetteNo, mukerrer: candidate.mukerrer,
+          sourceUrl, storedObjectId,
+        },
+      })
+      if (!existing || existing.storedObjectId !== storedObjectId || existing.sourceUrl !== sourceUrl) {
+        await tx.scanRun.update({ where: { id: (await tx.previousSourceJob.findUniqueOrThrow({ where: { id: jobId }, select: { scanRunId: true } })).scanRunId }, data: { downloadedBytes: { increment: object.byteSize } } })
+      }
+    })
+  }
+
+  async savePreviousSourceAsset(jobId: string, asset: PreviousSourceAssetInput): Promise<void> {
+    const source = await this.prisma.previousSourceDocument.findUniqueOrThrow({ where: { jobId }, select: { id: true } })
+    const storedObjectId = await this.upsertObject(asset.object)
+    await this.prisma.$transaction(async (tx) => {
+      const where = { previousSourceId_sourceUrl: { previousSourceId: source.id, sourceUrl: asset.sourceUrl } }
+      const existing = await tx.previousSourceAsset.findUnique({ where, select: { storedObjectId: true } })
+      await tx.previousSourceAsset.upsert({
+        where,
+        create: {
+          previousSourceId: source.id, storedObjectId, sourceUrl: asset.sourceUrl,
+          referenceText: asset.referenceText ?? null, role: asset.role, validationStatus: 'PENDING',
+        },
+        update: {
+          storedObjectId, referenceText: asset.referenceText ?? null, role: asset.role,
+        },
+      })
+      if (!existing || existing.storedObjectId !== storedObjectId) {
+        const job = await tx.previousSourceJob.findUniqueOrThrow({ where: { id: jobId }, select: { scanRunId: true } })
+        await tx.scanRun.update({ where: { id: job.scanRunId }, data: { downloadedBytes: { increment: asset.object.byteSize } } })
+      }
     })
   }
 
@@ -1014,4 +1095,15 @@ export class PreviousSourceRetryConflictError extends Error {
 
 function stringArray(value: Prisma.JsonValue | null): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function mapStoredBlob(object: { sha256: string; bucket: string; objectKey: string; mediaType: string; byteSize: bigint; versionId: string | null }): StoredBlob {
+  return {
+    sha256: object.sha256,
+    bucket: object.bucket,
+    objectKey: object.objectKey,
+    mediaType: object.mediaType,
+    byteSize: object.byteSize,
+    ...(object.versionId ? { versionId: object.versionId } : {}),
+  }
 }

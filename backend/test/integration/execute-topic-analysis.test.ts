@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AiModelClient, StructuredAiRequest } from '../../src/modules/ai/application/ai-model-client'
 import { AiProviderError } from '../../src/modules/ai/domain/ai-errors'
 import { executeTopicAnalysis } from '../../src/modules/topic-analysis/application/execute-topic-analysis'
+import { recoverAnalysisForRetry } from '../../src/modules/topic-analysis/application/retry-topic-analysis'
 import type {
   CreateTopicAnalysisRevisionInput,
   TopicAnalysisRepository,
@@ -107,5 +108,24 @@ describe('executeTopicAnalysis', () => {
     await expect(executeTopicAnalysis(topicId, dependencies(new FixedAi({ ...validAnalysis(), topics: [] }), repository))).rejects.toThrow()
     expect(repository.status).toBe('BLOCKED')
     expect(repository.revisions).toEqual([])
+  })
+
+  it('reuses a persisted analysis revision after a retry delivery crash', async () => {
+    const repository = new MemoryRepository()
+    const objectStore = new MemoryObjectStore()
+    const analysis = validAnalysis()
+    const analysisObjectKey = 'runs/run-1/topics/topic-1/analysis/r01/analysis.json'
+    objectStore.values.set(analysisObjectKey, Buffer.from(JSON.stringify(analysis)))
+    const ai = new FixedAi(new Error('Gemini must not be called'))
+
+    const recovered = await recoverAnalysisForRetry({
+      id: topicId,
+      status: 'ANALYZED',
+      latestAnalysis: { id: 'revision-1', version: 1, analysisObjectKey, markdownObjectKey: 'analysis.md' },
+    }, dependencies(ai, repository, objectStore))
+
+    expect(recovered.analysis).toEqual(analysis)
+    expect(ai.calls).toBe(0)
+    expect(repository.revisions).toHaveLength(0)
   })
 })
