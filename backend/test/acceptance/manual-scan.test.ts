@@ -188,6 +188,11 @@ describe('manual scan acceptance', () => {
     await executeScanRun(firstRunId, { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
     expect(await prisma.topicAiExecution.count({ where: { topic: { scanRunId: firstRunId } } })).toBe(executionsBeforeRedelivery)
 
+    await prisma.scanRun.update({ where: { id: firstRunId }, data: { status: 'PARTIAL', currentStage: 'WRITING_MANIFEST', manifestObjectKey: null, completedAt: null } })
+    await executeScanRun(firstRunId, { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
+    expect(await prisma.topicAiExecution.count({ where: { topic: { scanRunId: firstRunId } } })).toBe(executionsBeforeRedelivery)
+    expect((await repository.getRun(firstRunId))?.status).toBe('COMPLETED')
+
     await prisma.scanRun.update({ where: { id: firstRunId }, data: { status: 'AWAITING_RETRY', currentStage: 'ANALYZING_TOPICS', manifestObjectKey: null, completedAt: null } })
     expect(await resumeRunAfterTopicRetry(firstRunId, { repository, topicRepository, objectStore })).toBe(true)
     expect((await repository.getRun(firstRunId))?.status).toBe('COMPLETED')

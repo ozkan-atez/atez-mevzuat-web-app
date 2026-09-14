@@ -29,7 +29,7 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
   const { repository, http, objectStore, maxRunBytes } = dependencies
   const run = await repository.getExecutionRun(runId)
   if (!run) throw new Error(`Scan run not found: ${runId}`)
-  if (command === 'START_SCAN' && run.status !== 'QUEUED') return
+  if (command === 'START_SCAN' && ['RUNNING', 'AWAITING_RETRY', 'COMPLETED', 'CANCELLED'].includes(run.status)) return
   const tempDirectory = await mkdtemp(join(tmpdir(), `atez-scan-${runId}-`))
   let currentStage: ScanStage = 'DISCOVERING'
   let bytes = run.downloadedBytes
@@ -105,6 +105,10 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
     const assets = await repository.listAssets(runId)
     await repository.startStage(runId, currentStage, assets.length)
     for (const asset of assets) {
+      if (asset.storedObject) {
+        await repository.advanceStage(runId, currentStage, 0n)
+        continue
+      }
       const file = await http.download(asset.sourceUrl, tempDirectory)
       bytes = addWithinLimit(bytes, file.byteSize, maxRunBytes)
       const object = await objectStore.putContent(file)

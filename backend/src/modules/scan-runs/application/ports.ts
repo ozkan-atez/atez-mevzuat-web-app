@@ -459,7 +459,7 @@ export interface ScanRepository {
   saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<void>
   listDocuments(runId: string): Promise<Array<{ id: string; sourceUrl: string; title: string }>>
   saveAssets(documentId: string, assets: DiscoveredAsset[]): Promise<void>
-  listAssets(runId: string): Promise<Array<{ id: string; documentId: string; sourceUrl: string }>>
+  listAssets(runId: string): Promise<Array<{ id: string; documentId: string; sourceUrl: string; storedObject: null | { objectKey: string; mediaType: string } }>>
   attachDocumentObject(documentId: string, object: StoredBlob): Promise<void>
   attachAssetObject(assetId: string, object: StoredBlob): Promise<void>
   completedSnapshot(runId: string): Promise<CompletedRunSnapshot>

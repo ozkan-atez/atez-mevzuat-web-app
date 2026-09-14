@@ -177,10 +177,10 @@ export class PrismaScanRepository {
     })
   }
 
-  async listAssets(runId: string): Promise<Array<{ id: string; documentId: string; sourceUrl: string }>> {
+  async listAssets(runId: string): Promise<Array<{ id: string; documentId: string; sourceUrl: string; storedObject: null | { objectKey: string; mediaType: string } }>> {
     return this.prisma.documentAsset.findMany({
       where: { document: { edition: { scanRunId: runId } } }, orderBy: { sourceUrl: 'asc' },
-      select: { id: true, documentId: true, sourceUrl: true },
+      select: { id: true, documentId: true, sourceUrl: true, storedObject: { select: { objectKey: true, mediaType: true } } },
     })
   }
 

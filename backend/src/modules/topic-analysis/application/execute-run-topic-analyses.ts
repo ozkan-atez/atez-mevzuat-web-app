@@ -48,18 +48,26 @@ export interface RunAnalysisResult {
 }
 
 export async function executeRunTopicAnalyses(runId: string, dependencies: Dependencies): Promise<RunAnalysisResult> {
-  const topics = await dependencies.repository.ensureTopics(runId)
+  const allTopics = await dependencies.repository.ensureTopics(runId)
+  const topics = allTopics.filter((topic) => topic.status !== 'COMPLETED')
   const context = await dependencies.repository.getRunReportContext(runId)
   if (!context) throw new Error(`Run rapor bağlamı bulunamadı: ${runId}`)
   await dependencies.lifecycle?.analysisStarted(topics.length)
 
-  if (topics.length === 0) {
+  if (allTopics.length === 0) {
     await dependencies.lifecycle?.analysisFinished()
     await dependencies.lifecycle?.reportsStarted(1)
     const noChangeReport = await createNoChangeReport(context, dependencies)
     await dependencies.lifecycle?.reportItemFinished()
     await dependencies.lifecycle?.reportsFinished()
     return { status: 'COMPLETED', topicReports: [], noChangeReport, counts: { total: 0, completed: 0, awaitingRetry: 0, failed: 0, reports: 1 } }
+  }
+
+  if (topics.length === 0) {
+    await dependencies.lifecycle?.analysisFinished()
+    await dependencies.lifecycle?.reportsStarted(0)
+    await dependencies.lifecycle?.reportsFinished()
+    return { status: 'COMPLETED', topicReports: [], noChangeReport: null, counts: { total: allTopics.length, completed: allTopics.length, awaitingRetry: 0, failed: 0, reports: 0 } }
   }
 
   const outcomes = await executePool(topics.map((topic) => topic.id), dependencies.concurrency, async (topicId) => {
@@ -85,7 +93,7 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
   await dependencies.lifecycle?.reportsStarted(passAnalyses.length)
   const topicReports: StoredTopicReport[] = []
   for (const item of passAnalyses) {
-    const sequence = topics.findIndex((topic) => topic.id === item.analysis.topicId) + 1
+    const sequence = allTopics.findIndex((topic) => topic.id === item.analysis.topicId) + 1
     try {
       topicReports.push(await publishTopicAnalysis(context, item, sequence, dependencies))
     } catch (error) {
@@ -112,8 +120,8 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
     topicReports,
     noChangeReport: null,
     counts: {
-      total: topics.length,
-      completed: noContentAnalyses.length + topicReports.length,
+      total: allTopics.length,
+      completed: allTopics.length - topics.length + noContentAnalyses.length + topicReports.length,
       awaitingRetry: retryable,
       failed: terminal,
       reports: topicReports.length,
