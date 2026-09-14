@@ -63,6 +63,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     prefix: '/api/v1/scan-runs',
     repository: options.scanRepository ?? new PrismaScanRepository(prisma),
     topicRepository,
+    ...(options.objectStore ? { objectStore: options.objectStore } : {}),
   })
   app.register(topicAnalysisRoutes, { prefix: '/api/v1/topics', repository: topicRepository, ...(options.objectStore ? { objectStore: options.objectStore } : {}) })
 

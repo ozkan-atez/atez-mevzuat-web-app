@@ -38,6 +38,18 @@ describe('topic analysis HTTP contract', () => {
     await app.close()
   })
 
+  it('serves a validated report that belongs to a run', async () => {
+    const { runId } = await seedTopic()
+    const report = await prisma.topicReport.findFirstOrThrow({ where: { scanRunId: runId } })
+    const objectStore = { getContent: async () => Buffer.from('<!doctype html><p>ATEZ bülteni</p>') }
+    const app = await buildApp({ scanRepository, topicRepository, objectStore })
+    const response = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${runId}/reports/${report.id}/html` })
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('text/html')
+    expect(response.body).toContain('ATEZ bülteni')
+    await app.close()
+  })
+
   it('appends a revision request idempotently', async () => {
     const { topicId } = await seedTopic()
     const app = await buildApp({ scanRepository, topicRepository })

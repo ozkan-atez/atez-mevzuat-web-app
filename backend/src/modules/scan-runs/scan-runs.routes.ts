@@ -2,15 +2,26 @@ import type { FastifyInstance } from 'fastify'
 import { AiFilterRetryConflictError, PreviousSourceRetryConflictError, type PrismaScanRepository } from './infrastructure/prisma-scan-repository'
 import { createScanRunSchema, idempotencyKeySchema } from './scan-runs.schemas'
 import type { PrismaTopicAnalysisRepository } from '../topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import type { TopicObjectStore } from '../topic-analysis/application/ports'
 
 interface Options {
   repository: PrismaScanRepository
   topicRepository?: PrismaTopicAnalysisRepository
+  objectStore?: Pick<TopicObjectStore, 'getContent'>
 }
 
 const terminalStatuses = new Set(['AWAITING_RETRY', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'])
 
 export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
+  app.get('/:id/reports/:reportId/html', async (request, reply) => {
+    const { id, reportId } = request.params as { id: string; reportId: string }
+    if (!options.topicRepository) return reply.code(503).send({ message: 'Rapor servisi kullanılamıyor' })
+    const objectKey = await options.topicRepository.getRunReportHtmlKey(id, reportId)
+    if (!objectKey) return reply.code(404).send({ message: 'Rapor bulunamadı' })
+    if (!options.objectStore) return reply.code(503).send({ message: 'Rapor deposu kullanılamıyor' })
+    return reply.type('text/html; charset=utf-8').send(await options.objectStore.getContent(objectKey))
+  })
+
   app.get('/:id/topics', async (request, reply) => {
     const { id } = request.params as { id: string }
     if (!options.topicRepository) return reply.code(503).send({ message: 'Topic servisi kullanılamıyor' })

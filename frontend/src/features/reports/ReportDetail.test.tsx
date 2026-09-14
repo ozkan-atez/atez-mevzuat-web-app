@@ -1,26 +1,37 @@
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { ReportDetail } from './ReportDetail'
 
+const topic = {
+  id: 'topic-1', runId: 'run-1', documentId: 'doc-1', title: 'İthalat Tebliği', sourceUrl: 'https://example.test/current', status: 'COMPLETED',
+  retryAvailable: false, errorCategory: null, errorMessage: null, analysisVersion: 1, reportVersion: 2, reportCard: 'K1', reportBasename: 'ithalat-tebligi.html',
+  latestAnalysis: { id: 'analysis-1', version: 1, status: 'COMPLETED', createdAt: '2026-09-11T05:00:00Z' },
+  latestReport: { id: 'report-1', version: 2, card: 'K1', basename: 'ithalat-tebligi.html', createdAt: '2026-09-11T05:00:00Z' },
+  analyses: [], reports: [], thread: { id: 'thread-1', messages: [] },
+}
+
 describe('ReportDetail', () => {
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('test fallback')))
+  it('loads the real topic report and shows its persistent revision chat', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => Promise.resolve(
+      url.endsWith('/reports/2/html')
+        ? new Response('<!doctype html><html><body>Gerçek bülten</body></html>', { status: 200, headers: { 'Content-Type': 'text/html' } })
+        : new Response(JSON.stringify(topic), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MemoryRouter initialEntries={['/reports/topic-1?revision=2']}><Routes><Route path="/reports/:id" element={<ReportDetail />} /></Routes></MemoryRouter>)
+
+    expect(await screen.findByText('İthalat Tebliği')).toBeVisible()
+    expect(screen.getByTitle('Bülten Önizleme')).toHaveAttribute('srcdoc', expect.stringContaining('Gerçek bülten'))
+    expect(screen.getByText('Revizyon & Sohbet')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/topics/topic-1/reports/2/html')
+    expect(document.body.textContent).not.toContain('İthalatta Haksız Rekabetin Önlenmesine İlişkin Tebliğ (No: 2026/4)')
   })
 
-  it('uses the full width for the bulletin without a separate revision chat panel', async () => {
-    render(
-      <MemoryRouter initialEntries={['/reports/1']}>
-        <Routes>
-          <Route path="/reports/:id" element={<ReportDetail />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await waitFor(() => expect(screen.getByTitle('Bülten Önizleme')).toBeInTheDocument())
-
-    expect(screen.queryByText('Revizyon & Sohbet')).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('Revizyon talimatınızı yazın... (Enter gönderir)')).not.toBeInTheDocument()
-    expect(screen.getByTestId('report-preview')).toHaveClass('lg:col-span-10')
+  it('shows a real error instead of demo content', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 404 })))
+    render(<MemoryRouter initialEntries={['/reports/missing']}><Routes><Route path="/reports/:id" element={<ReportDetail />} /></Routes></MemoryRouter>)
+    expect(await screen.findByText('Bülten kaydı bulunamadı')).toBeVisible()
   })
 })

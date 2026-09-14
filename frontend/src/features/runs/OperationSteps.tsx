@@ -9,6 +9,8 @@ const steps: Array<{ stage: ScanStage; title: string; description: string }> = [
   { stage: 'DOWNLOADING_ASSETS', title: 'Varlıklar indiriliyor', description: 'Keşfedilen resim ve ek dosyalar nesne deposuna yazılıyor.' },
   { stage: 'VALIDATING', title: 'Dosyalar doğrulanıyor', description: 'İndirilen içeriklerin türü, boyutu ve bütünlüğü kontrol ediliyor.' },
   { stage: 'DISCOVERING_PREVIOUS_SOURCES', title: 'Önceki kaynaklar hazırlanıyor', description: 'İlgili her belge için önceki mevzuat kaynağı bağımsız olarak aranır ve arşivlenir.' },
+  { stage: 'ANALYZING_TOPICS', title: 'Mevzuat değişiklikleri analiz ediliyor', description: 'Her ilgili belge, kaynaklarıyla birlikte bağımsız bir işlem olarak analiz edilir.' },
+  { stage: 'GENERATING_REPORTS', title: 'Raporlar oluşturuluyor', description: 'Tamamlanan analizlerden doğrulanmış ATEZ bültenleri hazırlanır.' },
   { stage: 'WRITING_MANIFEST', title: 'Tarama kaydı tamamlanıyor', description: 'Çalışmanın denetlenebilir dosya envanteri oluşturuluyor.' },
 ]
 

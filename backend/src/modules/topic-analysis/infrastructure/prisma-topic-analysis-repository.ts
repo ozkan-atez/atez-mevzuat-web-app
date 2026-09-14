@@ -374,6 +374,21 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     return revision?.htmlObjectKey ?? null
   }
 
+  async getRunReportHtmlKey(runId: string, reportId: string): Promise<string | null> {
+    const report = await this.prisma.topicReport.findFirst({
+      where: { id: reportId, scanRunId: runId },
+      select: {
+        revisions: {
+          where: { status: 'VALIDATED' },
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { htmlObjectKey: true },
+        },
+      },
+    })
+    return report?.revisions[0]?.htmlObjectKey ?? null
+  }
+
   async getTopicRevisionWorkItem(topicId: string, messageId: string) {
     const topic = await this.prisma.topicProcess.findUnique({
       where: { id: topicId },

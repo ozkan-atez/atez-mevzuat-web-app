@@ -4,6 +4,8 @@ export type ScanStage =
   | 'DISCOVERING'
   | 'AI_FILTERING'
   | 'DISCOVERING_PREVIOUS_SOURCES'
+  | 'ANALYZING_TOPICS'
+  | 'GENERATING_REPORTS'
   | 'DOWNLOADING_DOCUMENTS'
   | 'DISCOVERING_ASSETS'
   | 'DOWNLOADING_ASSETS'
@@ -33,6 +35,19 @@ export interface ScanRunDetail {
     retryAvailable: boolean
     errorMessage: string | null
   }
+  analysis?: {
+    counts: { total: number; completed: number; awaitingRetry: number; failed: number }
+    topics: import('../analysis/types').TopicSummary[]
+  }
+  reports?: Array<{
+    id: string
+    topicId: string | null
+    title: string
+    basename: string
+    card: import('../analysis/types').ReportCard
+    version: number
+    htmlObjectKey: string
+  }>
   counts: {
     editions: number
     documents: number

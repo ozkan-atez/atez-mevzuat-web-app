@@ -46,6 +46,12 @@ export async function getScanRun(runId: string): Promise<ScanRunDetail> {
   return response.json() as Promise<ScanRunDetail>
 }
 
+export async function getRunReportHtml(runId: string, reportId: string): Promise<string> {
+  const response = await fetch(`/api/v1/scan-runs/${runId}/reports/${reportId}/html`)
+  if (!response.ok) throw new ScanApiError(response.status, await readError(response, 'Bülten içeriği alınamadı'))
+  return response.text()
+}
+
 export async function retryAiFilter(runId: string): Promise<{ runId: string; status: 'QUEUED' }> {
   const response = await fetch(`/api/v1/scan-runs/${runId}/ai-filter/retry`, {
     method: 'POST',

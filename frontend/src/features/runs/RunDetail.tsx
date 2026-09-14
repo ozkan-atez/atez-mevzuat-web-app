@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { AlertCircle, ArrowLeft, CalendarDays, RefreshCw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { retryAiFilter, retryPreviousSources } from '../scans/api'
+import { retryTopicAnalysis } from '../analysis/api'
+import { TopicAnalysisCard } from '../analysis/TopicAnalysisCard'
 import { useScanRun } from '../scans/useScanRun'
 import type { ScanRunStatus } from '../scans/types'
 import { CollectedDocuments } from './CollectedDocuments'
@@ -20,6 +22,7 @@ export function RunDetail() {
   const { run, isLoading, notFound, error, refresh, reconnect } = useScanRun(id)
   const [isRetrying, setIsRetrying] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
+  const [retryingTopicId, setRetryingTopicId] = useState<string | null>(null)
 
   const handleRetry = async (kind: 'filter' | 'previous-sources') => {
     if (!id || isRetrying) return
@@ -32,6 +35,20 @@ export function RunDetail() {
       setRetryError(caught instanceof Error ? caught.message : 'İşlem yeniden başlatılamadı')
     } finally {
       setIsRetrying(false)
+    }
+  }
+
+  const handleTopicRetry = async (topicId: string) => {
+    if (retryingTopicId) return
+    setRetryingTopicId(topicId)
+    setRetryError(null)
+    try {
+      await retryTopicAnalysis(topicId)
+      await reconnect()
+    } catch (caught) {
+      setRetryError(caught instanceof Error ? caught.message : 'Topic analizi yeniden başlatılamadı')
+    } finally {
+      setRetryingTopicId(null)
     }
   }
 
@@ -113,6 +130,28 @@ export function RunDetail() {
         />
         <CollectedDocuments editions={run.editions} />
       </div>
+
+      {(run.analysis?.topics.length ?? 0) > 0 && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">İlgili mevzuat analizleri</h2>
+            <p className="mt-1 text-sm text-slate-500">Her belge bağımsız analiz edilir ve tek bir bülten üretir.</p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {run.analysis?.topics.map((topic) => (
+              <TopicAnalysisCard key={topic.id} topic={topic} onRetry={(topicId) => void handleTopicRetry(topicId)} isRetrying={retryingTopicId === topic.id} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {run.reports?.find((report) => report.card === 'K6') && (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+          <h2 className="font-bold text-emerald-950">Değişiklik bulunmadı</h2>
+          <p className="mt-1 text-sm text-emerald-800">Bu tarihte gümrük ve dış ticaretle ilgili bir mevzuat değişikliği tespit edilmedi.</p>
+          <Link to={`/runs/${run.id}/reports/${run.reports.find((report) => report.card === 'K6')?.id}`} className="mt-4 inline-flex rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">Değişiklik yok raporunu aç</Link>
+        </section>
+      )}
     </div>
   )
 }
