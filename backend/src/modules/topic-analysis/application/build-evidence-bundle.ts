@@ -30,7 +30,7 @@ export async function buildEvidenceBundle(
   }
 
   const parts: EvidencePart[] = []
-  const aiParts: AiInputPart[] = []
+  const aiParts: AiInputPart[] = [{ text: `Topic kimliği: ${topic.topicId}\nHedef tarih: ${topic.targetDate}\nBelge başlığı: ${topic.document.title}` }]
   for (const candidate of candidates) {
     const bytes = await objectStore.getContent(candidate.object.objectKey)
     parts.push({

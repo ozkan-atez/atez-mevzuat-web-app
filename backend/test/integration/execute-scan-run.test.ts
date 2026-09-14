@@ -6,6 +6,7 @@ import type { DownloadedFile, ObjectStore, OfficialHttp, PreviousSourceSearch, S
 import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
 import { fixtureFile } from '../helpers/files'
 import { AiProviderError } from '../../src/modules/ai/domain/ai-errors'
+import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
 
 class FixtureHttp implements OfficialHttp {
   readonly calls: string[] = []
@@ -17,7 +18,7 @@ class FixtureHttp implements OfficialHttp {
     } else if (url.endsWith('.htm')) {
       file = await fixtureFile('<!doctype html><html><body><img src="./chart.png"></body></html>', 'text/html')
     } else {
-      file = await fixtureFile('<!doctype html><html><body><a href="/eskiler/2026/07/20260711-1.htm">Karar</a></body></html>', 'text/html')
+      file = await fixtureFile('<!doctype html><html><body><h1>11 Eylül 2026 Tarihli ve 33000 Sayılı Resmî Gazete</h1><a href="/eskiler/2026/09/20260911-1.htm">Karar</a></body></html>', 'text/html')
     }
     return { ...file, sourceUrl: url }
   }
@@ -36,6 +37,7 @@ class MemoryObjectStore implements ObjectStore {
   }
   async putRunFile(key: string, body: Buffer, mediaType: string): Promise<StoredBlob> {
     this.runFiles.push(key)
+    this.objects.set(key, body)
     return { sha256: 'f'.repeat(64), bucket: 'test', objectKey: key, mediaType, byteSize: BigInt(body.length) }
   }
 }
@@ -44,6 +46,22 @@ class AllInAi implements AiModelClient {
   readonly requests: StructuredAiRequest[] = []
   async generateStructured(request: StructuredAiRequest): Promise<StructuredAiResult> {
     this.requests.push(request)
+    if (request.systemInstruction.includes('Her istek filtre aşamasında ayrılmış tek topic')) {
+      const topicId = (request.parts[0] as { text: string }).text.match(/Topic kimliği: ([^\n]+)/)?.[1]
+      if (!topicId) throw new Error('Topic id missing')
+      return {
+        json: {
+          schemaVersion: 1, topicId, status: 'PASS',
+          document: { title: 'İthalat Kararı', gazetteDate: '2026-09-11', gazetteNumber: '33000', sourceUrl: 'https://www.resmigazete.gov.tr/current' },
+          change: { type: 'AMENDMENT', detailedAnalysis: 'İthalat uygulaması değişmiştir.', summary: 'Yeni ithalat kuralı uygulanır.' },
+          affectedParties: [], effectiveDates: [], comparisons: [], tables: [],
+          officialSources: [{ id: 's1', label: 'T.C. Resmî Gazete', url: 'https://www.resmigazete.gov.tr/current', evidenceIds: ['e1'] }], supportingSources: [],
+          evidence: [{ id: 'e1', objectKey: 'objects/current.html', locator: 'paragraph:1' }], unresolvedReferences: [],
+          emailTitle: 'İthalat değişikliği', emailSummary: 'Yeni ithalat kuralı uygulanacaktır.',
+        },
+        providerRequestId: 'topic-response', usage: { inputTokens: 30, outputTokens: 20 },
+      }
+    }
     if (request.systemInstruction.includes('önceki kaynak aramasını daralt')) {
       return {
         json: { needsPreviousSource: false, relationship: 'NONE', targetRegulationTitle: null, targetRegulationIdentifier: null, targetRegulationType: null, targetInstitution: null, targetArticleReferences: [], queryCandidates: [], reason: 'Bağımsız düzenleme.' },
@@ -71,6 +89,7 @@ class RateLimitedAi implements AiModelClient {
 
 const prisma = new PrismaClient()
 const repository = new PrismaScanRepository(prisma)
+const topicRepository = new PrismaTopicAnalysisRepository(prisma)
 
 describe('executeScanRun', () => {
   beforeEach(async () => {
@@ -79,7 +98,7 @@ describe('executeScanRun', () => {
   afterAll(() => prisma.$disconnect())
 
   it('writes the manifest before completing a fully collected run', async () => {
-    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-07-11' })
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-11' })
     const objectStore = new MemoryObjectStore()
     const aiModel = new AllInAi()
 
@@ -90,41 +109,42 @@ describe('executeScanRun', () => {
       maxRunBytes: 10_000n,
       aiModel,
       previousSourceSearch: new EmptyPreviousSourceSearch(),
-      gemini: { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2 },
+      topicRepository,
+      gemini: { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2, topicConcurrency: 2 },
     })
 
     const saved = await prisma.scanRun.findUniqueOrThrow({ where: { id: run.id } })
     expect(saved.status).toBe('COMPLETED')
-    expect(saved.manifestObjectKey).toBe(`runs/2026/07/11/${run.id}/manifest.json`)
+    expect(saved.manifestObjectKey).toBe(`runs/2026/09/11/${run.id}/manifest.json`)
     expect(objectStore.runFiles.at(-1)).toBe(saved.manifestObjectKey)
     expect(await prisma.collectedDocument.count()).toBe(1)
     expect(await prisma.documentAsset.count()).toBe(1)
-    expect(aiModel.requests).toHaveLength(2)
+    expect(aiModel.requests).toHaveLength(3)
     expect((await prisma.stageExecution.findMany({ where: { scanRunId: run.id }, orderBy: { createdAt: 'asc' }, select: { stage: true } })).map((stage) => stage.stage)).toEqual([
-      'DISCOVERING', 'AI_FILTERING', 'DOWNLOADING_DOCUMENTS', 'DISCOVERING_ASSETS', 'DOWNLOADING_ASSETS', 'VALIDATING', 'DISCOVERING_PREVIOUS_SOURCES', 'WRITING_MANIFEST',
+      'DISCOVERING', 'AI_FILTERING', 'DOWNLOADING_DOCUMENTS', 'DISCOVERING_ASSETS', 'DOWNLOADING_ASSETS', 'VALIDATING', 'DISCOVERING_PREVIOUS_SOURCES', 'ANALYZING_TOPICS', 'GENERATING_REPORTS', 'WRITING_MANIFEST',
     ])
   })
 
   it('resumes the same paused run from AI filtering without repeating discovery', async () => {
-    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-07-11' })
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-11' })
     const http = new FixtureHttp()
     const objectStore = new MemoryObjectStore()
 
     await executeScanRun(run.id, {
-      repository, http, objectStore, maxRunBytes: 10_000n, aiModel: new RateLimitedAi(), previousSourceSearch: new EmptyPreviousSourceSearch(),
-      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000, previousSourceConcurrency: 2 },
+      repository, topicRepository, http, objectStore, maxRunBytes: 10_000n, aiModel: new RateLimitedAi(), previousSourceSearch: new EmptyPreviousSourceSearch(),
+      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000, previousSourceConcurrency: 2, topicConcurrency: 2 },
     })
 
     expect((await repository.getRun(run.id))?.status).toBe('AWAITING_RETRY')
     const discoveryCalls = http.calls.length
 
     await executeScanRun(run.id, {
-      repository, http, objectStore, maxRunBytes: 10_000n, aiModel: new AllInAi(), previousSourceSearch: new EmptyPreviousSourceSearch(),
-      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000, previousSourceConcurrency: 2 },
+      repository, topicRepository, http, objectStore, maxRunBytes: 10_000n, aiModel: new AllInAi(), previousSourceSearch: new EmptyPreviousSourceSearch(),
+      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000, previousSourceConcurrency: 2, topicConcurrency: 2 },
     }, 'RETRY_AI_FILTER')
 
     expect((await repository.getRun(run.id))?.status).toBe('COMPLETED')
     expect(http.calls.slice(0, discoveryCalls)).toHaveLength(discoveryCalls)
-    expect(http.calls.filter((url) => url.endsWith('/11.07.2026') || url.endsWith('/20260711.htm'))).toHaveLength(1)
+    expect(http.calls.filter((url) => url.endsWith('/11.09.2026') || url.endsWith('/20260911.htm'))).toHaveLength(1)
   })
 })

@@ -10,6 +10,9 @@ import type { ScanStage } from '../domain/scan-run'
 import { AiFilterAwaitingRetryError, executeDocumentFilter } from './execute-document-filter'
 import { executePreviousSourceDiscovery, PreviousSourceAwaitingRetryError } from './execute-previous-source-discovery'
 import { PREVIOUS_SOURCE_CONFIGURATION_HASH, PREVIOUS_SOURCE_PROMPT_VERSION } from './previous-source-prompts'
+import type { PrismaTopicAnalysisRepository } from '../../topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import { executeTopicAnalysis } from '../../topic-analysis/application/execute-topic-analysis'
+import { executeRunTopicAnalyses } from '../../topic-analysis/application/execute-run-topic-analyses'
 
 interface Dependencies {
   repository: PrismaScanRepository
@@ -18,7 +21,8 @@ interface Dependencies {
   maxRunBytes: bigint
   aiModel: AiModelClient
   previousSourceSearch: PreviousSourceSearch
-  gemini: { model: string; maxAttempts: number; maxContentBytes: number; previousSourceConcurrency: number }
+  topicRepository: PrismaTopicAnalysisRepository
+  gemini: { model: string; maxAttempts: number; maxContentBytes: number; previousSourceConcurrency: number; topicConcurrency: number }
 }
 
 export async function executeScanRun(runId: string, dependencies: Dependencies, command: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES' = 'START_SCAN'): Promise<void> {
@@ -139,6 +143,35 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
       await repository.advanceStage(runId, currentStage, 0n)
     }
     await repository.completeStage(runId, currentStage)
+
+    const analysisResult = await executeRunTopicAnalyses(runId, {
+      repository: dependencies.topicRepository,
+      objectStore,
+      concurrency: dependencies.gemini.topicConcurrency,
+      executeTopic: (topicId) => executeTopicAnalysis(topicId, {
+        repository: dependencies.topicRepository,
+        objectStore,
+        aiModel: dependencies.aiModel,
+        model: dependencies.gemini.model,
+        maxAttempts: dependencies.gemini.maxAttempts,
+        maxContextBytes: dependencies.gemini.maxContentBytes,
+      }),
+      lifecycle: {
+        analysisStarted: async (total) => { currentStage = 'ANALYZING_TOPICS'; await repository.startStage(runId, currentStage, total) },
+        analysisItemFinished: () => repository.advanceStage(runId, 'ANALYZING_TOPICS', 0n),
+        analysisFinished: () => repository.completeStage(runId, 'ANALYZING_TOPICS'),
+        reportsStarted: async (total) => { currentStage = 'GENERATING_REPORTS'; await repository.startStage(runId, currentStage, total) },
+        reportItemFinished: () => repository.advanceStage(runId, 'GENERATING_REPORTS', 0n),
+        reportsFinished: () => repository.completeStage(runId, 'GENERATING_REPORTS'),
+      },
+    })
+    if (analysisResult.status === 'AWAITING_RETRY') {
+      await repository.markTopicAnalysisAwaitingRetry(runId, analysisResult.counts)
+      return
+    }
+    if (analysisResult.status === 'PARTIAL' || analysisResult.status === 'FAILED') {
+      throw new Error(`Topic analizi ve raporlama ${analysisResult.status.toLocaleLowerCase('tr-TR')} tamamlandı.`)
+    }
 
     currentStage = 'WRITING_MANIFEST'
     await repository.startStage(runId, currentStage, 1)

@@ -84,7 +84,7 @@ export async function executeTopicAnalysis(topicId: string, dependencies: Execut
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
       })
-      return { ...revision, analysisObjectKey, markdownObjectKey }
+      return { ...revision, analysisObjectKey, markdownObjectKey, analysis }
     } catch (error) {
       if (error instanceof AiProviderError) {
         const failure = toFailure(error)

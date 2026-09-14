@@ -726,6 +726,17 @@ export class PrismaScanRepository {
     ])
   }
 
+  async markTopicAnalysisAwaitingRetry(runId: string, counts: { total: number; completed: number; awaitingRetry: number; failed: number }): Promise<void> {
+    const message = 'Mevzuat analizlerinden bazıları yeniden deneme bekliyor.'
+    await this.prisma.$transaction([
+      this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'AWAITING_RETRY', currentStage: 'ANALYZING_TOPICS', completedItems: counts.completed, failedItems: counts.awaitingRetry, errorSummary: message } }),
+      this.prisma.stageExecution.update({
+        where: { scanRunId_stage: { scanRunId: runId, stage: 'ANALYZING_TOPICS' } },
+        data: { status: 'AWAITING_RETRY', totalItems: counts.total, completedItems: counts.completed, failedItems: counts.awaitingRetry, errorSummary: message },
+      }),
+    ])
+  }
+
   async requestPreviousSourceRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.scanOutbox.findUnique({ where: { requestKey } })
@@ -868,7 +879,57 @@ export class PrismaScanRepository {
         })),
       } : null,
     }))
-    return { run, index: { sourceUrl: raw.indexSourceUrl, objectKey: raw.indexObjectKey, sha256: raw.indexSha256 }, objects, filterAudit, previousSourceAudit }
+    const topics = await this.prisma.topicProcess.findMany({
+      where: { scanRunId: runId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        evidenceBundle: true,
+        analyses: { orderBy: { version: 'asc' } },
+        executions: { orderBy: [{ kind: 'asc' }, { attemptNo: 'asc' }] },
+        reports: { include: { revisions: { orderBy: { version: 'asc' } } } },
+      },
+    })
+    const noChangeReports = await this.prisma.topicReport.findMany({
+      where: { scanRunId: runId, topicId: null, card: 'K6' },
+      include: { revisions: { orderBy: { version: 'asc' } } },
+    })
+    const topicAnalysisAudit: NonNullable<CompletedRunSnapshot['topicAnalysisAudit']> = {
+      topics: topics.map((topic) => ({
+        topicId: topic.id,
+        documentId: topic.documentId,
+        status: topic.status,
+        evidenceManifestObjectKey: topic.evidenceBundle?.manifestObjectKey ?? null,
+        sourceSignature: topic.evidenceBundle?.sourceSignature ?? null,
+        analyses: topic.analyses.map((analysis) => ({
+          id: analysis.id, version: analysis.version, status: analysis.status,
+          analysisObjectKey: analysis.analysisObjectKey, markdownObjectKey: analysis.markdownObjectKey,
+          model: analysis.model, promptVersion: analysis.promptVersion, schemaVersion: analysis.schemaVersion,
+          inputTokens: analysis.inputTokens, outputTokens: analysis.outputTokens,
+        })),
+        executions: topic.executions.map((execution) => ({
+          kind: execution.kind, attemptNo: execution.attemptNo, status: execution.status,
+          model: execution.model, promptVersion: execution.promptVersion, schemaVersion: execution.schemaVersion,
+          inputHash: execution.inputHash, providerRequestId: execution.providerRequestId,
+          inputTokens: execution.inputTokens, outputTokens: execution.outputTokens, latencyMs: execution.latencyMs,
+          errorCategory: execution.errorCategory, providerStatus: execution.providerStatus, errorMessage: execution.errorMessage,
+        })),
+        reports: topic.reports.map((report) => ({
+          id: report.id, basename: report.basename, card: report.card,
+          revisions: report.revisions.map((revision) => ({
+            version: revision.version, status: revision.status, card: revision.card,
+            analysisRevisionId: revision.analysisRevisionId, specObjectKey: revision.specObjectKey, htmlObjectKey: revision.htmlObjectKey,
+          })),
+        })),
+      })),
+      noChangeReports: noChangeReports.map((report) => ({
+        id: report.id, basename: report.basename, card: report.card,
+        revisions: report.revisions.map((revision) => ({
+          version: revision.version, status: revision.status, card: revision.card,
+          specObjectKey: revision.specObjectKey, htmlObjectKey: revision.htmlObjectKey,
+        })),
+      })),
+    }
+    return { run, index: { sourceUrl: raw.indexSourceUrl, objectKey: raw.indexObjectKey, sha256: raw.indexSha256 }, objects, filterAudit, previousSourceAudit, topicAnalysisAudit }
   }
 
   private async upsertObject(object: StoredBlob): Promise<string> {

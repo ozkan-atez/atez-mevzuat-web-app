@@ -353,6 +353,55 @@ export interface CompletedRunSnapshot {
       }>
     }
   }>
+  topicAnalysisAudit?: {
+    topics: Array<{
+      topicId: string
+      documentId: string
+      status: string
+      evidenceManifestObjectKey: string | null
+      sourceSignature: string | null
+      analyses: Array<{
+        id: string
+        version: number
+        status: string
+        analysisObjectKey: string
+        markdownObjectKey: string
+        model: string
+        promptVersion: string
+        schemaVersion: number
+        inputTokens: number | null
+        outputTokens: number | null
+      }>
+      executions: Array<{
+        kind: string
+        attemptNo: number
+        status: string
+        model: string
+        promptVersion: string
+        schemaVersion: number
+        inputHash: string
+        providerRequestId: string | null
+        inputTokens: number | null
+        outputTokens: number | null
+        latencyMs: number | null
+        errorCategory: string | null
+        providerStatus: number | null
+        errorMessage: string | null
+      }>
+      reports: Array<{
+        id: string
+        basename: string
+        card: string
+        revisions: Array<{ version: number; status: string; card: string; analysisRevisionId: string | null; specObjectKey: string; htmlObjectKey: string }>
+      }>
+    }>
+    noChangeReports: Array<{
+      id: string
+      basename: string
+      card: string
+      revisions: Array<{ version: number; status: string; card: string; specObjectKey: string; htmlObjectKey: string }>
+    }>
+  }
 }
 
 export interface ObjectStore {

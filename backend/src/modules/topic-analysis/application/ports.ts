@@ -101,3 +101,44 @@ export interface TopicAnalysisRepository {
   markTopicAwaitingRetry(topicId: string, error: AiCallFailure): Promise<void>
   markTopicBlocked(topicId: string, message: string): Promise<void>
 }
+
+export interface RunReportContext {
+  runId: string
+  targetDate: string
+  indexSourceUrl: string
+  indexObjectKey: string
+  inspectedDocumentCount: number
+}
+
+export interface CreateTopicReportRevisionInput {
+  scanRunId: string
+  topicId: string | null
+  analysisRevisionId: string | null
+  title: string
+  basename: string
+  card: 'K1' | 'K2' | 'K3' | 'K4' | 'K5' | 'K6'
+  version: number
+  specObjectKey: string
+  htmlObjectKey: string
+}
+
+export interface StoredTopicReport {
+  id: string
+  revisionId: string
+  topicId: string | null
+  version: number
+  basename: string
+  card: CreateTopicReportRevisionInput['card']
+  specObjectKey: string
+  htmlObjectKey: string
+}
+
+export interface RunTopicAnalysisRepository extends TopicAnalysisRepository {
+  ensureTopics(runId: string): Promise<Array<{ id: string; documentId: string; status: string }>>
+  getRunReportContext(runId: string): Promise<RunReportContext | null>
+  nextReportVersion(runId: string, topicId: string | null): Promise<number>
+  createReportRevision(input: CreateTopicReportRevisionInput): Promise<StoredTopicReport>
+  markTopicRendering(topicId: string): Promise<void>
+  markTopicValidating(topicId: string): Promise<void>
+  markTopicCompleted(topicId: string): Promise<void>
+}

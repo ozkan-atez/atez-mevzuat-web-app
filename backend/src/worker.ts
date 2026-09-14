@@ -13,11 +13,13 @@ import { AiProviderError } from './modules/ai/domain/ai-errors'
 import { GeminiAiModelClient, type GeminiTransport } from './modules/ai/infrastructure/gemini-ai-model-client'
 import type { ScanCommand } from './modules/scan-runs/application/ports'
 import { ResmiGazeteSearch } from './modules/scan-runs/infrastructure/resmi-gazete-search'
+import { PrismaTopicAnalysisRepository } from './modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
 
 async function startWorker() {
   const queue = await startQueue()
   const env = loadEnv()
   const repository = new PrismaScanRepository(prisma)
+  const topicRepository = new PrismaTopicAnalysisRepository(prisma)
   const scanQueue = new PgBossScanQueue(queue)
   const objectStore = new S3ObjectStore(env.s3)
   const http = new OfficialHttpClient(new SourcePolicy(env.sourceHosts), {
@@ -57,11 +59,13 @@ async function startWorker() {
         maxRunBytes: BigInt(env.maxRunBytes),
         aiModel,
         previousSourceSearch,
+        topicRepository,
         gemini: {
           model: env.gemini.model,
           maxAttempts: env.gemini.maxAttempts,
           maxContentBytes: env.gemini.maxContentBytes,
           previousSourceConcurrency: env.gemini.previousSourceConcurrency,
+          topicConcurrency: env.gemini.topicConcurrency,
         },
       }, command.type)
     }

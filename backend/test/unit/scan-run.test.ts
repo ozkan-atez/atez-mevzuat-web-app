@@ -19,11 +19,15 @@ describe('scan state machine', () => {
       'DOWNLOADING_ASSETS',
       'VALIDATING',
       'DISCOVERING_PREVIOUS_SOURCES',
+      'ANALYZING_TOPICS',
+      'GENERATING_REPORTS',
       'WRITING_MANIFEST',
     ])
     expect(() => assertStageTransition('DISCOVERING', 'AI_FILTERING')).not.toThrow()
     expect(() => assertStageTransition('AI_FILTERING', 'DOWNLOADING_DOCUMENTS')).not.toThrow()
     expect(() => assertStageTransition('VALIDATING', 'DISCOVERING_PREVIOUS_SOURCES')).not.toThrow()
-    expect(() => assertStageTransition('DISCOVERING_PREVIOUS_SOURCES', 'WRITING_MANIFEST')).not.toThrow()
+    expect(() => assertStageTransition('DISCOVERING_PREVIOUS_SOURCES', 'ANALYZING_TOPICS')).not.toThrow()
+    expect(() => assertStageTransition('ANALYZING_TOPICS', 'GENERATING_REPORTS')).not.toThrow()
+    expect(() => assertStageTransition('GENERATING_REPORTS', 'WRITING_MANIFEST')).not.toThrow()
   })
 })

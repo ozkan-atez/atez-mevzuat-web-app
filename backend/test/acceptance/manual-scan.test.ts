@@ -10,6 +10,7 @@ import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure
 import { S3ObjectStore } from '../../src/modules/scan-runs/infrastructure/s3-object-store'
 import { fixtureFile } from '../helpers/files'
 import type { AiModelClient, StructuredAiRequest, StructuredAiResult } from '../../src/modules/ai/application/ai-model-client'
+import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
 
 const s3Config = {
   endpoint: 'http://localhost:59000',
@@ -82,6 +83,7 @@ class EmptyPreviousSourceSearch implements PreviousSourceSearch {
 
 const prisma = new PrismaClient()
 const repository = new PrismaScanRepository(prisma)
+const topicRepository = new PrismaTopicAnalysisRepository(prisma)
 const objectStore = new S3ObjectStore(s3Config)
 const s3 = new S3Client({
   endpoint: s3Config.endpoint,
@@ -91,7 +93,7 @@ const s3 = new S3Client({
 })
 let http: FixtureOfficialHttp
 const aiModel = new MixedDecisionAi()
-const gemini = { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2 }
+const gemini = { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2, topicConcurrency: 2 }
 const previousSourceSearch = new EmptyPreviousSourceSearch()
 
 describe('manual scan acceptance', () => {
@@ -129,7 +131,7 @@ describe('manual scan acceptance', () => {
     const firstRunId = firstResponse.json<{ runId: string }>().runId
     expect(duplicateResponse.json<{ runId: string }>().runId).toBe(firstRunId)
 
-    await executeScanRun(firstRunId, { repository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
+    await executeScanRun(firstRunId, { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
     const finalRun = await repository.getRun(firstRunId)
     expect(finalRun?.status).toBe('COMPLETED')
     expect(finalRun?.editions.map((edition) => edition.type)).toEqual(['MAIN', 'SUPPLEMENT', 'SUPPLEMENT'])
@@ -167,7 +169,7 @@ describe('manual scan acceptance', () => {
     })
     const secondRunId = secondResponse.json<{ runId: string }>().runId
     expect(secondRunId).not.toBe(firstRunId)
-    await executeScanRun(secondRunId, { repository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
+    await executeScanRun(secondRunId, { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
 
     expect(await prisma.storedObject.count()).toBe(objectsAfterFirstRun.length)
     await app.close()

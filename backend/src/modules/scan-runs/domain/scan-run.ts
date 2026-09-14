@@ -8,6 +8,8 @@ export type ScanStage =
   | 'DOWNLOADING_ASSETS'
   | 'VALIDATING'
   | 'DISCOVERING_PREVIOUS_SOURCES'
+  | 'ANALYZING_TOPICS'
+  | 'GENERATING_REPORTS'
   | 'WRITING_MANIFEST'
 
 export const scanStages: readonly ScanStage[] = [
@@ -18,6 +20,8 @@ export const scanStages: readonly ScanStage[] = [
   'DOWNLOADING_ASSETS',
   'VALIDATING',
   'DISCOVERING_PREVIOUS_SOURCES',
+  'ANALYZING_TOPICS',
+  'GENERATING_REPORTS',
   'WRITING_MANIFEST',
 ]
 

@@ -57,9 +57,34 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
       assets: job.source.assets.map((asset) => ({ ...asset, byteSize: asset.byteSize.toString() })),
     } : null,
   }))
+  const topicAnalysis = snapshot.topicAnalysisAudit ?? { topics: [], noChangeReports: [] }
+  const reports = [
+    ...topicAnalysis.topics.flatMap((topic) => topic.reports.flatMap((report) => report.revisions.map((revision) => ({
+      topicId: topic.topicId,
+      reportId: report.id,
+      basename: report.basename,
+      card: revision.card,
+      version: revision.version,
+      status: revision.status,
+      analysisRevisionId: revision.analysisRevisionId,
+      specObjectKey: revision.specObjectKey,
+      htmlObjectKey: revision.htmlObjectKey,
+    })))),
+    ...topicAnalysis.noChangeReports.flatMap((report) => report.revisions.map((revision) => ({
+      topicId: null,
+      reportId: report.id,
+      basename: report.basename,
+      card: revision.card,
+      version: revision.version,
+      status: revision.status,
+      analysisRevisionId: null,
+      specObjectKey: revision.specObjectKey,
+      htmlObjectKey: revision.htmlObjectKey,
+    }))),
+  ]
 
   return Buffer.from(JSON.stringify({
-    schemaVersion: 3,
+    schemaVersion: 4,
     runId: snapshot.run.id,
     source: 'RESMI_GAZETE',
     targetDate: snapshot.run.targetDate,
@@ -68,6 +93,8 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
     editions,
     filterAudit: snapshot.filterAudit,
     previousSourceAudit,
+    topicAnalysis,
+    reports,
     totals: {
       editions: editions.length,
       documents: editions.reduce((total, edition) => total + edition.documents.length, 0),

@@ -25,6 +25,7 @@ const schema = z.object({
   GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
   GEMINI_MAX_CONTENT_BYTES: z.coerce.number().int().positive().default(8_000_000),
   PREVIOUS_SOURCE_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
+  TOPIC_ANALYSIS_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
 })
 
 export interface AppEnv {
@@ -52,6 +53,7 @@ export interface AppEnv {
     maxAttempts: number
     maxContentBytes: number
     previousSourceConcurrency: number
+    topicConcurrency: number
   }
 }
 
@@ -82,6 +84,7 @@ export function loadEnv(input: NodeJS.ProcessEnv = process.env): AppEnv {
       maxAttempts: value.GEMINI_MAX_ATTEMPTS,
       maxContentBytes: value.GEMINI_MAX_CONTENT_BYTES,
       previousSourceConcurrency: value.PREVIOUS_SOURCE_CONCURRENCY,
+      topicConcurrency: value.TOPIC_ANALYSIS_CONCURRENCY,
     },
   }
 }
