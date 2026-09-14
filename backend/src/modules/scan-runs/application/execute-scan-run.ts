@@ -39,19 +39,20 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
     const datePath = run.targetDate.replaceAll('-', '/')
     if (command === 'START_SCAN') {
       await repository.startRun(runId)
-      await repository.startStage(runId, currentStage, 1)
-
-      const indexFile = await downloadFirstAvailable(http, candidateIndexUrls(run.targetDate), tempDirectory)
-      bytes = addWithinLimit(bytes, indexFile.byteSize, maxRunBytes)
-      const indexKey = `runs/${datePath}/${runId}/index.html`
-      const indexBytes = await readFile(indexFile.tempPath)
-      const storedIndex = await objectStore.putRunFile(indexKey, indexBytes, 'text/html')
-      await repository.saveIndex(runId, indexFile.sourceUrl, storedIndex)
-      const editions = parseEditions(indexBytes.toString('utf8'), indexFile.sourceUrl, run.targetDate)
-      if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
-      await repository.saveEditions(runId, run.targetDate, editions)
-      await repository.advanceStage(runId, currentStage, indexFile.byteSize)
-      await repository.completeStage(runId, currentStage)
+      if (!run.indexObjectKey) {
+        await repository.startStage(runId, currentStage, 1)
+        const indexFile = await downloadFirstAvailable(http, candidateIndexUrls(run.targetDate), tempDirectory)
+        bytes = addWithinLimit(bytes, indexFile.byteSize, maxRunBytes)
+        const indexKey = `runs/${datePath}/${runId}/index.html`
+        const indexBytes = await readFile(indexFile.tempPath)
+        const storedIndex = await objectStore.putRunFile(indexKey, indexBytes, 'text/html')
+        await repository.saveIndex(runId, indexFile.sourceUrl, storedIndex)
+        const editions = parseEditions(indexBytes.toString('utf8'), indexFile.sourceUrl, run.targetDate)
+        if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
+        await repository.saveEditions(runId, run.targetDate, editions)
+        await repository.advanceStage(runId, currentStage, indexFile.byteSize)
+        await repository.completeStage(runId, currentStage)
+      }
     }
 
     if (command !== 'RETRY_PREVIOUS_SOURCES') {
@@ -216,7 +217,7 @@ export async function finalizeScanRun(
   const manifestKey = `runs/${run.targetDate.replaceAll('-', '/')}/${runId}/manifest.json`
   const storedManifest = await dependencies.objectStore.putRunFile(manifestKey, manifest, 'application/json')
   await dependencies.repository.verifyManifestCounts(runId)
-  await dependencies.repository.advanceStage(runId, 'WRITING_MANIFEST', storedManifest.byteSize)
+  await dependencies.repository.advanceStage(runId, 'WRITING_MANIFEST', 0n)
   await dependencies.repository.completeStage(runId, 'WRITING_MANIFEST')
   await dependencies.repository.completeRun(runId, storedManifest.objectKey)
 }

@@ -93,9 +93,9 @@ export class PrismaScanRepository {
     })
   }
 
-  async getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint } | null> {
+  async getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint; indexObjectKey: string | null } | null> {
     const run = await this.prisma.scanRun.findUnique({ where: { id: runId } })
-    return run ? { id: run.id, status: run.status, targetDate: run.targetDate.toISOString().slice(0, 10), downloadedBytes: run.downloadedBytes } : null
+    return run ? { id: run.id, status: run.status, targetDate: run.targetDate.toISOString().slice(0, 10), downloadedBytes: run.downloadedBytes, indexObjectKey: run.indexObjectKey } : null
   }
 
   async startRun(runId: string): Promise<void> {

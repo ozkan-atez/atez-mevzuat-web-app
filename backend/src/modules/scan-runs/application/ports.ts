@@ -454,7 +454,7 @@ export interface ScanCommand {
 export interface ScanRepository {
   createManualRun(input: { requestKey: string; targetDate: string }): Promise<{ id: string; status: ScanRunStatus; targetDate: string }>
   getRun(runId: string): Promise<ScanRunDetailDto | null>
-  getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint } | null>
+  getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint; indexObjectKey: string | null } | null>
   saveIndex(runId: string, sourceUrl: string, object: StoredBlob): Promise<void>
   saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<void>
   listDocuments(runId: string): Promise<Array<{ id: string; sourceUrl: string; title: string }>>
