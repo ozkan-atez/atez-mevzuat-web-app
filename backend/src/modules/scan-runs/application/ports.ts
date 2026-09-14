@@ -214,6 +214,7 @@ export interface PreviousSourceJobRecord {
 }
 
 export interface PreviousSourceWorkItem extends PreviousSourceJobRecord {
+  intent: PreviousSourceIntentRecord | null
   document: {
     title: string
     sourceUrl: string

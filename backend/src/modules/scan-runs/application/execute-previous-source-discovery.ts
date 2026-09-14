@@ -72,18 +72,23 @@ async function processJob(
   reserve: (bytes: bigint) => void,
 ): Promise<void> {
   await dependencies.repository.markPreviousSourceJobRunning(item.id)
-  const currentBytes = await dependencies.objectStore.getContent(item.document.storedObject.objectKey)
-  const visibleText = item.document.storedObject.mediaType === 'text/html' ? extractVisibleText(currentBytes) : ''
-  const built = buildPreviousSourcePreflightRequest({
-    documentId: item.documentId,
-    title: item.document.title,
-    publicationDate: item.document.publicationDate,
-    sourceUrl: item.document.sourceUrl,
-    documentType: item.document.documentType,
-    visibleText,
-  }, dependencies.model)
-  const intent = await generateIntent(item.id, built.request, dependencies)
-  await dependencies.repository.savePreviousSourceIntent(item.id, intent)
+  let intent: PreviousSourceIntent
+  if (item.intent) {
+    intent = item.intent
+  } else {
+    const currentBytes = await dependencies.objectStore.getContent(item.document.storedObject.objectKey)
+    const visibleText = item.document.storedObject.mediaType === 'text/html' ? extractVisibleText(currentBytes) : ''
+    const built = buildPreviousSourcePreflightRequest({
+      documentId: item.documentId,
+      title: item.document.title,
+      publicationDate: item.document.publicationDate,
+      sourceUrl: item.document.sourceUrl,
+      documentType: item.document.documentType,
+      visibleText,
+    }, dependencies.model)
+    intent = await generateIntent(item.id, built.request, dependencies)
+    await dependencies.repository.savePreviousSourceIntent(item.id, intent)
+  }
   if (!intent.needsPreviousSource) {
     await dependencies.repository.completePreviousSourceOutcome(item.id, 'NOT_REQUIRED')
     return

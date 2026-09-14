@@ -61,6 +61,23 @@ class FixedSearch implements PreviousSourceSearch {
   async resolveDocumentUrl(): Promise<string> { return 'https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.htm' }
 }
 
+class FlakyResolveSearch extends FixedSearch {
+  resolveAttempts = 0
+  override async resolveDocumentUrl(): Promise<string> {
+    this.resolveAttempts += 1
+    if (this.resolveAttempts === 1) throw new Error('Temporary archive index failure')
+    return super.resolveDocumentUrl()
+  }
+}
+
+class NeverAi implements AiModelClient {
+  calls = 0
+  async generateStructured(): Promise<StructuredAiResult> {
+    this.calls += 1
+    throw new Error('AI must not be called after its intent has been persisted')
+  }
+}
+
 class SourceHttp implements OfficialHttp {
   async download(url: string): Promise<DownloadedFile> {
     if (url.endsWith('image001.png')) {
@@ -172,5 +189,36 @@ describe('executePreviousSourceDiscovery', () => {
     expect(completed[0]?.calls).toHaveLength(1)
     expect(completed[1]?.calls).toHaveLength(2)
     expect(retryAi.calls).toBe(1)
+  })
+
+  it('reuses a persisted AI intent when retrying a later archive failure', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-07-11' })
+    await repository.saveEditions(run.id, run.targetDate, [{
+      type: 'MAIN', supplementNo: null, indexUrl: 'https://www.resmigazete.gov.tr/11.07.2026', discoveryOrder: 0,
+      documents: [{ title: '2018/5 değişikliği', sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31.htm', publicationOrder: 1 }],
+    }])
+    const [document] = await repository.listFilterDocuments(run.id)
+    const store = new MemoryStore()
+    const current = await fixtureFile('<html><body>Tebliğ No: 2018/5’in tablosu değiştirilmiştir.</body></html>', 'text/html')
+    await repository.attachDocumentObject(document!.id, await store.putContent(current))
+    const filterJob = await repository.getOrCreateDocumentFilterJob(run.id, {
+      model: 'gemini-3.7-flash', titlePromptVersion: 'title-v1', contentPromptVersion: 'content-v1', configurationHash: 'a'.repeat(64),
+    })
+    await repository.markFilterRunning(run.id, filterJob.id, 1)
+    await repository.saveTitleDecisions(filterJob.id, [{ documentId: document!.id, decision: 'IN', reason: 'İlgili.', confidence: 0.9 }])
+    const search = new FlakyResolveSearch()
+
+    await expect(executePreviousSourceDiscovery(run.id, {
+      repository, aiModel: new FixedAi(), search, http: new SourceHttp(), objectStore: store,
+      model: 'gemini-3.7-flash', maxAttempts: 1, concurrency: 1, maxRunBytes: 10_000_000n,
+    })).rejects.toBeInstanceOf(PreviousSourceAwaitingRetryError)
+
+    const retryAi = new NeverAi()
+    await executePreviousSourceDiscovery(run.id, {
+      repository, aiModel: retryAi, search, http: new SourceHttp(), objectStore: store,
+      model: 'gemini-3.7-flash', maxAttempts: 1, concurrency: 1, maxRunBytes: 10_000_000n,
+    })
+    expect(retryAi.calls).toBe(0)
+    expect(search.resolveAttempts).toBe(2)
   })
 })

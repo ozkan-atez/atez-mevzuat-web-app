@@ -558,6 +558,17 @@ export class PrismaScanRepository {
         id: job.id,
         documentId: job.documentId,
         status: job.status,
+        intent: job.needsPreviousSource === null ? null : {
+          needsPreviousSource: job.needsPreviousSource,
+          relationship: job.relationship ?? 'NONE',
+          targetRegulationTitle: job.targetRegulationTitle,
+          targetRegulationIdentifier: job.targetRegulationIdentifier,
+          targetRegulationType: job.targetRegulationType,
+          targetInstitution: job.targetInstitution,
+          targetArticleReferences: stringArray(job.targetArticleReferences),
+          queryCandidates: stringArray(job.queryCandidates),
+          reason: job.reason ?? '',
+        },
         document: {
           title: job.document.title,
           sourceUrl: job.document.sourceUrl,
