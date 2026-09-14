@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { toGeminiJsonSchema } from '../../ai/application/gemini-json-schema'
+import { toGeminiJsonSchema, toGeminiShallowSchema } from '../../ai/application/gemini-json-schema'
 
 const nonEmptyText = z.string().trim().min(1).refine(
   (value) => !['-', '—', 'N/A'].includes(value),
@@ -122,4 +122,4 @@ export const analysisContractJsonSchema = toGeminiJsonSchema(z.toJSONSchema(Anal
 
 // Gemini rejects the full nested contract as too complex for responseJsonSchema.
 // The complete contract is supplied in the system instruction and enforced by Zod after generation.
-export const analysisResponseJsonSchema: Record<string, unknown> = { type: 'object' }
+export const analysisResponseJsonSchema = toGeminiShallowSchema(analysisContractJsonSchema)

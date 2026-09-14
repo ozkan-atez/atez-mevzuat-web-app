@@ -8,6 +8,10 @@ export function toGeminiJsonSchema(schema: Record<string, unknown>): Record<stri
   return normalizeSchema(schema) as Record<string, unknown>
 }
 
+export function toGeminiShallowSchema(schema: Record<string, unknown>, maxPropertyDepth = 2): Record<string, unknown> {
+  return shallowSchema(schema, 0, maxPropertyDepth) as Record<string, unknown>
+}
+
 function normalizeSchema(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeSchema)
   if (!value || typeof value !== 'object') return value
@@ -22,5 +26,22 @@ function normalizeSchema(value: unknown): unknown {
       output[key] = normalizeSchema(child)
     }
   }
+  return output
+}
+
+function shallowSchema(value: unknown, depth: number, maxDepth: number): unknown {
+  if (Array.isArray(value)) return value.map((item) => shallowSchema(item, depth, maxDepth))
+  if (!value || typeof value !== 'object') return value
+  const input = value as Record<string, unknown>
+  const output: Record<string, unknown> = {}
+  for (const key of ['type', 'title', 'description', 'enum', 'minItems', 'maxItems', 'minimum', 'maximum', 'additionalProperties']) {
+    if (key in input) output[key] = input[key]
+  }
+  if (depth < maxDepth && input.properties && typeof input.properties === 'object') {
+    output.properties = Object.fromEntries(Object.entries(input.properties as Record<string, unknown>).map(([name, property]) => [name, shallowSchema(property, depth + 1, maxDepth)]))
+    if (input.required) output.required = input.required
+  }
+  if (input.items) output.items = shallowSchema(input.items, depth + 1, maxDepth)
+  if (input.anyOf) output.anyOf = shallowSchema(input.anyOf, depth + 1, maxDepth)
   return output
 }
