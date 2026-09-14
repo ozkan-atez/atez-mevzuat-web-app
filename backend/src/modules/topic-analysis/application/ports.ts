@@ -1,4 +1,5 @@
 import type { AiInputPart } from '../../ai/application/ai-model-client'
+import type { AiCallFailure } from '../../scan-runs/application/ports'
 
 export interface TopicStoredObject {
   objectKey: string
@@ -59,4 +60,44 @@ export interface EvidenceContext {
   parts: EvidencePart[]
   aiParts: AiInputPart[]
   manifest: Buffer
+}
+
+export interface CreateTopicAnalysisRevisionInput {
+  topicId: string
+  version: number
+  status: 'PASS' | 'PASS_NO_RELEVANT_CONTENT'
+  analysisObjectKey: string
+  markdownObjectKey: string
+  model: string
+  promptVersion: string
+  schemaVersion: number
+  inputTokens: number | null
+  outputTokens: number | null
+}
+
+export interface TopicAnalysisRepository {
+  getTopicEvidenceInput(topicId: string): Promise<TopicEvidenceInput | null>
+  markTopicAnalyzing(topicId: string): Promise<void>
+  saveEvidenceBundle(topicId: string, input: { manifestObjectKey: string; sourceSignature: string }): Promise<void>
+  nextAnalysisVersion(topicId: string): Promise<number>
+  startTopicAiExecution(input: {
+    topicId: string
+    kind: 'INITIAL_ANALYSIS' | 'ANALYSIS_REVISION' | 'PUBLICATION_REVISION'
+    attemptNo: number
+    model: string
+    promptVersion: string
+    schemaVersion: number
+    inputHash: string
+  }): Promise<{ id: string }>
+  completeTopicAiExecution(id: string, input: {
+    analysisRevisionId?: string
+    providerRequestId: string | null
+    latencyMs: number
+    inputTokens: number | null
+    outputTokens: number | null
+  }): Promise<void>
+  failTopicAiExecution(id: string, error: AiCallFailure): Promise<void>
+  createAnalysisRevision(input: CreateTopicAnalysisRevisionInput): Promise<{ id: string; version: number }>
+  markTopicAwaitingRetry(topicId: string, error: AiCallFailure): Promise<void>
+  markTopicBlocked(topicId: string, message: string): Promise<void>
 }

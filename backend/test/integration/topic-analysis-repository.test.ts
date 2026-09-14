@@ -65,6 +65,7 @@ describe('topic analysis repository', () => {
 
     const first = await repository.createAnalysisRevision({
       topicId: topic.id,
+      version: 1,
       status: 'PASS',
       analysisObjectKey: `runs/2026/09/11/${run.id}/topics/${topic.id}/analysis/r01/analysis.json`,
       markdownObjectKey: `runs/2026/09/11/${run.id}/topics/${topic.id}/analysis/r01/analysis.md`,
@@ -76,6 +77,7 @@ describe('topic analysis repository', () => {
     })
     const second = await repository.createAnalysisRevision({
       topicId: topic.id,
+      version: 2,
       status: 'PASS',
       analysisObjectKey: `runs/2026/09/11/${run.id}/topics/${topic.id}/analysis/r02/analysis.json`,
       markdownObjectKey: `runs/2026/09/11/${run.id}/topics/${topic.id}/analysis/r02/analysis.md`,
