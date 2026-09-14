@@ -147,4 +147,29 @@ describe('scan run HTTP contract', () => {
     expect(await prisma.previousSourceJob.findFirstOrThrow()).toMatchObject({ status: 'QUEUED' })
     await app.close()
   })
+
+  it('does not offer previous-source retry while sibling jobs are still running', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
+    const edition = await prisma.gazetteEdition.create({
+      data: {
+        scanRunId: run.id, publicationDate: new Date('2026-09-14T00:00:00.000Z'), type: 'MAIN',
+        indexUrl: 'https://www.resmigazete.gov.tr/14.09.2026', discoveryOrder: 0,
+        documents: { create: [
+          { title: 'İlk belge', sourceUrl: 'https://www.resmigazete.gov.tr/1.htm', publicationOrder: 0 },
+          { title: 'İkinci belge', sourceUrl: 'https://www.resmigazete.gov.tr/2.htm', publicationOrder: 1 },
+        ] },
+      }, include: { documents: true },
+    })
+    await prisma.previousSourceJob.createMany({ data: [
+      { scanRunId: run.id, documentId: edition.documents[0]!.id, status: 'AWAITING_RETRY', model: 'gemini-3.7-flash', promptVersion: 'v1', configurationHash: 'a'.repeat(64) },
+      { scanRunId: run.id, documentId: edition.documents[1]!.id, status: 'RUNNING', model: 'gemini-3.7-flash', promptVersion: 'v1', configurationHash: 'a'.repeat(64) },
+    ] })
+    await prisma.scanRun.update({ where: { id: run.id }, data: { status: 'RUNNING', currentStage: 'DISCOVERING_PREVIOUS_SOURCES' } })
+    const app = await buildApp({ scanRepository: repository })
+
+    const response = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${run.id}` })
+
+    expect(response.json()).toMatchObject({ previousSources: { status: 'RUNNING', retryAvailable: false } })
+    await app.close()
+  })
 })

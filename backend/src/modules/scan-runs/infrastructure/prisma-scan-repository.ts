@@ -214,10 +214,13 @@ export class PrismaScanRepository {
     const previousNotRequired = run.previousSourceJobs.filter((job) => job.outcome === 'NOT_REQUIRED').length
     const previousNotFound = run.previousSourceJobs.filter((job) => job.outcome === 'NOT_FOUND').length
     const previousAmbiguous = run.previousSourceJobs.filter((job) => job.outcome === 'AMBIGUOUS').length
-    const previousStatus = run.previousSourceJobs.some((job) => job.status === 'AWAITING_RETRY') ? 'AWAITING_RETRY'
+    const hasPreviousAwaitingRetry = run.previousSourceJobs.some((job) => job.status === 'AWAITING_RETRY')
+    const previousStatus = run.status === 'AWAITING_RETRY' && hasPreviousAwaitingRetry ? 'AWAITING_RETRY'
+      : run.previousSourceJobs.some((job) => job.status === 'RUNNING') ? 'RUNNING'
+      : run.previousSourceJobs.some((job) => job.status === 'QUEUED') ? 'QUEUED'
       : run.previousSourceJobs.some((job) => job.status === 'FAILED') ? 'FAILED'
       : run.previousSourceJobs.every((job) => job.status === 'COMPLETED') ? 'COMPLETED'
-      : run.previousSourceJobs.some((job) => job.status === 'RUNNING') ? 'RUNNING'
+      : hasPreviousAwaitingRetry ? 'AWAITING_RETRY'
       : 'QUEUED'
     const finalIn = filterJob?.decisions.filter((decision) => decision.finalDecision === 'IN').length ?? 0
     const finalOut = filterJob?.decisions.filter((decision) => decision.finalDecision === 'OUT').length ?? 0
@@ -244,7 +247,7 @@ export class PrismaScanRepository {
           ambiguous: previousAmbiguous,
           pending: run.previousSourceJobs.length - previousCompleted,
         },
-        retryAvailable: previousStatus === 'AWAITING_RETRY',
+        retryAvailable: run.status === 'AWAITING_RETRY' && previousStatus === 'AWAITING_RETRY',
         errorMessage: run.previousSourceJobs.find((job) => job.lastErrorMessage)?.lastErrorMessage ?? null,
       } : null,
       counts: { editions: run.editions.length, documents: run.editions.reduce((n, e) => n + e.documents.length, 0), assets, completedItems: run.completedItems, totalItems: run.totalItems, failedItems: run.failedItems },
