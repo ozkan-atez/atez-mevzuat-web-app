@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { toGeminiJsonSchema } from '../../ai/application/gemini-json-schema'
 
 const nonEmptyText = z.string().trim().min(1).refine(
   (value) => !['-', '—', 'N/A'].includes(value),
@@ -117,4 +118,4 @@ export const AnalysisResultSchema = z.object({
 
 export type AnalysisResult = z.infer<typeof AnalysisResultSchema>
 
-export const analysisResponseJsonSchema = z.toJSONSchema(AnalysisResultSchema, { target: 'draft-7' }) as Record<string, unknown>
+export const analysisResponseJsonSchema = toGeminiJsonSchema(z.toJSONSchema(AnalysisResultSchema, { target: 'draft-7' }) as Record<string, unknown>)

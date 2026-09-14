@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { AiModelClient } from '../../ai/application/ai-model-client'
 import { AiProviderError } from '../../ai/domain/ai-errors'
+import { toGeminiJsonSchema } from '../../ai/application/gemini-json-schema'
 import { AnalysisResultSchema } from '../domain/analysis-schemas'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import type { PrismaTopicAnalysisRepository } from '../infrastructure/prisma-topic-analysis-repository'
@@ -121,7 +122,7 @@ async function executePublicationRevision(work: NonNullable<Awaited<ReturnType<P
       model: dependencies.model,
       systemInstruction: 'Mevcut ATEZ rapor spesifikasyonunun yalnızca ifade biçimini kullanıcı talebine göre revize et. Kanonik analizde olmayan olgu ekleme. topicId, card, reportId, issueNumber ve kaynak URL alanlarını değiştirme. Yalnızca JSON Schema ile uyumlu JSON döndür.',
       parts: [{ text: `Kanonik analiz:\n${currentAnalysisJson}` }, { text: `Mevcut rapor spesifikasyonu:\n${JSON.stringify(currentSpec)}` }, { text: `Revizyon talebi:\n${work.message.content}` }],
-      responseJsonSchema: z.toJSONSchema(ReportSpecSchema, { target: 'draft-7' }) as Record<string, unknown>,
+      responseJsonSchema: toGeminiJsonSchema(z.toJSONSchema(ReportSpecSchema, { target: 'draft-7' }) as Record<string, unknown>),
     })
     const revised = ReportSpecSchema.parse(response.json)
     assertPublicationIdentity(currentSpec, revised)
