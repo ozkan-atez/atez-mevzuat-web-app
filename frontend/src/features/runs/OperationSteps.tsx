@@ -8,6 +8,7 @@ const steps: Array<{ stage: ScanStage; title: string; description: string }> = [
   { stage: 'DISCOVERING_ASSETS', title: 'Belge ekleri bulunuyor', description: 'Belge içindeki resim ve ek dosya bağlantıları çıkarılıyor.' },
   { stage: 'DOWNLOADING_ASSETS', title: 'Varlıklar indiriliyor', description: 'Keşfedilen resim ve ek dosyalar nesne deposuna yazılıyor.' },
   { stage: 'VALIDATING', title: 'Dosyalar doğrulanıyor', description: 'İndirilen içeriklerin türü, boyutu ve bütünlüğü kontrol ediliyor.' },
+  { stage: 'DISCOVERING_PREVIOUS_SOURCES', title: 'Önceki kaynaklar hazırlanıyor', description: 'İlgili her belge için önceki mevzuat kaynağı bağımsız olarak aranır ve arşivlenir.' },
   { stage: 'WRITING_MANIFEST', title: 'Tarama kaydı tamamlanıyor', description: 'Çalışmanın denetlenebilir dosya envanteri oluşturuluyor.' },
 ]
 
@@ -18,12 +19,13 @@ function resolveStatus(run: ScanRunDetail, stage: ScanStage): StageExecutionStat
 
 interface OperationStepsProps {
   run: ScanRunDetail
-  onRetry: () => void
+  onRetryAiFilter: () => void
+  onRetryPreviousSources: () => void
   isRetrying: boolean
   retryError: string | null
 }
 
-export function OperationSteps({ run, onRetry, isRetrying, retryError }: OperationStepsProps) {
+export function OperationSteps({ run, onRetryAiFilter, onRetryPreviousSources, isRetrying, retryError }: OperationStepsProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
@@ -59,8 +61,16 @@ export function OperationSteps({ run, onRetry, isRetrying, retryError }: Operati
                 )}
                 {step.stage === 'AI_FILTERING' && run.filter?.retryAvailable && (
                   <div className="mt-3">
-                    <button type="button" onClick={onRetry} disabled={isRetrying} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:cursor-wait disabled:opacity-60">
+                    <button type="button" onClick={onRetryAiFilter} disabled={isRetrying} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:cursor-wait disabled:opacity-60">
                       {isRetrying ? 'Yeniden başlatılıyor…' : 'AI filtresini tekrar dene'}
+                    </button>
+                    {retryError && <p className="mt-2 text-xs font-medium text-red-600">{retryError}</p>}
+                  </div>
+                )}
+                {step.stage === 'DISCOVERING_PREVIOUS_SOURCES' && run.previousSources?.retryAvailable && (
+                  <div className="mt-3">
+                    <button type="button" onClick={onRetryPreviousSources} disabled={isRetrying} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:cursor-wait disabled:opacity-60">
+                      {isRetrying ? 'Yeniden başlatılıyor…' : 'Önceki kaynakları tekrar dene'}
                     </button>
                     {retryError && <p className="mt-2 text-xs font-medium text-red-600">{retryError}</p>}
                   </div>

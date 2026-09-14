@@ -111,8 +111,14 @@ export function parseAssets(html: string, documentUrl: string): DiscoveredAsset[
   })
   $('a[href]').each((_index, element) => {
     const value = $(element).attr('href')
-    if (value && extensionOf(value) === '.pdf') {
-      references.push({ value, role: 'ATTACHMENT', text: normalizeText($(element).text()) })
+    if (value) {
+      const extension = extensionOf(value)
+      if (!supportedAssetExtensions.has(extension)) return
+      references.push({
+        value,
+        role: extension === '.pdf' ? 'ATTACHMENT' : 'IMAGE',
+        text: normalizeText($(element).text()),
+      })
     }
   })
   $('[style], style').each((_index, element) => {

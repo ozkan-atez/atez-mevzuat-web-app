@@ -68,6 +68,12 @@ export interface ScanRunDetailDto {
     errorCategory: AiCallFailure['category'] | null
     errorMessage: string | null
   }
+  previousSources: null | {
+    status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+    counts: { total: number; completed: number; verified: number; notRequired: number; notFound: number; ambiguous: number; pending: number }
+    retryAvailable: boolean
+    errorMessage: string | null
+  }
   counts: {
     editions: number
     documents: number
@@ -97,6 +103,16 @@ export interface ScanRunDetailDto {
         titleDecision: 'IN' | 'OUT' | 'MAYBE'
         finalDecision: 'IN' | 'OUT' | null
         reason: string
+      }
+      previousSource: null | {
+        status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+        outcome: 'NOT_REQUIRED' | 'VERIFIED' | 'NOT_FOUND' | 'AMBIGUOUS' | null
+        needsPreviousSource: boolean | null
+        reason: string | null
+        title: string | null
+        publicationDate: string | null
+        gazetteNo: string | null
+        sourceUrl: string | null
       }
     }>
   }>
@@ -197,6 +213,55 @@ export interface PreviousSourceJobRecord {
   status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
 }
 
+export interface PreviousSourceWorkItem extends PreviousSourceJobRecord {
+  document: {
+    title: string
+    sourceUrl: string
+    documentType: string | null
+    publicationDate: string
+    storedObject: {
+      objectKey: string
+      sha256: string
+      mediaType: string
+      byteSize: bigint
+    }
+  }
+}
+
+export interface PreviousSourceCallInput {
+  jobId: string
+  attemptNo: number
+  inputHash: string
+}
+
+export interface PreviousSourceIntentRecord {
+  needsPreviousSource: boolean
+  relationship: 'AMENDS' | 'REPEALS' | 'EXTENDS' | 'IMPLEMENTS' | 'NONE'
+  targetRegulationTitle: string | null
+  targetRegulationIdentifier: string | null
+  targetRegulationType: string | null
+  targetInstitution: string | null
+  targetArticleReferences: string[]
+  queryCandidates: string[]
+  reason: string
+}
+
+export interface PreviousSourceCandidateRecord extends PreviousSourceSearchCandidate {
+  documentUrl?: string | null
+  exactIdentifierMatch: boolean
+  titleScore: number
+  score: number
+  reasons: string[]
+  selected: boolean
+}
+
+export interface PreviousSourceAssetInput {
+  sourceUrl: string
+  referenceText?: string
+  role: AssetRole
+  object: StoredBlob
+}
+
 export interface PreviousSourceSearchCandidate {
   query: string
   title: string
@@ -245,6 +310,48 @@ export interface CompletedRunSnapshot {
       finalDecision: 'IN' | 'OUT' | null
     }>
   }
+  previousSourceAudit: Array<{
+    documentId: string
+    status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+    outcome: 'NOT_REQUIRED' | 'VERIFIED' | 'NOT_FOUND' | 'AMBIGUOUS' | null
+    model: string
+    promptVersion: string
+    configurationHash: string
+    intent: PreviousSourceIntentRecord | null
+    calls: Array<{
+      attemptNo: number
+      status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+      inputHash: string
+      providerRequestId: string | null
+      inputTokens: number | null
+      outputTokens: number | null
+      latencyMs: number | null
+      errorCategory: AiCallFailure['category'] | null
+      providerStatus: number | null
+      errorMessage: string | null
+    }>
+    candidates: PreviousSourceCandidateRecord[]
+    source: null | {
+      title: string
+      publicationDate: string
+      gazetteNo: string | null
+      mukerrer: string | null
+      sourceUrl: string
+      objectKey: string
+      sha256: string
+      mediaType: string
+      byteSize: bigint
+      assets: Array<{
+        sourceUrl: string
+        referenceText: string | null
+        role: AssetRole
+        objectKey: string
+        sha256: string
+        mediaType: string
+        byteSize: bigint
+      }>
+    }
+  }>
 }
 
 export interface ObjectStore {
@@ -304,4 +411,23 @@ export interface ScanRepository {
   addDownloadedBytes(runId: string, byteSize: bigint): Promise<void>
   requestAiFilterRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }>
   ensurePreviousSourceJobs(runId: string, configuration: PreviousSourceConfiguration): Promise<PreviousSourceJobRecord[]>
+  listPreviousSourceWork(runId: string): Promise<PreviousSourceWorkItem[]>
+  markPreviousSourceJobRunning(jobId: string): Promise<void>
+  nextPreviousSourceCallAttempt(jobId: string): Promise<number>
+  startPreviousSourceCall(input: PreviousSourceCallInput): Promise<AiCallRecord>
+  completePreviousSourceCall(callId: string, result: AiCallCompletion): Promise<void>
+  failPreviousSourceCall(callId: string, error: AiCallFailure): Promise<void>
+  savePreviousSourceIntent(jobId: string, intent: PreviousSourceIntentRecord): Promise<void>
+  savePreviousSourceCandidates(jobId: string, candidates: PreviousSourceCandidateRecord[]): Promise<void>
+  completePreviousSourceOutcome(jobId: string, outcome: 'NOT_REQUIRED' | 'NOT_FOUND' | 'AMBIGUOUS'): Promise<void>
+  completePreviousSourceVerified(jobId: string, input: {
+    candidate: PreviousSourceCandidateRecord
+    sourceUrl: string
+    object: StoredBlob
+    assets: PreviousSourceAssetInput[]
+  }): Promise<void>
+  markPreviousSourceAwaitingRetry(jobId: string, error: AiCallFailure): Promise<void>
+  getPreviousSourceProgress(runId: string): Promise<{ total: number; completed: number; awaitingRetry: number }>
+  markPreviousSourceStageAwaitingRetry(runId: string, message: string): Promise<void>
+  requestPreviousSourceRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }>
 }

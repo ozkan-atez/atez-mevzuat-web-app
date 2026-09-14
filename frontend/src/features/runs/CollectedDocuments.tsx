@@ -38,6 +38,26 @@ export function CollectedDocuments({ editions }: { editions: ScanRunDetail['edit
                           <span className="text-xs text-slate-500">{document.filter.reason}</span>
                         </div>
                       )}
+                      {document.previousSource && (
+                        <div className="mt-2 text-xs text-slate-500">
+                          {document.previousSource.outcome === 'VERIFIED' && document.previousSource.sourceUrl ? (
+                            <a className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:text-blue-800" href={document.previousSource.sourceUrl} target="_blank" rel="noreferrer">
+                              Önceki kaynak · {document.previousSource.publicationDate ?? document.previousSource.title}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ) : document.previousSource.status === 'AWAITING_RETRY' ? (
+                            <span className="font-medium text-amber-700">Önceki kaynak yeniden deneme bekliyor</span>
+                          ) : document.previousSource.outcome === 'NOT_FOUND' ? (
+                            <span>Önceki kaynak bulunamadı</span>
+                          ) : document.previousSource.outcome === 'AMBIGUOUS' ? (
+                            <span>Önceki kaynak eşleşmesi belirsiz</span>
+                          ) : document.previousSource.outcome === 'NOT_REQUIRED' ? (
+                            <span>Önceki kaynak gerekmiyor</span>
+                          ) : (
+                            <span>Önceki kaynak hazırlanıyor</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </li>
                 ))}

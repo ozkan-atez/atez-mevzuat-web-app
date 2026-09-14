@@ -13,7 +13,11 @@ import type {
   FilterDocumentRecord,
   FilterProgress,
   PreviousSourceConfiguration,
+  PreviousSourceCallInput,
+  PreviousSourceCandidateRecord,
+  PreviousSourceIntentRecord,
   PreviousSourceJobRecord,
+  PreviousSourceWorkItem,
   ScanRunDetailDto,
   ScanRunSummaryDto,
   StartAiCallInput,
@@ -196,6 +200,7 @@ export class PrismaScanRepository {
       include: {
         stages: { orderBy: { createdAt: 'asc' } },
         aiJobs: { where: { kind: 'DOCUMENT_FILTER' }, include: { decisions: true } },
+        previousSourceJobs: { include: { source: true } },
         editions: { orderBy: { discoveryOrder: 'asc' }, include: { documents: { orderBy: { publicationOrder: 'asc' }, include: { _count: { select: { assets: true } } } } } },
       },
     })
@@ -203,6 +208,17 @@ export class PrismaScanRepository {
     const assets = await this.prisma.documentAsset.count({ where: { document: { edition: { scanRunId: runId } } } })
     const filterJob = run.aiJobs[0] ?? null
     const filterDecisions = new Map(filterJob?.decisions.map((decision) => [decision.documentId, decision]) ?? [])
+    const previousSourceJobs = new Map(run.previousSourceJobs.map((job) => [job.documentId, job]))
+    const previousCompleted = run.previousSourceJobs.filter((job) => job.status === 'COMPLETED').length
+    const previousVerified = run.previousSourceJobs.filter((job) => job.outcome === 'VERIFIED').length
+    const previousNotRequired = run.previousSourceJobs.filter((job) => job.outcome === 'NOT_REQUIRED').length
+    const previousNotFound = run.previousSourceJobs.filter((job) => job.outcome === 'NOT_FOUND').length
+    const previousAmbiguous = run.previousSourceJobs.filter((job) => job.outcome === 'AMBIGUOUS').length
+    const previousStatus = run.previousSourceJobs.some((job) => job.status === 'AWAITING_RETRY') ? 'AWAITING_RETRY'
+      : run.previousSourceJobs.some((job) => job.status === 'FAILED') ? 'FAILED'
+      : run.previousSourceJobs.every((job) => job.status === 'COMPLETED') ? 'COMPLETED'
+      : run.previousSourceJobs.some((job) => job.status === 'RUNNING') ? 'RUNNING'
+      : 'QUEUED'
     const finalIn = filterJob?.decisions.filter((decision) => decision.finalDecision === 'IN').length ?? 0
     const finalOut = filterJob?.decisions.filter((decision) => decision.finalDecision === 'OUT').length ?? 0
     const documentCount = run.editions.reduce((count, edition) => count + edition.documents.length, 0)
@@ -217,12 +233,27 @@ export class PrismaScanRepository {
         errorCategory: filterJob.lastErrorCategory,
         errorMessage: filterJob.lastErrorMessage,
       } : null,
+      previousSources: run.previousSourceJobs.length > 0 ? {
+        status: previousStatus,
+        counts: {
+          total: run.previousSourceJobs.length,
+          completed: previousCompleted,
+          verified: previousVerified,
+          notRequired: previousNotRequired,
+          notFound: previousNotFound,
+          ambiguous: previousAmbiguous,
+          pending: run.previousSourceJobs.length - previousCompleted,
+        },
+        retryAvailable: previousStatus === 'AWAITING_RETRY',
+        errorMessage: run.previousSourceJobs.find((job) => job.lastErrorMessage)?.lastErrorMessage ?? null,
+      } : null,
       counts: { editions: run.editions.length, documents: run.editions.reduce((n, e) => n + e.documents.length, 0), assets, completedItems: run.completedItems, totalItems: run.totalItems, failedItems: run.failedItems },
       stages: run.stages.map((stage) => ({ stage: stage.stage, status: stage.status, completedItems: stage.completedItems, totalItems: stage.totalItems, failedItems: stage.failedItems })),
       editions: run.editions.map((edition) => ({
         id: edition.id, type: edition.type, supplementNo: edition.supplementNo,
         documents: edition.documents.map((document) => {
           const decision = filterDecisions.get(document.id)
+          const previous = previousSourceJobs.get(document.id)
           return {
             id: document.id, title: document.title, sourceUrl: document.sourceUrl,
             validationStatus: document.validationStatus, assetCount: document._count.assets,
@@ -230,6 +261,16 @@ export class PrismaScanRepository {
               titleDecision: decision.titleDecision,
               finalDecision: decision.finalDecision,
               reason: decision.contentReason ?? decision.titleReason,
+            } : null,
+            previousSource: previous ? {
+              status: previous.status,
+              outcome: previous.outcome,
+              needsPreviousSource: previous.needsPreviousSource,
+              reason: previous.reason,
+              title: previous.source?.title ?? null,
+              publicationDate: previous.source?.publicationDate.toISOString().slice(0, 10) ?? null,
+              gazetteNo: previous.source?.gazetteNo ?? null,
+              sourceUrl: previous.source?.sourceUrl ?? null,
             } : null,
           }
         }),
@@ -505,6 +546,204 @@ export class PrismaScanRepository {
     })
   }
 
+  async listPreviousSourceWork(runId: string): Promise<PreviousSourceWorkItem[]> {
+    const jobs = await this.prisma.previousSourceJob.findMany({
+      where: { scanRunId: runId, status: { not: 'COMPLETED' } },
+      orderBy: { createdAt: 'asc' },
+      include: { document: { include: { edition: true, storedObject: true } } },
+    })
+    return jobs.map((job) => {
+      if (!job.document.storedObject) throw new Error(`Current document object is missing: ${job.documentId}`)
+      return {
+        id: job.id,
+        documentId: job.documentId,
+        status: job.status,
+        document: {
+          title: job.document.title,
+          sourceUrl: job.document.sourceUrl,
+          documentType: job.document.documentType,
+          publicationDate: job.document.edition.publicationDate.toISOString().slice(0, 10),
+          storedObject: {
+            objectKey: job.document.storedObject.objectKey,
+            sha256: job.document.storedObject.sha256,
+            mediaType: job.document.storedObject.mediaType,
+            byteSize: job.document.storedObject.byteSize,
+          },
+        },
+      }
+    })
+  }
+
+  async markPreviousSourceJobRunning(jobId: string): Promise<void> {
+    await this.prisma.previousSourceJob.update({
+      where: { id: jobId },
+      data: { status: 'RUNNING', startedAt: new Date(), completedAt: null, lastErrorCategory: null, lastErrorMessage: null },
+    })
+  }
+
+  async nextPreviousSourceCallAttempt(jobId: string): Promise<number> {
+    const aggregate = await this.prisma.previousSourceCall.aggregate({ where: { jobId }, _max: { attemptNo: true } })
+    return (aggregate._max.attemptNo ?? 0) + 1
+  }
+
+  async startPreviousSourceCall(input: PreviousSourceCallInput): Promise<AiCallRecord> {
+    return this.prisma.previousSourceCall.create({ data: input, select: { id: true } })
+  }
+
+  async completePreviousSourceCall(callId: string, result: AiCallCompletion): Promise<void> {
+    await this.prisma.previousSourceCall.update({
+      where: { id: callId },
+      data: { status: 'COMPLETED', providerRequestId: result.providerRequestId, inputTokens: result.inputTokens, outputTokens: result.outputTokens, latencyMs: result.latencyMs, completedAt: new Date() },
+    })
+  }
+
+  async failPreviousSourceCall(callId: string, error: AiCallFailure): Promise<void> {
+    await this.prisma.previousSourceCall.update({
+      where: { id: callId },
+      data: { status: 'FAILED', errorCategory: error.category, providerStatus: error.providerStatus, errorMessage: error.message, completedAt: new Date() },
+    })
+  }
+
+  async savePreviousSourceIntent(jobId: string, intent: PreviousSourceIntentRecord): Promise<void> {
+    await this.prisma.previousSourceJob.update({
+      where: { id: jobId },
+      data: {
+        needsPreviousSource: intent.needsPreviousSource,
+        relationship: intent.relationship,
+        targetRegulationTitle: intent.targetRegulationTitle,
+        targetRegulationIdentifier: intent.targetRegulationIdentifier,
+        targetRegulationType: intent.targetRegulationType,
+        targetInstitution: intent.targetInstitution,
+        targetArticleReferences: intent.targetArticleReferences,
+        queryCandidates: intent.queryCandidates,
+        reason: intent.reason,
+      },
+    })
+  }
+
+  async savePreviousSourceCandidates(jobId: string, candidates: PreviousSourceCandidateRecord[]): Promise<void> {
+    await this.prisma.$transaction(candidates.map((candidate) => this.prisma.previousSourceCandidate.upsert({
+      where: { jobId_url: { jobId, url: candidate.url } },
+      create: {
+        jobId, query: candidate.query, title: candidate.title,
+        publicationDate: new Date(`${candidate.publicationDate}T00:00:00.000Z`),
+        gazetteNo: candidate.gazetteNo, mukerrer: candidate.mukerrer, url: candidate.url,
+        documentUrl: candidate.documentUrl ?? null, regulationType: candidate.regulationType,
+        exactIdentifierMatch: candidate.exactIdentifierMatch, titleScore: candidate.titleScore,
+        score: candidate.score, reasons: candidate.reasons, selected: candidate.selected,
+      },
+      update: {
+        query: candidate.query, title: candidate.title,
+        publicationDate: new Date(`${candidate.publicationDate}T00:00:00.000Z`),
+        gazetteNo: candidate.gazetteNo, mukerrer: candidate.mukerrer,
+        documentUrl: candidate.documentUrl ?? null, regulationType: candidate.regulationType,
+        exactIdentifierMatch: candidate.exactIdentifierMatch, titleScore: candidate.titleScore,
+        score: candidate.score, reasons: candidate.reasons, selected: candidate.selected,
+      },
+    })))
+  }
+
+  async completePreviousSourceOutcome(jobId: string, outcome: 'NOT_REQUIRED' | 'NOT_FOUND' | 'AMBIGUOUS'): Promise<void> {
+    await this.prisma.previousSourceJob.update({ where: { id: jobId }, data: { status: 'COMPLETED', outcome, completedAt: new Date() } })
+  }
+
+  async completePreviousSourceVerified(jobId: string, input: {
+    candidate: PreviousSourceCandidateRecord
+    sourceUrl: string
+    object: StoredBlob
+    assets: Array<{ sourceUrl: string; referenceText?: string; role: 'ATTACHMENT' | 'IMAGE' | 'STYLESHEET_ASSET' | 'OTHER_SUPPORTED'; object: StoredBlob }>
+  }): Promise<void> {
+    const storedObjectId = await this.upsertObject(input.object)
+    const assetObjectIds = new Map<string, string>()
+    for (const asset of input.assets) assetObjectIds.set(asset.sourceUrl, await this.upsertObject(asset.object))
+    await this.prisma.$transaction(async (tx) => {
+      await tx.previousSourceCandidate.updateMany({ where: { jobId }, data: { selected: false } })
+      await tx.previousSourceCandidate.update({ where: { jobId_url: { jobId, url: input.candidate.url } }, data: { selected: true, documentUrl: input.sourceUrl } })
+      const source = await tx.previousSourceDocument.upsert({
+        where: { jobId },
+        create: {
+          jobId, title: input.candidate.title,
+          publicationDate: new Date(`${input.candidate.publicationDate}T00:00:00.000Z`),
+          gazetteNo: input.candidate.gazetteNo, mukerrer: input.candidate.mukerrer,
+          sourceUrl: input.sourceUrl, storedObjectId, validationStatus: 'VALID',
+        },
+        update: {
+          title: input.candidate.title,
+          publicationDate: new Date(`${input.candidate.publicationDate}T00:00:00.000Z`),
+          gazetteNo: input.candidate.gazetteNo, mukerrer: input.candidate.mukerrer,
+          sourceUrl: input.sourceUrl, storedObjectId, validationStatus: 'VALID',
+        },
+      })
+      for (const asset of input.assets) {
+        await tx.previousSourceAsset.upsert({
+          where: { previousSourceId_sourceUrl: { previousSourceId: source.id, sourceUrl: asset.sourceUrl } },
+          create: { previousSourceId: source.id, storedObjectId: assetObjectIds.get(asset.sourceUrl)!, sourceUrl: asset.sourceUrl, referenceText: asset.referenceText ?? null, role: asset.role, validationStatus: 'VALID' },
+          update: { storedObjectId: assetObjectIds.get(asset.sourceUrl)!, referenceText: asset.referenceText ?? null, role: asset.role, validationStatus: 'VALID' },
+        })
+      }
+      await tx.previousSourceJob.update({ where: { id: jobId }, data: { status: 'COMPLETED', outcome: 'VERIFIED', completedAt: new Date() } })
+    })
+  }
+
+  async markPreviousSourceAwaitingRetry(jobId: string, error: AiCallFailure): Promise<void> {
+    await this.prisma.previousSourceJob.update({
+      where: { id: jobId },
+      data: { status: 'AWAITING_RETRY', lastErrorCategory: error.category, lastErrorMessage: error.message },
+    })
+  }
+
+  async getPreviousSourceProgress(runId: string): Promise<{ total: number; completed: number; awaitingRetry: number }> {
+    const [total, completed, awaitingRetry] = await Promise.all([
+      this.prisma.previousSourceJob.count({ where: { scanRunId: runId } }),
+      this.prisma.previousSourceJob.count({ where: { scanRunId: runId, status: 'COMPLETED' } }),
+      this.prisma.previousSourceJob.count({ where: { scanRunId: runId, status: 'AWAITING_RETRY' } }),
+    ])
+    return { total, completed, awaitingRetry }
+  }
+
+  async markPreviousSourceStageAwaitingRetry(runId: string, message: string): Promise<void> {
+    const progress = await this.getPreviousSourceProgress(runId)
+    await this.prisma.$transaction([
+      this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'AWAITING_RETRY', currentStage: 'DISCOVERING_PREVIOUS_SOURCES', completedItems: progress.completed, failedItems: progress.awaitingRetry, errorSummary: message } }),
+      this.prisma.stageExecution.update({
+        where: { scanRunId_stage: { scanRunId: runId, stage: 'DISCOVERING_PREVIOUS_SOURCES' } },
+        data: { status: 'AWAITING_RETRY', totalItems: progress.total, completedItems: progress.completed, failedItems: progress.awaitingRetry, errorSummary: message },
+      }),
+    ])
+  }
+
+  async requestPreviousSourceRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.scanOutbox.findUnique({ where: { requestKey } })
+      if (existing) {
+        if (existing.scanRunId !== runId || existing.commandType !== 'RETRY_PREVIOUS_SOURCES') {
+          throw new PreviousSourceRetryConflictError('Idempotency key belongs to another command')
+        }
+        return { runId, commandId: existing.id, status: 'QUEUED' as const }
+      }
+
+      const run = await tx.scanRun.findUnique({ where: { id: runId } })
+      const awaitingRetryCount = await tx.previousSourceJob.count({ where: { scanRunId: runId, status: 'AWAITING_RETRY' } })
+      if (!run || run.status !== 'AWAITING_RETRY' || run.currentStage !== 'DISCOVERING_PREVIOUS_SOURCES' || awaitingRetryCount === 0) {
+        throw new PreviousSourceRetryConflictError('Previous source discovery is not awaiting retry')
+      }
+
+      const command = await tx.scanOutbox.create({ data: { scanRunId: runId, commandType: 'RETRY_PREVIOUS_SOURCES', requestKey } })
+      await Promise.all([
+        tx.scanRun.update({ where: { id: runId }, data: { status: 'QUEUED', errorSummary: null } }),
+        tx.previousSourceJob.updateMany({
+          where: { scanRunId: runId, status: 'AWAITING_RETRY' },
+          data: { status: 'QUEUED', lastErrorCategory: null, lastErrorMessage: null },
+        }),
+        tx.stageExecution.update({
+          where: { scanRunId_stage: { scanRunId: runId, stage: 'DISCOVERING_PREVIOUS_SOURCES' } },
+          data: { status: 'PENDING', errorSummary: null },
+        }),
+      ])
+      return { runId, commandId: command.id, status: 'QUEUED' as const }
+    })
+  }
+
   async completedSnapshot(runId: string): Promise<CompletedRunSnapshot> {
     const run = await this.getRun(runId)
     if (!run) throw new Error(`Scan run not found: ${runId}`)
@@ -540,7 +779,82 @@ export class PrismaScanRepository {
         finalDecision: decision.finalDecision,
       })),
     } : null
-    return { run, index: { sourceUrl: raw.indexSourceUrl, objectKey: raw.indexObjectKey, sha256: raw.indexSha256 }, objects, filterAudit }
+    const previousJobs = await this.prisma.previousSourceJob.findMany({
+      where: { scanRunId: runId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        calls: { orderBy: { attemptNo: 'asc' } },
+        candidates: { orderBy: [{ score: 'desc' }, { publicationDate: 'desc' }] },
+        source: { include: { storedObject: true, assets: { include: { storedObject: true } } } },
+      },
+    })
+    const previousSourceAudit: CompletedRunSnapshot['previousSourceAudit'] = previousJobs.map((job) => ({
+      documentId: job.documentId,
+      status: job.status,
+      outcome: job.outcome,
+      model: job.model,
+      promptVersion: job.promptVersion,
+      configurationHash: job.configurationHash,
+      intent: job.needsPreviousSource === null ? null : {
+        needsPreviousSource: job.needsPreviousSource,
+        relationship: job.relationship ?? 'NONE',
+        targetRegulationTitle: job.targetRegulationTitle,
+        targetRegulationIdentifier: job.targetRegulationIdentifier,
+        targetRegulationType: job.targetRegulationType,
+        targetInstitution: job.targetInstitution,
+        targetArticleReferences: stringArray(job.targetArticleReferences),
+        queryCandidates: stringArray(job.queryCandidates),
+        reason: job.reason ?? '',
+      },
+      calls: job.calls.map((call) => ({
+        attemptNo: call.attemptNo,
+        status: call.status,
+        inputHash: call.inputHash,
+        providerRequestId: call.providerRequestId,
+        inputTokens: call.inputTokens,
+        outputTokens: call.outputTokens,
+        latencyMs: call.latencyMs,
+        errorCategory: call.errorCategory,
+        providerStatus: call.providerStatus,
+        errorMessage: call.errorMessage,
+      })),
+      candidates: job.candidates.map((candidate) => ({
+        query: candidate.query,
+        title: candidate.title,
+        publicationDate: candidate.publicationDate.toISOString().slice(0, 10),
+        gazetteNo: candidate.gazetteNo,
+        mukerrer: candidate.mukerrer,
+        url: candidate.url,
+        documentUrl: candidate.documentUrl,
+        regulationType: candidate.regulationType,
+        exactIdentifierMatch: candidate.exactIdentifierMatch,
+        titleScore: candidate.titleScore,
+        score: candidate.score,
+        reasons: stringArray(candidate.reasons),
+        selected: candidate.selected,
+      })),
+      source: job.source ? {
+        title: job.source.title,
+        publicationDate: job.source.publicationDate.toISOString().slice(0, 10),
+        gazetteNo: job.source.gazetteNo,
+        mukerrer: job.source.mukerrer,
+        sourceUrl: job.source.sourceUrl,
+        objectKey: job.source.storedObject.objectKey,
+        sha256: job.source.storedObject.sha256,
+        mediaType: job.source.storedObject.mediaType,
+        byteSize: job.source.storedObject.byteSize,
+        assets: job.source.assets.map((asset) => ({
+          sourceUrl: asset.sourceUrl,
+          referenceText: asset.referenceText,
+          role: asset.role,
+          objectKey: asset.storedObject.objectKey,
+          sha256: asset.storedObject.sha256,
+          mediaType: asset.storedObject.mediaType,
+          byteSize: asset.storedObject.byteSize,
+        })),
+      } : null,
+    }))
+    return { run, index: { sourceUrl: raw.indexSourceUrl, objectKey: raw.indexObjectKey, sha256: raw.indexSha256 }, objects, filterAudit, previousSourceAudit }
   }
 
   private async upsertObject(object: StoredBlob): Promise<string> {
@@ -563,4 +877,12 @@ export class PrismaScanRepository {
 
 export class AiFilterRetryConflictError extends Error {
   override readonly name = 'AiFilterRetryConflictError'
+}
+
+export class PreviousSourceRetryConflictError extends Error {
+  override readonly name = 'PreviousSourceRetryConflictError'
+}
+
+function stringArray(value: Prisma.JsonValue | null): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }

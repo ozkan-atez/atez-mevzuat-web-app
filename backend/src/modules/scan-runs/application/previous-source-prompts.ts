@@ -17,7 +17,7 @@ const systemInstruction = `Sen Resmî Gazete mevzuat kimliği çıkarma sistemis
 Metinde değiştirilen, kaldırılan, süresi uzatılan veya uygulanan önceki mevzuatın adını ve kimliğini aynen ayıkla. Güncel yayının Karar/Tebliğ numarasını hedef mevzuat numarası sanma.
 Açık bir Tebliğ No (örneğin 2018/5), karar numarası veya yönetmelik adı varsa ilk sorgu adayı en ayırt edici tam kimlik olsun. En fazla üç sorgu üret. Önceki kaynağa gerek yoksa relationship NONE kullan.`
 
-const configurationHash = createHash('sha256')
+export const PREVIOUS_SOURCE_CONFIGURATION_HASH = createHash('sha256')
   .update(JSON.stringify({ promptVersion: PREVIOUS_SOURCE_PROMPT_VERSION, systemInstruction, schema: previousSourceResponseJsonSchema }))
   .digest('hex')
 
@@ -34,7 +34,7 @@ export function buildPreviousSourcePreflightRequest(input: PreviousSourcePreflig
     visibleText: input.visibleText.slice(0, 12_000),
   }
   return {
-    configurationHash,
+    configurationHash: PREVIOUS_SOURCE_CONFIGURATION_HASH,
     request: {
       model,
       systemInstruction,

@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { executeScanRun } from '../../src/modules/scan-runs/application/execute-scan-run'
 import type { AiModelClient, StructuredAiRequest, StructuredAiResult } from '../../src/modules/ai/application/ai-model-client'
-import type { DownloadedFile, ObjectStore, OfficialHttp, StoredBlob } from '../../src/modules/scan-runs/application/ports'
+import type { DownloadedFile, ObjectStore, OfficialHttp, PreviousSourceSearch, StoredBlob } from '../../src/modules/scan-runs/application/ports'
 import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
 import { fixtureFile } from '../helpers/files'
 import { AiProviderError } from '../../src/modules/ai/domain/ai-errors'
@@ -25,11 +25,14 @@ class FixtureHttp implements OfficialHttp {
 
 class MemoryObjectStore implements ObjectStore {
   readonly runFiles: string[] = []
+  readonly objects = new Map<string, Buffer>()
   async ensureBucket(): Promise<void> {}
   async exists(): Promise<boolean> { return false }
-  async getContent(): Promise<Buffer> { throw new Error('Object is not available') }
+  async getContent(key: string): Promise<Buffer> { return this.objects.get(key) ?? Buffer.alloc(0) }
   async putContent(file: DownloadedFile): Promise<StoredBlob> {
-    return { ...file, bucket: 'test', objectKey: `objects/${file.sha256}` }
+    const objectKey = `objects/${file.sha256}`
+    this.objects.set(objectKey, await import('node:fs/promises').then(({ readFile }) => readFile(file.tempPath)))
+    return { ...file, bucket: 'test', objectKey }
   }
   async putRunFile(key: string, body: Buffer, mediaType: string): Promise<StoredBlob> {
     this.runFiles.push(key)
@@ -41,12 +44,23 @@ class AllInAi implements AiModelClient {
   readonly requests: StructuredAiRequest[] = []
   async generateStructured(request: StructuredAiRequest): Promise<StructuredAiResult> {
     this.requests.push(request)
+    if (request.systemInstruction.includes('önceki kaynak aramasını daralt')) {
+      return {
+        json: { needsPreviousSource: false, relationship: 'NONE', targetRegulationTitle: null, targetRegulationIdentifier: null, targetRegulationType: null, targetInstitution: null, targetArticleReferences: [], queryCandidates: [], reason: 'Bağımsız düzenleme.' },
+        providerRequestId: 'preflight-response', usage: { inputTokens: 10, outputTokens: 5 },
+      }
+    }
     const payload = JSON.parse((request.parts[0] as { text: string }).text) as { documents: Array<{ id: string }> }
     return {
       json: { decisions: payload.documents.map((document) => ({ documentId: document.id, decision: 'IN', reason: 'Gümrükle ilgili.', confidence: 0.98 })) },
       providerRequestId: 'fixture-response', usage: { inputTokens: 10, outputTokens: 5 },
     }
   }
+}
+
+class EmptyPreviousSourceSearch implements PreviousSourceSearch {
+  async search() { return [] }
+  async resolveDocumentUrl(): Promise<string> { throw new Error('No source to resolve') }
 }
 
 class RateLimitedAi implements AiModelClient {
@@ -75,7 +89,8 @@ describe('executeScanRun', () => {
       objectStore,
       maxRunBytes: 10_000n,
       aiModel,
-      gemini: { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000 },
+      previousSourceSearch: new EmptyPreviousSourceSearch(),
+      gemini: { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2 },
     })
 
     const saved = await prisma.scanRun.findUniqueOrThrow({ where: { id: run.id } })
@@ -84,9 +99,9 @@ describe('executeScanRun', () => {
     expect(objectStore.runFiles.at(-1)).toBe(saved.manifestObjectKey)
     expect(await prisma.collectedDocument.count()).toBe(1)
     expect(await prisma.documentAsset.count()).toBe(1)
-    expect(aiModel.requests).toHaveLength(1)
+    expect(aiModel.requests).toHaveLength(2)
     expect((await prisma.stageExecution.findMany({ where: { scanRunId: run.id }, orderBy: { createdAt: 'asc' }, select: { stage: true } })).map((stage) => stage.stage)).toEqual([
-      'DISCOVERING', 'AI_FILTERING', 'DOWNLOADING_DOCUMENTS', 'DISCOVERING_ASSETS', 'DOWNLOADING_ASSETS', 'VALIDATING', 'WRITING_MANIFEST',
+      'DISCOVERING', 'AI_FILTERING', 'DOWNLOADING_DOCUMENTS', 'DISCOVERING_ASSETS', 'DOWNLOADING_ASSETS', 'VALIDATING', 'DISCOVERING_PREVIOUS_SOURCES', 'WRITING_MANIFEST',
     ])
   })
 
@@ -96,16 +111,16 @@ describe('executeScanRun', () => {
     const objectStore = new MemoryObjectStore()
 
     await executeScanRun(run.id, {
-      repository, http, objectStore, maxRunBytes: 10_000n, aiModel: new RateLimitedAi(),
-      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000 },
+      repository, http, objectStore, maxRunBytes: 10_000n, aiModel: new RateLimitedAi(), previousSourceSearch: new EmptyPreviousSourceSearch(),
+      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000, previousSourceConcurrency: 2 },
     })
 
     expect((await repository.getRun(run.id))?.status).toBe('AWAITING_RETRY')
     const discoveryCalls = http.calls.length
 
     await executeScanRun(run.id, {
-      repository, http, objectStore, maxRunBytes: 10_000n, aiModel: new AllInAi(),
-      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000 },
+      repository, http, objectStore, maxRunBytes: 10_000n, aiModel: new AllInAi(), previousSourceSearch: new EmptyPreviousSourceSearch(),
+      gemini: { model: 'gemini-3.8-flash', maxAttempts: 1, maxContentBytes: 8_000_000, previousSourceConcurrency: 2 },
     }, 'RETRY_AI_FILTER')
 
     expect((await repository.getRun(run.id))?.status).toBe('COMPLETED')

@@ -10,9 +10,11 @@ describe('buildManifest', () => {
         startedAt: '2026-07-11T04:00:00.000Z', completedAt: null, errorSummary: null,
         counts: { editions: 1, documents: 1, assets: 1, completedItems: 1, totalItems: 1, failedItems: 0 },
         stages: [],
+        previousSources: null,
         editions: [{ id: 'edition-1', type: 'MAIN', supplementNo: null, documents: [{
           id: 'document-1', title: 'Karar', sourceUrl: 'https://www.resmigazete.gov.tr/b.htm', validationStatus: 'VALID', assetCount: 1,
           filter: { titleDecision: 'MAYBE', finalDecision: 'IN', reason: 'İçerikte ithalat düzenlemesi var.' },
+          previousSource: null,
         }] }],
         filter: { status: 'COMPLETED', counts: { in: 1, out: 0, pending: 0 }, retryAvailable: false, errorCategory: null, errorMessage: null },
       },
@@ -31,11 +33,20 @@ describe('buildManifest', () => {
           contentDecision: 'IN', contentReason: 'İçerikte ithalat düzenlemesi var.', contentConfidence: 0.94, finalDecision: 'IN',
         }],
       },
+      previousSourceAudit: [{
+        documentId: 'document-1', status: 'COMPLETED', outcome: 'VERIFIED', model: 'gemini-3.7-flash',
+        promptVersion: 'previous-source-preflight-v1', configurationHash: 'e'.repeat(64),
+        intent: { needsPreviousSource: true, relationship: 'AMENDS', targetRegulationTitle: 'İthalat Rejimi Kararına Ek Karar', targetRegulationIdentifier: '2018/5', targetRegulationType: 'TEBLİĞ', targetInstitution: null, targetArticleReferences: ['1'], queryCandidates: ['2018/5'], reason: 'Önceki tebliği değiştiriyor.' },
+        calls: [{ attemptNo: 1, status: 'COMPLETED', inputHash: 'f'.repeat(64), providerRequestId: 'provider-1', inputTokens: 50, outputTokens: 20, latencyMs: 400, errorCategory: null, providerStatus: null, errorMessage: null }],
+        candidates: [{ query: '2018/5', title: 'İthalat Rejimi Kararına Ek Karar', publicationDate: '2025-12-31', gazetteNo: '33124', mukerrer: '4', url: '/fihrist?tarih=2025-12-31&mukerrer=4', documentUrl: 'https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf', regulationType: 'TEBLİĞ', exactIdentifierMatch: true, titleScore: 1, score: 1, reasons: ['exact_identifier'], selected: true }],
+        source: { title: 'İthalat Rejimi Kararına Ek Karar', publicationDate: '2025-12-31', gazetteNo: '33124', mukerrer: '4', sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf', objectKey: 'objects/previous.pdf', sha256: '9'.repeat(64), mediaType: 'application/pdf', byteSize: 25n, assets: [] },
+      }],
     }
 
     const manifest = JSON.parse(buildManifest(snapshot).toString('utf8'))
-    expect(manifest.schemaVersion).toBe(2)
-    expect(manifest.totals.bytes).toBe('19')
+    expect(manifest.schemaVersion).toBe(3)
+    expect(manifest.totals.bytes).toBe('44')
+    expect(manifest.totals.previousSources).toBe(1)
     expect(manifest.editions[0].documents[0].assets[0].byteSize).toBe('7')
     expect(manifest.filterAudit.model).toBe('gemini-3.8-flash')
     expect(manifest.filterAudit.decisions[0]).toMatchObject({ titleConfidence: 0.51, contentConfidence: 0.94, finalDecision: 'IN' })
@@ -44,5 +55,7 @@ describe('buildManifest', () => {
       contentDecision: 'IN', contentReason: 'İçerikte ithalat düzenlemesi var.', contentConfidence: 0.94,
       finalDecision: 'IN', model: 'gemini-3.8-flash', titlePromptVersion: 'title-v1', contentPromptVersion: 'content-v1', configurationHash: 'd'.repeat(64),
     })
+    expect(manifest.previousSourceAudit[0].source.byteSize).toBe('25')
+    expect(manifest.previousSourceAudit[0].candidates[0]).toMatchObject({ selected: true, exactIdentifierMatch: true })
   })
 })

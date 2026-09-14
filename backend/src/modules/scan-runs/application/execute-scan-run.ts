@@ -1,13 +1,15 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ObjectStore, OfficialHttp } from './ports'
+import type { ObjectStore, OfficialHttp, PreviousSourceSearch } from './ports'
 import type { AiModelClient } from '../../ai/application/ai-model-client'
 import type { PrismaScanRepository } from '../infrastructure/prisma-scan-repository'
 import { candidateIndexUrls, parseAssets, parseEditions } from '../infrastructure/resmi-gazete-parser'
 import { buildManifest } from './build-manifest'
 import type { ScanStage } from '../domain/scan-run'
 import { AiFilterAwaitingRetryError, executeDocumentFilter } from './execute-document-filter'
+import { executePreviousSourceDiscovery, PreviousSourceAwaitingRetryError } from './execute-previous-source-discovery'
+import { PREVIOUS_SOURCE_CONFIGURATION_HASH, PREVIOUS_SOURCE_PROMPT_VERSION } from './previous-source-prompts'
 
 interface Dependencies {
   repository: PrismaScanRepository
@@ -15,7 +17,8 @@ interface Dependencies {
   objectStore: ObjectStore
   maxRunBytes: bigint
   aiModel: AiModelClient
-  gemini: { model: string; maxAttempts: number; maxContentBytes: number }
+  previousSourceSearch: PreviousSourceSearch
+  gemini: { model: string; maxAttempts: number; maxContentBytes: number; previousSourceConcurrency: number }
 }
 
 export async function executeScanRun(runId: string, dependencies: Dependencies, command: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES' = 'START_SCAN'): Promise<void> {
@@ -46,6 +49,7 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
       await repository.completeStage(runId, currentStage)
     }
 
+    if (command !== 'RETRY_PREVIOUS_SOURCES') {
     currentStage = 'AI_FILTERING'
     await executeDocumentFilter(runId, {
       repository,
@@ -110,6 +114,32 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
     await repository.advanceStage(runId, currentStage, 0n)
     await repository.completeStage(runId, currentStage)
 
+    }
+
+    currentStage = 'DISCOVERING_PREVIOUS_SOURCES'
+    const previousJobs = await repository.ensurePreviousSourceJobs(runId, {
+      model: dependencies.gemini.model,
+      promptVersion: PREVIOUS_SOURCE_PROMPT_VERSION,
+      configurationHash: PREVIOUS_SOURCE_CONFIGURATION_HASH,
+    })
+    await repository.startStage(runId, currentStage, previousJobs.length)
+    await executePreviousSourceDiscovery(runId, {
+      repository,
+      aiModel: dependencies.aiModel,
+      search: dependencies.previousSourceSearch,
+      http,
+      objectStore,
+      model: dependencies.gemini.model,
+      maxAttempts: dependencies.gemini.maxAttempts,
+      concurrency: dependencies.gemini.previousSourceConcurrency,
+      maxRunBytes,
+    })
+    const previousProgress = await repository.getPreviousSourceProgress(runId)
+    for (let completed = 0; completed < previousProgress.completed; completed += 1) {
+      await repository.advanceStage(runId, currentStage, 0n)
+    }
+    await repository.completeStage(runId, currentStage)
+
     currentStage = 'WRITING_MANIFEST'
     await repository.startStage(runId, currentStage, 1)
     const manifest = buildManifest(await repository.completedSnapshot(runId))
@@ -121,6 +151,10 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
     await repository.completeRun(runId, storedManifest.objectKey)
   } catch (error) {
     if (error instanceof AiFilterAwaitingRetryError) return
+    if (error instanceof PreviousSourceAwaitingRetryError) {
+      await repository.markPreviousSourceStageAwaitingRetry(runId, 'Önceki kaynak hazırlama işlemlerinden bazıları yeniden deneme bekliyor.')
+      return
+    }
     const message = sanitizeError(error)
     await repository.failStage(runId, currentStage, message).catch(() => undefined)
     const latest = await repository.getExecutionRun(runId)

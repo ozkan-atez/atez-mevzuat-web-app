@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { AiFilterRetryConflictError, type PrismaScanRepository } from './infrastructure/prisma-scan-repository'
+import { AiFilterRetryConflictError, PreviousSourceRetryConflictError, type PrismaScanRepository } from './infrastructure/prisma-scan-repository'
 import { createScanRunSchema, idempotencyKeySchema } from './scan-runs.schemas'
 
 interface Options {
@@ -34,6 +34,18 @@ export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
       return reply.code(202).send(await options.repository.requestAiFilterRetry(id, keyResult.data))
     } catch (error) {
       if (error instanceof AiFilterRetryConflictError) return reply.code(409).send({ message: 'AI filtresi yeniden denenmeye hazır değil' })
+      throw error
+    }
+  })
+
+  app.post('/:id/previous-sources/retry', async (request, reply) => {
+    const keyResult = idempotencyKeySchema.safeParse(request.headers['idempotency-key'])
+    if (!keyResult.success) return reply.code(400).send({ message: 'Geçerli Idempotency-Key gereklidir' })
+    const { id } = request.params as { id: string }
+    try {
+      return reply.code(202).send(await options.repository.requestPreviousSourceRetry(id, keyResult.data))
+    } catch (error) {
+      if (error instanceof PreviousSourceRetryConflictError) return reply.code(409).send({ message: 'Önceki kaynak işlemi yeniden denenmeye hazır değil' })
       throw error
     }
   })

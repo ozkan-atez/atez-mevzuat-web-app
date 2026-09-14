@@ -58,4 +58,12 @@ describe('Resmî Gazete parser', () => {
     expect(assets.map((asset) => asset.role)).toContain('IMAGE')
     expect(assets.every((asset) => new URL(asset.sourceUrl).hostname === 'www.resmigazete.gov.tr')).toBe(true)
   })
+
+  it('archives supported image files that are exposed only as links', () => {
+    const assets = parseAssets('<a href="./20260711-31_dosyalar/image002.jpg">Değişiklik tablosu</a><a href="./diagram.gif">Şema</a>', documentUrl)
+    expect(assets).toEqual([
+      { sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31_dosyalar/image002.jpg', role: 'IMAGE', referenceText: 'Değişiklik tablosu' },
+      { sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2026/07/diagram.gif', role: 'IMAGE', referenceText: 'Şema' },
+    ])
+  })
 })

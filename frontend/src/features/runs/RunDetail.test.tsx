@@ -19,11 +19,13 @@ describe('RunDetail', () => {
       id: 'run-1', status: 'RUNNING', currentStage: 'DOWNLOADING_ASSETS', targetDate: '2026-07-11',
       startedAt: '2026-07-11T04:00:00.000Z', completedAt: null, errorSummary: null,
       filter: { status: 'COMPLETED', counts: { in: 1, out: 0, pending: 0 }, retryAvailable: false, errorCategory: null, errorMessage: null },
+      previousSources: { status: 'RUNNING', counts: { total: 1, completed: 0, verified: 0, notRequired: 0, notFound: 0, ambiguous: 0, pending: 1 }, retryAvailable: false, errorMessage: null },
       counts: { editions: 1, documents: 1, assets: 2, completedItems: 1, totalItems: 2, failedItems: 0 },
       stages: [],
       editions: [{ id: 'edition-1', type: 'MAIN', supplementNo: null, documents: [{
         id: 'document-1', title: 'Örnek Resmî Gazete Kararı', sourceUrl: 'https://www.resmigazete.gov.tr/20260711-1.htm', validationStatus: 'VALID', assetCount: 2,
         filter: { titleDecision: 'MAYBE', finalDecision: 'IN', reason: 'İçerikte ithalat düzenlemesi bulunuyor.' },
+        previousSource: { status: 'COMPLETED', outcome: 'VERIFIED', needsPreviousSource: true, reason: '2018/5 sayılı Tebliği değiştiriyor.', title: 'İthalat Rejimi Kararına Ek Karar', publicationDate: '2025-12-31', gazetteNo: '33124', sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf' },
       }] }],
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(run), { status: 200 })))
@@ -32,9 +34,11 @@ describe('RunDetail', () => {
 
     expect(await screen.findByText('Varlıklar indiriliyor')).toBeVisible()
     expect(screen.getByText('Gümrük ve dış ticaret ilgisi belirleniyor')).toBeVisible()
+    expect(screen.getByText('Önceki kaynaklar hazırlanıyor')).toBeVisible()
     expect(screen.getByText('Örnek Resmî Gazete Kararı')).toBeVisible()
     expect(screen.getByText('İlgili')).toBeVisible()
     expect(screen.getByText('İçerikte ithalat düzenlemesi bulunuyor.')).toBeVisible()
+    expect(screen.getByRole('link', { name: /Önceki kaynak/ })).toHaveAttribute('href', 'https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf')
     expect(document.body.textContent).not.toMatch(/güven puanı|confidence/i)
     expect(screen.queryByText('39 gümrük & dış ticaret maddesi')).not.toBeInTheDocument()
   })
@@ -85,6 +89,31 @@ describe('RunDetail', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'AI filtresini tekrar dene' }))
 
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/scan-runs/run-1/ai-filter/retry', expect.objectContaining({ method: 'POST' }))
-    expect(await screen.findByText('Sırada')).toBeVisible()
+    expect((await screen.findAllByText('Sırada'))[0]).toBeVisible()
+  })
+
+  it('retries only incomplete previous-source jobs on the same run', async () => {
+    const pausedRun = {
+      id: 'run-1', status: 'AWAITING_RETRY', currentStage: 'DISCOVERING_PREVIOUS_SOURCES', targetDate: '2026-07-11',
+      startedAt: '2026-07-11T04:00:00.000Z', completedAt: null, errorSummary: 'Bir önceki kaynak işi geçici olarak başarısız oldu.',
+      filter: { status: 'COMPLETED', counts: { in: 2, out: 1, pending: 0 }, retryAvailable: false, errorCategory: null, errorMessage: null },
+      previousSources: { status: 'AWAITING_RETRY', counts: { total: 2, completed: 1, verified: 1, notRequired: 0, notFound: 0, ambiguous: 0, pending: 1 }, retryAvailable: true, errorMessage: 'Gemini geçici olarak yoğun.' },
+      counts: { editions: 1, documents: 3, assets: 0, completedItems: 1, totalItems: 2, failedItems: 1 },
+      stages: [{ stage: 'DISCOVERING_PREVIOUS_SOURCES', status: 'AWAITING_RETRY', completedItems: 1, totalItems: 2, failedItems: 1 }],
+      editions: [],
+    }
+    const queuedRun = { ...pausedRun, status: 'QUEUED', errorSummary: null, previousSources: { ...pausedRun.previousSources, status: 'QUEUED', retryAvailable: false, errorMessage: null } }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(pausedRun), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ runId: 'run-1', status: 'QUEUED' }), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(queuedRun), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('EventSource', SilentEventSource)
+    renderDetail()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Önceki kaynakları tekrar dene' }))
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/scan-runs/run-1/previous-sources/retry', expect.objectContaining({ method: 'POST' }))
+    expect((await screen.findAllByText('Sırada'))[0]).toBeVisible()
   })
 })

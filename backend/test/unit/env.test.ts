@@ -31,6 +31,7 @@ describe('loadEnv', () => {
       timeoutMs: 30_000,
       maxAttempts: 3,
       maxContentBytes: 8_000_000,
+      previousSourceConcurrency: 3,
     })
   })
 })

@@ -57,6 +57,17 @@ export async function retryAiFilter(runId: string): Promise<{ runId: string; sta
   return response.json() as Promise<{ runId: string; status: 'QUEUED' }>
 }
 
+export async function retryPreviousSources(runId: string): Promise<{ runId: string; status: 'QUEUED' }> {
+  const response = await fetch(`/api/v1/scan-runs/${runId}/previous-sources/retry`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+  })
+  if (!response.ok) {
+    throw new ScanApiError(response.status, await readError(response, 'Önceki kaynak işlemleri yeniden başlatılamadı'))
+  }
+  return response.json() as Promise<{ runId: string; status: 'QUEUED' }>
+}
+
 export async function listScanRuns(limit = 10): Promise<ScanRunSummary[]> {
   const response = await fetch(`/api/v1/scan-runs?limit=${limit}`)
   if (!response.ok) {

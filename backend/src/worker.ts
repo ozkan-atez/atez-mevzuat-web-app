@@ -12,6 +12,7 @@ import type { AiModelClient } from './modules/ai/application/ai-model-client'
 import { AiProviderError } from './modules/ai/domain/ai-errors'
 import { GeminiAiModelClient, type GeminiTransport } from './modules/ai/infrastructure/gemini-ai-model-client'
 import type { ScanCommand } from './modules/scan-runs/application/ports'
+import { ResmiGazeteSearch } from './modules/scan-runs/infrastructure/resmi-gazete-search'
 
 async function startWorker() {
   const queue = await startQueue()
@@ -26,6 +27,7 @@ async function startWorker() {
     maxFileBytes: env.maxFileBytes,
   })
   const aiModel = createAiModel(env.gemini.apiKey, env.gemini.timeoutMs)
+  const previousSourceSearch = new ResmiGazeteSearch(new SourcePolicy(env.sourceHosts), { timeoutMs: env.sourceTimeoutMs })
   await objectStore.ensureBucket()
 
   const dispatch = async () => {
@@ -54,7 +56,13 @@ async function startWorker() {
         objectStore,
         maxRunBytes: BigInt(env.maxRunBytes),
         aiModel,
-        gemini: { model: env.gemini.model, maxAttempts: env.gemini.maxAttempts, maxContentBytes: env.gemini.maxContentBytes },
+        previousSourceSearch,
+        gemini: {
+          model: env.gemini.model,
+          maxAttempts: env.gemini.maxAttempts,
+          maxContentBytes: env.gemini.maxContentBytes,
+          previousSourceConcurrency: env.gemini.previousSourceConcurrency,
+        },
       }, command.type)
     }
   })

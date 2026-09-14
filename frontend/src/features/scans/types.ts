@@ -3,6 +3,7 @@ export type ScanRunStatus = 'QUEUED' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED
 export type ScanStage =
   | 'DISCOVERING'
   | 'AI_FILTERING'
+  | 'DISCOVERING_PREVIOUS_SOURCES'
   | 'DOWNLOADING_DOCUMENTS'
   | 'DISCOVERING_ASSETS'
   | 'DOWNLOADING_ASSETS'
@@ -24,6 +25,12 @@ export interface ScanRunDetail {
     counts: { in: number; out: number; pending: number }
     retryAvailable: boolean
     errorCategory: string | null
+    errorMessage: string | null
+  }
+  previousSources: null | {
+    status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+    counts: { total: number; completed: number; verified: number; notRequired: number; notFound: number; ambiguous: number; pending: number }
+    retryAvailable: boolean
     errorMessage: string | null
   }
   counts: {
@@ -55,6 +62,16 @@ export interface ScanRunDetail {
         titleDecision: 'IN' | 'OUT' | 'MAYBE'
         finalDecision: 'IN' | 'OUT' | null
         reason: string
+      }
+      previousSource: null | {
+        status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'AWAITING_RETRY' | 'FAILED'
+        outcome: 'NOT_REQUIRED' | 'VERIFIED' | 'NOT_FOUND' | 'AMBIGUOUS' | null
+        needsPreviousSource: boolean | null
+        reason: string | null
+        title: string | null
+        publicationDate: string | null
+        gazetteNo: string | null
+        sourceUrl: string | null
       }
     }>
   }>

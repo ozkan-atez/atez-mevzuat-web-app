@@ -42,11 +42,24 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
       }
     }),
   }))
-  const bytes = objects.reduce((total, object) => total + object.byteSize, 0n)
+  const previousSourceBytes = snapshot.previousSourceAudit.reduce((total, job) => {
+    if (!job.source) return total
+    return total + job.source.byteSize + job.source.assets.reduce((assetTotal, asset) => assetTotal + asset.byteSize, 0n)
+  }, 0n)
+  const bytes = objects.reduce((total, object) => total + object.byteSize, previousSourceBytes)
   const assets = objects.filter((object) => object.assetId)
+  const previousSourceAssets = snapshot.previousSourceAudit.reduce((total, job) => total + (job.source?.assets.length ?? 0), 0)
+  const previousSourceAudit = snapshot.previousSourceAudit.map((job) => ({
+    ...job,
+    source: job.source ? {
+      ...job.source,
+      byteSize: job.source.byteSize.toString(),
+      assets: job.source.assets.map((asset) => ({ ...asset, byteSize: asset.byteSize.toString() })),
+    } : null,
+  }))
 
   return Buffer.from(JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId: snapshot.run.id,
     source: 'RESMI_GAZETE',
     targetDate: snapshot.run.targetDate,
@@ -54,10 +67,13 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
     index: snapshot.index,
     editions,
     filterAudit: snapshot.filterAudit,
+    previousSourceAudit,
     totals: {
       editions: editions.length,
       documents: editions.reduce((total, edition) => total + edition.documents.length, 0),
       assets: assets.length,
+      previousSources: snapshot.previousSourceAudit.filter((job) => job.source).length,
+      previousSourceAssets,
       bytes: bytes.toString(),
     },
   }, null, 2))

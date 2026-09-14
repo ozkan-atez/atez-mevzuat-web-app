@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AlertCircle, ArrowLeft, CalendarDays, RefreshCw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
-import { retryAiFilter } from '../scans/api'
+import { retryAiFilter, retryPreviousSources } from '../scans/api'
 import { useScanRun } from '../scans/useScanRun'
 import type { ScanRunStatus } from '../scans/types'
 import { CollectedDocuments } from './CollectedDocuments'
@@ -21,15 +21,15 @@ export function RunDetail() {
   const [isRetrying, setIsRetrying] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
 
-  const handleRetry = async () => {
+  const handleRetry = async (kind: 'filter' | 'previous-sources') => {
     if (!id || isRetrying) return
     setIsRetrying(true)
     setRetryError(null)
     try {
-      await retryAiFilter(id)
+      await (kind === 'filter' ? retryAiFilter(id) : retryPreviousSources(id))
       await reconnect()
     } catch (caught) {
-      setRetryError(caught instanceof Error ? caught.message : 'AI filtresi yeniden başlatılamadı')
+      setRetryError(caught instanceof Error ? caught.message : 'İşlem yeniden başlatılamadı')
     } finally {
       setIsRetrying(false)
     }
@@ -104,7 +104,13 @@ export function RunDetail() {
       )}
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <OperationSteps run={run} onRetry={() => void handleRetry()} isRetrying={isRetrying} retryError={retryError} />
+        <OperationSteps
+          run={run}
+          onRetryAiFilter={() => void handleRetry('filter')}
+          onRetryPreviousSources={() => void handleRetry('previous-sources')}
+          isRetrying={isRetrying}
+          retryError={retryError}
+        />
         <CollectedDocuments editions={run.editions} />
       </div>
     </div>
