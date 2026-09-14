@@ -212,4 +212,20 @@ describe('manual scan acceptance', () => {
     expect(await prisma.storedObject.count()).toBe(objectsAfterFirstRun.length)
     await app.close()
   })
+
+  it('recovers editions from an archived index after a mid-discovery crash', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-11' })
+    const indexUrl = 'https://www.resmigazete.gov.tr/eskiler/2026/09/20260911.htm'
+    const indexBody = await readFile(resolve('test/fixtures/resmi-gazete/2026-09-11/index.html'))
+    const storedIndex = await objectStore.putRunFile(`runs/2026/09/11/${run.id}/index.html`, indexBody, 'text/html')
+    await repository.saveIndex(run.id, indexUrl, storedIndex)
+    await prisma.scanRun.update({ where: { id: run.id }, data: { status: 'PARTIAL' } })
+
+    await executeScanRun(run.id, { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
+
+    const recovered = await repository.getRun(run.id)
+    expect(recovered?.status).toBe('COMPLETED')
+    expect(recovered?.counts.documents).toBe(4)
+    expect(recovered?.editions).toHaveLength(3)
+  })
 })

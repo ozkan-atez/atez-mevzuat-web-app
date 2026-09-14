@@ -39,20 +39,31 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
     const datePath = run.targetDate.replaceAll('-', '/')
     if (command === 'START_SCAN') {
       await repository.startRun(runId)
-      if (!run.indexObjectKey) {
-        await repository.startStage(runId, currentStage, 1)
+      await repository.startStage(runId, currentStage, 1)
+      let indexBytes: Buffer
+      let indexSourceUrl: string
+      let downloadedIndexBytes = 0n
+
+      if (run.indexObjectKey) {
+        if (!run.indexSourceUrl) throw new Error('Archived index source URL is missing')
+        indexBytes = await objectStore.getContent(run.indexObjectKey)
+        indexSourceUrl = run.indexSourceUrl
+      } else {
         const indexFile = await downloadFirstAvailable(http, candidateIndexUrls(run.targetDate), tempDirectory)
         bytes = addWithinLimit(bytes, indexFile.byteSize, maxRunBytes)
         const indexKey = `runs/${datePath}/${runId}/index.html`
-        const indexBytes = await readFile(indexFile.tempPath)
+        indexBytes = await readFile(indexFile.tempPath)
+        indexSourceUrl = indexFile.sourceUrl
+        downloadedIndexBytes = indexFile.byteSize
         const storedIndex = await objectStore.putRunFile(indexKey, indexBytes, 'text/html')
-        await repository.saveIndex(runId, indexFile.sourceUrl, storedIndex)
-        const editions = parseEditions(indexBytes.toString('utf8'), indexFile.sourceUrl, run.targetDate)
-        if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
-        await repository.saveEditions(runId, run.targetDate, editions)
-        await repository.advanceStage(runId, currentStage, indexFile.byteSize)
-        await repository.completeStage(runId, currentStage)
+        await repository.saveIndex(runId, indexSourceUrl, storedIndex)
       }
+
+      const editions = parseEditions(indexBytes.toString('utf8'), indexSourceUrl, run.targetDate)
+      if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
+      await repository.saveEditions(runId, run.targetDate, editions)
+      await repository.advanceStage(runId, currentStage, downloadedIndexBytes)
+      await repository.completeStage(runId, currentStage)
     }
 
     if (command !== 'RETRY_PREVIOUS_SOURCES') {
