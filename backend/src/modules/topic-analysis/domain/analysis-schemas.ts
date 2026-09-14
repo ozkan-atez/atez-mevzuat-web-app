@@ -118,4 +118,8 @@ export const AnalysisResultSchema = z.object({
 
 export type AnalysisResult = z.infer<typeof AnalysisResultSchema>
 
-export const analysisResponseJsonSchema = toGeminiJsonSchema(z.toJSONSchema(AnalysisResultSchema, { target: 'draft-7' }) as Record<string, unknown>)
+export const analysisContractJsonSchema = toGeminiJsonSchema(z.toJSONSchema(AnalysisResultSchema, { target: 'draft-7' }) as Record<string, unknown>)
+
+// Gemini rejects the full nested contract as too complex for responseJsonSchema.
+// The complete contract is supplied in the system instruction and enforced by Zod after generation.
+export const analysisResponseJsonSchema: Record<string, unknown> = { type: 'object' }

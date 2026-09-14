@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { analysisResponseJsonSchema } from '../domain/analysis-schemas'
+import { analysisContractJsonSchema, analysisResponseJsonSchema } from '../domain/analysis-schemas'
 
 export const TOPIC_ANALYSIS_PROMPT_VERSION = 'topic-analysis-v1'
 
@@ -14,6 +14,7 @@ export function buildTopicAnalysisSystemInstruction(): string {
     'Tablo yalnızca kaynakta gerçek satır-sütun verisi varsa doldur; yoksa tables alanını boş dizi döndür.',
     'Önceki hüküm kanıtlı değilse previousRule ve comparisons alanlarına tahmin yazma.',
     'Yanıt yalnızca verilen JSON Schema ile uyumlu JSON olmalıdır.',
+    `Uygulanacak eksiksiz JSON sözleşmesi: ${JSON.stringify(analysisContractJsonSchema)}`,
   ].join('\n')
 }
 
