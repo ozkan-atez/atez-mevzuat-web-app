@@ -34,12 +34,13 @@ function shallowSchema(value: unknown, depth: number, maxDepth: number): unknown
   if (!value || typeof value !== 'object') return value
   const input = value as Record<string, unknown>
   const output: Record<string, unknown> = {}
-  for (const key of ['type', 'title', 'description', 'enum', 'minItems', 'maxItems', 'minimum', 'maximum', 'additionalProperties']) {
+  for (const key of ['type', 'title', 'description', 'enum', 'minItems', 'maxItems', 'minimum', 'maximum']) {
     if (key in input) output[key] = input[key]
   }
   if (depth < maxDepth && input.properties && typeof input.properties === 'object') {
     output.properties = Object.fromEntries(Object.entries(input.properties as Record<string, unknown>).map(([name, property]) => [name, shallowSchema(property, depth + 1, maxDepth)]))
     if (input.required) output.required = input.required
+    if ('additionalProperties' in input) output.additionalProperties = input.additionalProperties
   }
   if (input.items) output.items = shallowSchema(input.items, depth + 1, maxDepth)
   if (input.anyOf) output.anyOf = shallowSchema(input.anyOf, depth + 1, maxDepth)
