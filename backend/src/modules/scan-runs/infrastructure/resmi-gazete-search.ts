@@ -79,9 +79,9 @@ export class ResmiGazeteSearch implements PreviousSourceSearch {
       const identifierMatch = intent.targetRegulationIdentifier
         ? containsExactIdentifier(text, intent.targetRegulationIdentifier)
         : true
-      const titleMatch = intent.targetRegulationTitle
-        ? normalizedTitle(text).includes(normalizedTitle(intent.targetRegulationTitle))
-        : true
+      const anchorTitle = normalizedTitle(text)
+      const selectedTitle = normalizedTitle(candidate.title)
+      const titleMatch = anchorTitle.includes(selectedTitle) || selectedTitle.includes(anchorTitle)
       if (!identifierMatch || !titleMatch) return []
       return [this.policy.assertAllowedUrl(new URL(href, archiveUrl).toString(), archiveUrl.toString()).toString()]
     })

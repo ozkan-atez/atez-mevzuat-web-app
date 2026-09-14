@@ -46,4 +46,18 @@ describe('ResmiGazeteSearch', () => {
     }, { targetRegulationIdentifier: '2018/5', targetRegulationTitle: 'İthalatta Gözetim Uygulanmasına İlişkin Tebliğ' }))
       .resolves.toBe('https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf')
   })
+
+  it('resolves the selected candidate by its full result title instead of a shorter AI target title', async () => {
+    const candidateTitle = 'Birleşmiş Milletler Güvenlik Konseyinin Kararlarıyla Listelenen Kişilerin Malvarlığının Dondurulması Hakkındaki 30/9/2013 Tarihli ve 2013/5428 Sayılı Bakanlar Kurulu Kararının Eki Listede Değişiklik Yapılmasına İlişkin Karar'
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(`<a href="20260525-8.pdf">${candidateTitle}</a>`, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }))
+    const gateway = new ResmiGazeteSearch(new SourcePolicy(['resmigazete.gov.tr', 'www.resmigazete.gov.tr']), { fetch: fetchFn, timeoutMs: 5_000 })
+
+    await expect(gateway.resolveDocumentUrl({
+      query: '2013/5428', title: candidateTitle, publicationDate: '2026-05-25', gazetteNo: '32910', mukerrer: null,
+      url: 'https://www.resmigazete.gov.tr/fihrist?tarih=2026-05-25', regulationType: 'CUMHURBAŞKANI KARARLARI',
+    }, {
+      targetRegulationIdentifier: '2013/5428',
+      targetRegulationTitle: 'Birleşmiş Milletler Güvenlik Konseyi Kararlarıyla Listelenen Kişilerin Malvarlığının Dondurulması Hakkında Karar',
+    })).resolves.toBe('https://www.resmigazete.gov.tr/eskiler/2026/05/20260525-8.pdf')
+  })
 })
