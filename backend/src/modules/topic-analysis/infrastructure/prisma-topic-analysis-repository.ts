@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import { Prisma, type PrismaClient } from '@prisma/client'
 import type { AiCallFailure } from '../../scan-runs/application/ports'
 import type {
   CreateTopicAnalysisRevisionInput,
@@ -432,6 +432,23 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     return index + 1
   }
 
+  async canFinalizeRunAfterTopicRetry(runId: string): Promise<boolean> {
+    const topics = await this.prisma.topicProcess.findMany({
+      where: { scanRunId: runId },
+      include: {
+        analyses: { orderBy: { version: 'desc' }, take: 1, select: { status: true } },
+        reports: { include: { revisions: { where: { status: 'VALIDATED' }, take: 1, select: { id: true } } } },
+      },
+    })
+    return topics.length > 0 && topics.every((topic) => {
+      if (topic.status !== 'COMPLETED') return false
+      const latestAnalysis = topic.analyses[0]
+      if (!latestAnalysis) return false
+      return latestAnalysis.status === 'PASS_NO_RELEVANT_CONTENT'
+        || topic.reports.some((report) => report.revisions.length > 0)
+    })
+  }
+
   async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: 'ANALYSIS' | 'PUBLICATION'; content: string }): Promise<void> {
     const thread = await this.prisma.analysisThread.findUnique({ where: { topicId } })
     if (!thread) throw new TopicNotFoundError('Topic konuşması bulunamadı.')
@@ -439,11 +456,21 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
   }
 
   async claimPendingTopicOutbox(limit: number) {
-    return this.prisma.topicOutbox.findMany({
-      where: { dispatchedAt: null, availableAt: { lte: new Date() } },
-      orderBy: { createdAt: 'asc' }, take: limit,
-      select: { id: true, topicId: true, command: true, messageId: true, attempts: true },
-    })
+    const leaseUntil = new Date(Date.now() + 60_000)
+    return this.prisma.$queryRaw<Array<{ id: string; topicId: string; command: 'RETRY_ANALYSIS' | 'REVISE_ANALYSIS' | 'REVISE_PUBLICATION'; messageId: string | null; attempts: number }>>(Prisma.sql`
+      WITH candidates AS (
+        SELECT id FROM "TopicOutbox"
+        WHERE "dispatchedAt" IS NULL AND "availableAt" <= NOW()
+        ORDER BY "createdAt" ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT ${limit}
+      )
+      UPDATE "TopicOutbox" AS outbox
+      SET "availableAt" = ${leaseUntil}, attempts = outbox.attempts + 1
+      FROM candidates
+      WHERE outbox.id = candidates.id
+      RETURNING outbox.id, outbox."topicId", outbox.command, outbox."messageId", outbox.attempts
+    `)
   }
 
   async markTopicOutboxDispatched(id: string): Promise<void> {
@@ -451,7 +478,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
   }
 
   async deferTopicOutbox(id: string, error: string, availableAt: Date): Promise<void> {
-    await this.prisma.topicOutbox.update({ where: { id }, data: { attempts: { increment: 1 }, lastError: error, availableAt } })
+    await this.prisma.topicOutbox.update({ where: { id }, data: { lastError: error, availableAt } })
   }
 }
 

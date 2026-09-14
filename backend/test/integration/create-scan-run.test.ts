@@ -35,4 +35,19 @@ describe('manual scan persistence', () => {
 
     expect(claimed.some((row) => row.scanRunId === run.id)).toBe(true)
   })
+
+  it('leases an outbox command to only one concurrent dispatcher', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-11' })
+    const [first, second] = await Promise.all([repository.claimPendingOutbox(10), repository.claimPendingOutbox(10)])
+    expect([...first, ...second].filter((row) => row.scanRunId === run.id)).toHaveLength(1)
+  })
+
+  it('persists repeated discovery delivery idempotently', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-11' })
+    const editions = [{ type: 'MAIN' as const, supplementNo: null, indexUrl: 'https://example.test/index', discoveryOrder: 0, documents: [{ title: 'Tebliğ', sourceUrl: 'https://example.test/doc', publicationOrder: 0 }] }]
+    await repository.saveEditions(run.id, run.targetDate, editions)
+    await repository.saveEditions(run.id, run.targetDate, editions)
+    expect(await prisma.gazetteEdition.count({ where: { scanRunId: run.id } })).toBe(1)
+    expect(await prisma.collectedDocument.count({ where: { edition: { scanRunId: run.id } } })).toBe(1)
+  })
 })

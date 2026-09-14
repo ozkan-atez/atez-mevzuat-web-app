@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import { Prisma, type PrismaClient } from '@prisma/client'
 import type { ScanRunStatus, ScanStage } from '../domain/scan-run'
 import type {
   AiCallCompletion,
@@ -55,12 +55,21 @@ export class PrismaScanRepository {
   }
 
   async claimPendingOutbox(limit: number): Promise<Array<{ id: string; scanRunId: string; commandType: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES'; attempts: number }>> {
-    return this.prisma.scanOutbox.findMany({
-      where: { dispatchedAt: null, availableAt: { lte: new Date() } },
-      orderBy: { createdAt: 'asc' },
-      take: limit,
-      select: { id: true, scanRunId: true, commandType: true, attempts: true },
-    })
+    const leaseUntil = new Date(Date.now() + 60_000)
+    return this.prisma.$queryRaw<Array<{ id: string; scanRunId: string; commandType: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES'; attempts: number }>>(Prisma.sql`
+      WITH candidates AS (
+        SELECT id FROM "ScanOutbox"
+        WHERE "dispatchedAt" IS NULL AND "availableAt" <= NOW()
+        ORDER BY "createdAt" ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT ${limit}
+      )
+      UPDATE "ScanOutbox" AS outbox
+      SET "availableAt" = ${leaseUntil}, attempts = outbox.attempts + 1
+      FROM candidates
+      WHERE outbox.id = candidates.id
+      RETURNING outbox.id, outbox."scanRunId", outbox."commandType", outbox.attempts
+    `)
   }
 
   async markOutboxDispatched(outboxId: string, queueJobId: string): Promise<void> {
@@ -80,13 +89,13 @@ export class PrismaScanRepository {
   async deferOutbox(outboxId: string, error: string, availableAt: Date): Promise<void> {
     await this.prisma.scanOutbox.update({
       where: { id: outboxId },
-      data: { attempts: { increment: 1 }, lastError: error, availableAt },
+      data: { lastError: error, availableAt },
     })
   }
 
-  async getExecutionRun(runId: string): Promise<{ id: string; targetDate: string; downloadedBytes: bigint } | null> {
+  async getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint } | null> {
     const run = await this.prisma.scanRun.findUnique({ where: { id: runId } })
-    return run ? { id: run.id, targetDate: run.targetDate.toISOString().slice(0, 10), downloadedBytes: run.downloadedBytes } : null
+    return run ? { id: run.id, status: run.status, targetDate: run.targetDate.toISOString().slice(0, 10), downloadedBytes: run.downloadedBytes } : null
   }
 
   async startRun(runId: string): Promise<void> {
@@ -124,22 +133,33 @@ export class PrismaScanRepository {
   }
 
   async saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<void> {
-    await this.prisma.$transaction(editions.map((edition) => this.prisma.gazetteEdition.create({
-      data: {
-        scanRunId: runId,
-        publicationDate: new Date(`${targetDate}T00:00:00.000Z`),
-        type: edition.type,
-        supplementNo: edition.supplementNo,
-        indexUrl: edition.indexUrl,
-        discoveryOrder: edition.discoveryOrder,
-        documents: { create: edition.documents.map((document) => ({
-          title: document.title,
-          documentType: document.documentType ?? null,
-          sourceUrl: document.sourceUrl,
-          publicationOrder: document.publicationOrder,
-        })) },
-      },
-    })))
+    await this.prisma.$transaction(async (tx) => {
+      for (const edition of editions) {
+        const storedEdition = await tx.gazetteEdition.upsert({
+          where: { scanRunId_indexUrl: { scanRunId: runId, indexUrl: edition.indexUrl } },
+          create: {
+            scanRunId: runId,
+            publicationDate: new Date(`${targetDate}T00:00:00.000Z`),
+            type: edition.type,
+            supplementNo: edition.supplementNo,
+            indexUrl: edition.indexUrl,
+            discoveryOrder: edition.discoveryOrder,
+          },
+          update: { type: edition.type, supplementNo: edition.supplementNo, discoveryOrder: edition.discoveryOrder },
+          select: { id: true },
+        })
+        await tx.collectedDocument.createMany({
+          data: edition.documents.map((document) => ({
+            editionId: storedEdition.id,
+            title: document.title,
+            documentType: document.documentType ?? null,
+            sourceUrl: document.sourceUrl,
+            publicationOrder: document.publicationOrder,
+          })),
+          skipDuplicates: true,
+        })
+      }
+    })
   }
 
   async listDocuments(runId: string): Promise<Array<{ id: string; sourceUrl: string; title: string }>> {

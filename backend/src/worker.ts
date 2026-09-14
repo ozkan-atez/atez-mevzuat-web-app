@@ -6,7 +6,7 @@ import { PgBossScanQueue } from './modules/scan-runs/infrastructure/scan-run-que
 import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-store'
 import { OfficialHttpClient } from './modules/scan-runs/infrastructure/official-http-client'
 import { SourcePolicy } from './modules/scan-runs/domain/source-policy'
-import { executeScanRun } from './modules/scan-runs/application/execute-scan-run'
+import { executeScanRun, resumeRunAfterTopicRetry } from './modules/scan-runs/application/execute-scan-run'
 import { GoogleGenAI } from '@google/genai'
 import type { AiModelClient } from './modules/ai/application/ai-model-client'
 import { AiProviderError } from './modules/ai/domain/ai-errors'
@@ -101,6 +101,7 @@ async function startWorker() {
           if (!context) throw new Error('Run rapor bağlamı bulunamadı.')
           await publishTopicAnalysis(context, result, await topicRepository.getTopicSequence(command.topicId), { repository: topicRepository, objectStore })
         } else await topicRepository.markTopicCompleted(command.topicId)
+        await resumeRunAfterTopicRetry((await topicRepository.getTopicDetail(command.topicId))!.runId, { repository, topicRepository, objectStore })
       } else {
         if (!command.messageId) throw new Error('Revizyon komutunda messageId eksik.')
         await executeTopicRevision({ topicId: command.topicId, messageId: command.messageId }, {

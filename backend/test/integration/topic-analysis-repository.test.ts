@@ -94,4 +94,14 @@ describe('topic analysis repository', () => {
     const storedTopic = await repository.getTopic(topic.id)
     expect(storedTopic?.thread?.topicId).toBe(topic.id)
   })
+
+  it('leases a topic command to only one concurrent dispatcher', async () => {
+    const run = await prisma.scanRun.create({ data: { requestKey: crypto.randomUUID(), targetDate: new Date('2026-09-11T00:00:00.000Z') } })
+    const edition = await prisma.gazetteEdition.create({ data: { scanRunId: run.id, publicationDate: run.targetDate, type: 'MAIN', indexUrl: 'https://example.test/index', discoveryOrder: 0 } })
+    const document = await prisma.collectedDocument.create({ data: { editionId: edition.id, title: 'İthalat Tebliği', sourceUrl: 'https://example.test/doc', publicationOrder: 0 } })
+    const topic = await prisma.topicProcess.create({ data: { scanRunId: run.id, documentId: document.id, thread: { create: {} } } })
+    await prisma.topicOutbox.create({ data: { topicId: topic.id, command: 'RETRY_ANALYSIS', requestKey: crypto.randomUUID() } })
+    const [first, second] = await Promise.all([repository.claimPendingTopicOutbox(10), repository.claimPendingTopicOutbox(10)])
+    expect([...first, ...second].filter((row) => row.topicId === topic.id)).toHaveLength(1)
+  })
 })

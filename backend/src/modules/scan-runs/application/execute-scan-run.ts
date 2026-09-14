@@ -29,6 +29,7 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
   const { repository, http, objectStore, maxRunBytes } = dependencies
   const run = await repository.getExecutionRun(runId)
   if (!run) throw new Error(`Scan run not found: ${runId}`)
+  if (command === 'START_SCAN' && run.status !== 'QUEUED') return
   const tempDirectory = await mkdtemp(join(tmpdir(), `atez-scan-${runId}-`))
   let currentStage: ScanStage = 'DISCOVERING'
   let bytes = run.downloadedBytes
@@ -174,14 +175,7 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
     }
 
     currentStage = 'WRITING_MANIFEST'
-    await repository.startStage(runId, currentStage, 1)
-    const manifest = buildManifest(await repository.completedSnapshot(runId))
-    const manifestKey = `runs/${datePath}/${runId}/manifest.json`
-    const storedManifest = await objectStore.putRunFile(manifestKey, manifest, 'application/json')
-    await repository.verifyManifestCounts(runId)
-    await repository.advanceStage(runId, currentStage, storedManifest.byteSize)
-    await repository.completeStage(runId, currentStage)
-    await repository.completeRun(runId, storedManifest.objectKey)
+    await finalizeScanRun(runId, { repository, objectStore })
   } catch (error) {
     if (error instanceof AiFilterAwaitingRetryError) return
     if (error instanceof PreviousSourceAwaitingRetryError) {
@@ -196,6 +190,31 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
   } finally {
     await rm(tempDirectory, { recursive: true, force: true })
   }
+}
+
+export async function resumeRunAfterTopicRetry(
+  runId: string,
+  dependencies: Pick<Dependencies, 'repository' | 'topicRepository' | 'objectStore'>,
+): Promise<boolean> {
+  if (!(await dependencies.topicRepository.canFinalizeRunAfterTopicRetry(runId))) return false
+  await finalizeScanRun(runId, dependencies)
+  return true
+}
+
+export async function finalizeScanRun(
+  runId: string,
+  dependencies: Pick<Dependencies, 'repository' | 'objectStore'>,
+): Promise<void> {
+  const run = await dependencies.repository.getExecutionRun(runId)
+  if (!run) throw new Error(`Scan run not found: ${runId}`)
+  await dependencies.repository.startStage(runId, 'WRITING_MANIFEST', 1)
+  const manifest = buildManifest(await dependencies.repository.completedSnapshot(runId))
+  const manifestKey = `runs/${run.targetDate.replaceAll('-', '/')}/${runId}/manifest.json`
+  const storedManifest = await dependencies.objectStore.putRunFile(manifestKey, manifest, 'application/json')
+  await dependencies.repository.verifyManifestCounts(runId)
+  await dependencies.repository.advanceStage(runId, 'WRITING_MANIFEST', storedManifest.byteSize)
+  await dependencies.repository.completeStage(runId, 'WRITING_MANIFEST')
+  await dependencies.repository.completeRun(runId, storedManifest.objectKey)
 }
 
 async function downloadFirstAvailable(http: OfficialHttp, urls: string[], tempDirectory: string) {

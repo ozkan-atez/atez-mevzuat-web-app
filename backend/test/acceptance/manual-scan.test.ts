@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { buildApp } from '../../src/app'
-import { executeScanRun } from '../../src/modules/scan-runs/application/execute-scan-run'
+import { executeScanRun, resumeRunAfterTopicRetry } from '../../src/modules/scan-runs/application/execute-scan-run'
 import type { DownloadedFile, OfficialHttp, PreviousSourceSearch } from '../../src/modules/scan-runs/application/ports'
 import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
 import { S3ObjectStore } from '../../src/modules/scan-runs/infrastructure/s3-object-store'
@@ -183,6 +183,14 @@ describe('manual scan acceptance', () => {
     expect(objectsAfterFirstRun.length).toBeGreaterThan(0)
     expect(objectsAfterFirstRun.every((object) => /^[0-9a-f]{64}$/.test(object.sha256))).toBe(true)
     expect(objectsAfterFirstRun.every((object) => object.objectKey.includes(object.sha256))).toBe(true)
+
+    const executionsBeforeRedelivery = await prisma.topicAiExecution.count({ where: { topic: { scanRunId: firstRunId } } })
+    await executeScanRun(firstRunId, { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch })
+    expect(await prisma.topicAiExecution.count({ where: { topic: { scanRunId: firstRunId } } })).toBe(executionsBeforeRedelivery)
+
+    await prisma.scanRun.update({ where: { id: firstRunId }, data: { status: 'AWAITING_RETRY', currentStage: 'ANALYZING_TOPICS', manifestObjectKey: null, completedAt: null } })
+    expect(await resumeRunAfterTopicRetry(firstRunId, { repository, topicRepository, objectStore })).toBe(true)
+    expect((await repository.getRun(firstRunId))?.status).toBe('COMPLETED')
 
     const secondResponse = await app.inject({
       method: 'POST',
