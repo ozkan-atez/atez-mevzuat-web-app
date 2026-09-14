@@ -28,10 +28,10 @@ class FixtureOfficialHttp implements OfficialHttp {
     const pathname = new URL(url).pathname
     let body: string | Buffer
     let mediaType: string
-    if (pathname.endsWith('20260711.htm') || pathname === '/11.07.2026') {
+    if (pathname.endsWith('20260911.htm') || pathname === '/11.09.2026') {
       body = this.indexHtml
       mediaType = 'text/html'
-    } else if (pathname.endsWith('20260711-1.htm')) {
+    } else if (pathname.endsWith('20260911-1.htm')) {
       body = this.documentHtml
       mediaType = 'text/html'
     } else if (pathname.endsWith('.htm')) {
@@ -50,6 +50,24 @@ class FixtureOfficialHttp implements OfficialHttp {
 
 class MixedDecisionAi implements AiModelClient {
   async generateStructured(request: StructuredAiRequest): Promise<StructuredAiResult> {
+    if (request.systemInstruction.includes('ATEZ gümrük ve dış ticaret mevzuatı analiz uzmanısın')) {
+      const header = (request.parts[0] as { text: string }).text
+      const topicId = header.match(/Topic kimliği: ([^\n]+)/)?.[1]
+      const title = header.match(/Belge başlığı: ([^\n]+)/)?.[1] ?? 'İthalat düzenlemesi'
+      if (!topicId) throw new Error('Fixture topic kimliği bulamadı')
+      return {
+        json: {
+          schemaVersion: 1, topicId, status: 'PASS',
+          document: { title, gazetteDate: '2026-09-11', gazetteNumber: '33014', sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2026/09/20260911-1.htm' },
+          change: { type: 'AMENDMENT', detailedAnalysis: 'İthalat işlemlerine ilişkin uygulama güncellenmiştir.', summary: 'İthalat uygulamasında değişiklik yapılmıştır.', currentRule: 'Yeni uygulama yayım tarihinde yürürlüğe girer.', operationalImpact: 'İthalat süreçleri güncel kurala göre kontrol edilmelidir.' },
+          affectedParties: [], effectiveDates: [], comparisons: [], tables: [],
+          officialSources: [{ id: 'source-current', label: 'T.C. Resmî Gazete', url: 'https://www.resmigazete.gov.tr/eskiler/2026/09/20260911-1.htm', evidenceIds: ['current-document'] }],
+          supportingSources: [], evidence: [{ id: 'current-document', objectKey: 'fixture/current-document.html', locator: 'body' }], unresolvedReferences: [],
+          emailTitle: title, emailSummary: 'İthalat uygulamasındaki değişiklik operasyonel kontrol gerektirir.',
+        },
+        providerRequestId: `topic-analysis-${topicId}`, usage: { inputTokens: 20, outputTokens: 15 },
+      }
+    }
     if (request.systemInstruction.includes('önceki kaynak aramasını daralt')) {
       return {
         json: { needsPreviousSource: false, relationship: 'NONE', targetRegulationTitle: null, targetRegulationIdentifier: null, targetRegulationType: null, targetInstitution: null, targetArticleReferences: [], queryCandidates: [], reason: 'Bağımsız düzenleme.' },
@@ -93,12 +111,12 @@ const s3 = new S3Client({
 })
 let http: FixtureOfficialHttp
 const aiModel = new MixedDecisionAi()
-const gemini = { model: 'gemini-3.8-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2, topicConcurrency: 2 }
+const gemini = { model: 'gemini-3.7-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2, topicConcurrency: 2 }
 const previousSourceSearch = new EmptyPreviousSourceSearch()
 
 describe('manual scan acceptance', () => {
   beforeAll(async () => {
-    const fixtureRoot = resolve('test/fixtures/resmi-gazete/2026-07-11')
+    const fixtureRoot = resolve('test/fixtures/resmi-gazete/2026-09-11')
     http = new FixtureOfficialHttp(
       await readFile(resolve(fixtureRoot, 'index.html'), 'utf8'),
       await readFile(resolve(fixtureRoot, 'document.html'), 'utf8'),
@@ -123,7 +141,7 @@ describe('manual scan acceptance', () => {
       method: 'POST',
       url: '/api/v1/scan-runs',
       headers: { 'idempotency-key': requestKey },
-      payload: { trigger: 'MANUAL', targetDate: '2026-07-11' },
+      payload: { trigger: 'MANUAL', targetDate: '2026-09-11' },
     })
 
     const firstResponse = await create()
@@ -138,6 +156,9 @@ describe('manual scan acceptance', () => {
     expect(finalRun?.counts.documents).toBe(4)
     expect(finalRun?.counts.assets).toBe(5)
     expect(finalRun?.filter?.counts).toEqual({ in: 2, out: 2, pending: 0 })
+    expect(finalRun?.analysis?.counts).toEqual({ total: 2, completed: 2, awaitingRetry: 0, failed: 0 })
+    expect(finalRun?.reports).toHaveLength(2)
+    expect(finalRun?.reports.every((report) => report.topicId && report.card !== 'K6')).toBe(true)
     expect(JSON.stringify(finalRun)).not.toMatch(/confidence/i)
 
     const decisions = await prisma.documentFilterDecision.findMany({ orderBy: { document: { publicationOrder: 'asc' } } })
@@ -153,8 +174,10 @@ describe('manual scan acceptance', () => {
     await expect(s3.send(new HeadObjectCommand({ Bucket: s3Config.bucket, Key: storedRun.manifestObjectKey! }))).resolves.toBeTruthy()
     const manifestObject = await s3.send(new GetObjectCommand({ Bucket: s3Config.bucket, Key: storedRun.manifestObjectKey! }))
     const manifest = JSON.parse(await manifestObject.Body!.transformToString())
-    expect(manifest.schemaVersion).toBe(3)
+    expect(manifest.schemaVersion).toBe(4)
     expect(manifest.filterAudit.decisions).toHaveLength(4)
+    expect(manifest.topicAnalysis.topics).toHaveLength(2)
+    expect(manifest.reports).toHaveLength(2)
     expect(manifest.editions.flatMap((edition: { documents: unknown[] }) => edition.documents).every((document: { filter: { finalDecision: string } }) => ['IN', 'OUT'].includes(document.filter.finalDecision))).toBe(true)
     const objectsAfterFirstRun = await prisma.storedObject.findMany()
     expect(objectsAfterFirstRun.length).toBeGreaterThan(0)
@@ -165,7 +188,7 @@ describe('manual scan acceptance', () => {
       method: 'POST',
       url: '/api/v1/scan-runs',
       headers: { 'idempotency-key': crypto.randomUUID() },
-      payload: { trigger: 'MANUAL', targetDate: '2026-07-11' },
+      payload: { trigger: 'MANUAL', targetDate: '2026-09-11' },
     })
     const secondRunId = secondResponse.json<{ runId: string }>().runId
     expect(secondRunId).not.toBe(firstRunId)
