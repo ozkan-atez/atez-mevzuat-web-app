@@ -126,6 +126,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     promptVersion: string
     schemaVersion: number
     inputHash: string
+    requestMessageId?: string
   }): Promise<{ id: string }> {
     return this.prisma.$transaction(async (tx) => {
       const latest = await tx.topicAiExecution.aggregate({
@@ -356,13 +357,29 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.topicOutbox.findUnique({ where: { requestKey: `retry:${requestKey}` } })
       if (existing) {
-        if (existing.topicId !== topicId || existing.command !== 'RETRY_ANALYSIS') throw new TopicCommandConflictError('Idempotency key başka bir komuta ait.')
+        if (existing.topicId !== topicId) throw new TopicCommandConflictError('Idempotency key başka bir komuta ait.')
         return { topicId, commandId: existing.id, status: 'QUEUED' as const }
       }
       const topic = await tx.topicProcess.findUnique({ where: { id: topicId } })
       if (!topic) throw new TopicNotFoundError('Topic bulunamadı.')
       if (topic.status !== 'AWAITING_RETRY') throw new TopicRetryConflictError('Topic yeniden denenmeye hazır değil.')
-      const command = await tx.topicOutbox.create({ data: { topicId, command: 'RETRY_ANALYSIS', requestKey: `retry:${requestKey}` } })
+      const failedRevision = await tx.topicAiExecution.findFirst({
+        where: { topicId, status: 'FAILED', requestMessageId: { not: null }, kind: { in: ['ANALYSIS_REVISION', 'PUBLICATION_REVISION'] } },
+        orderBy: { createdAt: 'desc' },
+        select: { kind: true, requestMessageId: true },
+      })
+      const command = await tx.topicOutbox.create({
+        data: {
+          topicId,
+          command: failedRevision?.kind === 'ANALYSIS_REVISION'
+            ? 'REVISE_ANALYSIS'
+            : failedRevision?.kind === 'PUBLICATION_REVISION'
+              ? 'REVISE_PUBLICATION'
+              : 'RETRY_ANALYSIS',
+          requestKey: `retry:${requestKey}`,
+          messageId: failedRevision?.requestMessageId ?? null,
+        },
+      })
       await tx.topicProcess.update({ where: { id: topicId }, data: { status: 'QUEUED', lastErrorCategory: null, lastErrorMessage: null } })
       return { topicId, commandId: command.id, status: 'QUEUED' as const }
     })

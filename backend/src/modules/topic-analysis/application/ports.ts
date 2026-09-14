@@ -89,6 +89,7 @@ export interface TopicAnalysisRepository {
     promptVersion: string
     schemaVersion: number
     inputHash: string
+    requestMessageId?: string
   }): Promise<{ id: string }>
   completeTopicAiExecution(id: string, input: {
     analysisRevisionId?: string

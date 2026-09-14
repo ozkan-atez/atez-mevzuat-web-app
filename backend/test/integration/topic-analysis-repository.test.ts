@@ -119,4 +119,20 @@ describe('topic analysis repository', () => {
     const stage = await prisma.stageExecution.findUniqueOrThrow({ where: { scanRunId_stage: { scanRunId: run.id, stage: 'WRITING_MANIFEST' } } })
     expect(stage).toMatchObject({ totalItems: 1, completedItems: 1, status: 'COMPLETED' })
   })
+
+  it('requeues the original chat revision when its provider call awaits retry', async () => {
+    const run = await prisma.scanRun.create({ data: { requestKey: crypto.randomUUID(), targetDate: new Date('2026-09-11T00:00:00.000Z') } })
+    const edition = await prisma.gazetteEdition.create({ data: { scanRunId: run.id, publicationDate: run.targetDate, type: 'MAIN', indexUrl: 'https://example.test/index', discoveryOrder: 0 } })
+    const document = await prisma.collectedDocument.create({ data: { editionId: edition.id, title: 'İthalat Tebliği', sourceUrl: 'https://example.test/doc', publicationOrder: 0 } })
+    const topic = await prisma.topicProcess.create({ data: { scanRunId: run.id, documentId: document.id, status: 'AWAITING_RETRY', thread: { create: {} } }, include: { thread: true } })
+    const message = await prisma.chatMessage.create({ data: { threadId: topic.thread!.id, role: 'USER', kind: 'REVISION_REQUEST', revisionKind: 'PUBLICATION', content: 'Özeti sadeleştir.' } })
+    await prisma.topicAiExecution.create({ data: {
+      topicId: topic.id, kind: 'PUBLICATION_REVISION', attemptNo: 1, status: 'FAILED', requestMessageId: message.id,
+      model: 'gemini-3.7-flash', promptVersion: 'revision-v1', schemaVersion: 1, inputHash: 'd'.repeat(64), errorCategory: 'PROVIDER_UNAVAILABLE',
+    } })
+
+    const retried = await repository.requestTopicRetry(topic.id, crypto.randomUUID())
+    const command = await prisma.topicOutbox.findUniqueOrThrow({ where: { id: retried.commandId } })
+    expect(command).toMatchObject({ command: 'REVISE_PUBLICATION', messageId: message.id })
+  })
 })

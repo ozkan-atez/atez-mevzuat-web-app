@@ -649,6 +649,7 @@ model TopicAiExecution {
   topicId            String
   topic              TopicProcess         @relation(fields: [topicId], references: [id], onDelete: Cascade)
   analysisRevisionId String?
+  requestMessageId   String?
   analysisRevision   AnalysisRevision?    @relation(fields: [analysisRevisionId], references: [id], onDelete: SetNull)
   kind               TopicAiExecutionKind
   attemptNo          Int
@@ -669,6 +670,7 @@ model TopicAiExecution {
   createdAt          DateTime             @default(now())
 
   @@unique([topicId, kind, attemptNo])
+  @@index([requestMessageId, createdAt])
   @@index([topicId, createdAt])
 }
 

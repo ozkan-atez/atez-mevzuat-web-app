@@ -63,6 +63,7 @@ async function executeAnalysisRevision(work: NonNullable<Awaited<ReturnType<Pris
     topicId: work.topicId, kind: 'ANALYSIS_REVISION', attemptNo: 1, model: dependencies.model,
     promptVersion: `${TOPIC_ANALYSIS_PROMPT_VERSION}-revision`, schemaVersion: 1,
     inputHash: hashInput(evidence.signature, work.message.content, dependencies.model),
+    requestMessageId: work.message.id,
   })
   const startedAt = Date.now()
   try {
@@ -112,6 +113,7 @@ async function executePublicationRevision(work: NonNullable<Awaited<ReturnType<P
     topicId: work.topicId, kind: 'PUBLICATION_REVISION', attemptNo: 1, model: dependencies.model,
     promptVersion: 'topic-publication-revision-v1', schemaVersion: 1,
     inputHash: hashInput(JSON.stringify(currentSpec), work.message.content, dependencies.model),
+    requestMessageId: work.message.id,
   })
   const startedAt = Date.now()
   try {
