@@ -43,16 +43,22 @@ export function ChatScreen() {
   // One conversation per handoff: React may run this effect twice (StrictMode, a
   // rerender), and a second session would strand the first message.
   const creating = useRef(false)
-  useEffect(() => {
-    if (sessionId || creating.current || !initialMessage) return
+  const startConversation = useCallback((content: string) => {
+    if (creating.current || !content.trim()) return
     creating.current = true
+    setHandoffError(null)
     createChatSession()
-      .then((session) => navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage }, viewTransition: true }))
+      .then((session) => navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage: content.trim() }, viewTransition: true }))
       .catch((caught: unknown) => {
         creating.current = false
         setHandoffError(caught instanceof Error ? caught.message : 'Sohbet başlatılamadı.')
       })
-  }, [initialMessage, navigate, sessionId])
+  }, [navigate])
+
+  useEffect(() => {
+    if (sessionId || !initialMessage) return
+    startConversation(initialMessage)
+  }, [initialMessage, sessionId, startConversation])
 
   // The handed-over message is sent exactly once, and the router state is cleared
   // so a refresh or a back-navigation cannot resend it.
@@ -82,7 +88,12 @@ export function ChatScreen() {
     wasSending.current = conversation.isSending
   }, [conversation.isSending, loadHistory])
 
-  const send = (content: string) => { void conversation.send(content) }
+  // On the empty state there is no conversation yet, so the first message opens
+  // one and is sent through the same handoff the dashboard uses.
+  const send = (content: string) => {
+    if (sessionId) void conversation.send(content)
+    else startConversation(content)
+  }
 
   const historyPanel = (
     <ConversationHistory
@@ -141,7 +152,7 @@ export function ChatScreen() {
 
         <div className="custom-scroll flex-1 overflow-y-auto">
           {sessionId && conversation.messages.length > 0
-            ? <ConversationMessages messages={conversation.messages} isSending={conversation.isSending} />
+            ? <ConversationMessages messages={conversation.messages} isSending={conversation.isSending} activity={conversation.activity} />
             : <EmptyState />}
         </div>
 

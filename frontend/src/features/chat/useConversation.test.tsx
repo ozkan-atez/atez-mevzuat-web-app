@@ -86,6 +86,22 @@ describe('useConversation', () => {
     expect(result.current.messages.map((item) => item.content)).toEqual(['Merhaba', 'Merhaba dünya'])
   })
 
+  it('shows what the assistant is looking up until the words start arriving', async () => {
+    stubFetch({ stream: [
+      frame({ type: 'message', message: message('u1', 'USER', 'Hangi rapor?') }, 'message'),
+      frame({ type: 'tool', name: 'raporlari_ara', label: 'Bültenlerde arıyor' }, 'tool'),
+      frame({ type: 'delta', content: 'Bulundu' }, 'delta'),
+      frame({ type: 'complete', message: message('a1', 'ASSISTANT', 'Bulundu') }, 'complete'),
+    ] })
+    const { result } = renderHook(() => useConversation('s1'))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await act(() => result.current.send('Hangi rapor?'))
+
+    expect(result.current.activity).toBeNull()
+    expect(result.current.messages.map((item) => item.content)).toEqual(['Hangi rapor?', 'Bulundu'])
+  })
+
   it('ignores a second send while a response is still streaming', async () => {
     stubFetch()
     const { result } = renderHook(() => useConversation('s1'))

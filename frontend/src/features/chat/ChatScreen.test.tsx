@@ -114,6 +114,17 @@ describe('ChatScreen', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/chat/session-1')
   })
 
+  it('starts a conversation when the first message is typed on the empty state', async () => {
+    stubFetch()
+    renderChat('/chat')
+
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Mesaj' }), 'GTİP nedir?{Enter}')
+
+    await waitFor(() => expect(createdSessions).toBe(1))
+    await waitFor(() => expect(sent).toEqual(['GTİP nedir?']))
+    expect(screen.getByTestId('location')).toHaveTextContent('/chat/session-1')
+  })
+
   it('deletes a general conversation after confirmation and leaves report threads alone', async () => {
     stubFetch({ history: [
       historyItem({}),

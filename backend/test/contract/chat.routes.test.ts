@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../../src/app'
 import type { ChatModelClient } from '../../src/modules/chat/application/chat-model-client'
+import type { AssistantKnowledge } from '../../src/modules/chat/application/assistant-knowledge'
 import type { AppendChatMessageInput, ChatHistoryItem, ChatMessageView, ChatRepository, ChatSessionView } from '../../src/modules/chat/application/ports'
 
 class MemoryChatRepository implements ChatRepository {
@@ -34,8 +35,15 @@ class MemoryChatRepository implements ChatRepository {
 }
 
 const model: ChatModelClient = {
-  async *streamReply() { yield 'GTİP'; yield ' tarife kodudur.' },
+  async *streamReply() {
+    yield { type: 'text', text: 'GTİP' }
+    yield { type: 'text', text: ' tarife kodudur.' }
+  },
 }
+
+const knowledge = {
+  searchReports: async () => [],
+} as unknown as AssistantKnowledge
 
 const failingModel: ChatModelClient = {
   // eslint-disable-next-line require-yield
@@ -47,7 +55,7 @@ let repository: MemoryChatRepository
 
 async function startApp(chatModel: ChatModelClient = model) {
   repository = new MemoryChatRepository()
-  return buildApp({ chatRepository: repository, chatModel, chatModelName: 'gemini-test' })
+  return buildApp({ chatRepository: repository, chatModel, chatModelName: 'gemini-test', chatKnowledge: knowledge })
 }
 
 describe('chat routes', () => {

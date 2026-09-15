@@ -8,6 +8,8 @@ export interface Conversation {
   messages: ChatMessage[]
   isLoading: boolean
   isSending: boolean
+  /** What the assistant is looking up right now, if anything. */
+  activity: string | null
   error: string | null
   send: (content: string) => Promise<void>
   clearError: () => void
@@ -32,6 +34,8 @@ export function reduceChatEvent(messages: ChatMessage[], event: ChatStreamEvent,
       ))
     case 'complete':
       return messages.map((message) => (message.id === STREAMING_MESSAGE_ID ? event.message : message))
+    case 'tool':
+      return messages
     case 'error':
       return messages.map((message) => (
         message.id === STREAMING_MESSAGE_ID
@@ -46,6 +50,7 @@ export function useConversation(sessionId: string | undefined): Conversation {
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activity, setActivity] = useState<string | null>(null)
   // A ref, not the state: two submits in the same tick would both read `false`.
   const sending = useRef(false)
   const sendController = useRef<AbortController | null>(null)
@@ -92,6 +97,9 @@ export function useConversation(sessionId: string | undefined): Conversation {
       const response = await streamChatMessage(sessionId, content, controller.signal)
       for await (const event of parseChatEventStream(response)) {
         setMessages((current) => reduceChatEvent(current, event, optimisticId))
+        if (event.type === 'tool') setActivity(event.label)
+        // Once words start arriving the lookup is over and the text speaks for itself.
+        if (event.type === 'delta') setActivity(null)
         if (event.type === 'error') setError(event.message)
       }
     } catch (caught: unknown) {
@@ -101,6 +109,7 @@ export function useConversation(sessionId: string | undefined): Conversation {
       }
     } finally {
       sending.current = false
+      setActivity(null)
       if (!controller.signal.aborted) setIsSending(false)
       sendController.current = null
     }
@@ -108,5 +117,5 @@ export function useConversation(sessionId: string | undefined): Conversation {
 
   const clearError = useCallback(() => setError(null), [])
 
-  return { messages, isLoading, isSending, error, send, clearError }
+  return { messages, isLoading, isSending, activity, error, send, clearError }
 }

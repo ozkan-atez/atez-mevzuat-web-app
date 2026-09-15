@@ -2,12 +2,14 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import type { ChatModelClient, ChatStreamEvent } from './application/chat-model-client'
 import type { ChatRepository } from './application/ports'
+import type { AssistantKnowledge } from './application/assistant-knowledge'
 import { MAX_MESSAGE_LENGTH, sendChatMessage } from './application/send-chat-message'
 
 export interface ChatRouteOptions {
   repository: ChatRepository
   model: ChatModelClient
   modelName: string
+  knowledge: AssistantKnowledge
 }
 
 const messageBodySchema = z.object({
@@ -53,7 +55,7 @@ export async function chatRoutes(app: FastifyInstance, options: ChatRouteOptions
     try {
       for await (const event of sendChatMessage(
         { sessionId: id, content: body.data.content, signal: controller.signal },
-        options,
+        { ...options, onFailure: (error) => request.log.error({ err: error }, 'Sohbet yanıtı tamamlanamadı') },
       )) {
         writeEvent(reply, event)
       }

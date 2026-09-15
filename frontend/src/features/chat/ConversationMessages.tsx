@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { AlertTriangle, Sparkles } from 'lucide-react'
+import { AlertTriangle, Search, Sparkles } from 'lucide-react'
 import { renderMarkdown } from './renderMarkdown'
 import { STREAMING_MESSAGE_ID } from './useConversation'
 import type { ChatMessage } from './types'
@@ -7,14 +7,15 @@ import type { ChatMessage } from './types'
 interface Props {
   messages: ChatMessage[]
   isSending: boolean
+  activity: string | null
 }
 
-export function ConversationMessages({ messages, isSending }: Props) {
+export function ConversationMessages({ messages, isSending, activity }: Props) {
   const anchor = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     anchor.current?.scrollIntoView?.({ block: 'end' })
-  }, [messages])
+  }, [messages, activity])
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
@@ -45,7 +46,11 @@ export function ConversationMessages({ messages, isSending }: Props) {
                   elements, so untrusted output is never injected as HTML. */}
               {isUser ? message.content : renderMarkdown(message.content)}
               {isStreaming && isSending && (
-                <span className="ml-1 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-slate-400 align-middle" aria-label="Yanıt yazılıyor" />
+                activity
+                  ? <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                      <Search className="h-3 w-3 animate-pulse" />{activity}…
+                    </span>
+                  : <span className="ml-1 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-slate-400 align-middle" aria-label="Yanıt yazılıyor" />
               )}
             </div>
           </div>

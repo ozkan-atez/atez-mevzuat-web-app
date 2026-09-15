@@ -31,6 +31,8 @@ export interface ChatHistoryItem {
 export type ChatStreamEvent =
   | { type: 'message'; message: ChatMessage }
   | { type: 'delta'; content: string }
+  /** The assistant is reading the platform's own data; shown while it happens. */
+  | { type: 'tool'; name: string; label: string }
   | { type: 'complete'; message: ChatMessage }
   | { type: 'error'; message: string }
 

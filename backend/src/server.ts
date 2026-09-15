@@ -5,7 +5,7 @@ import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-stor
 import { GotenbergPdfRenderer } from './modules/delivery/infrastructure/gotenberg-pdf-renderer'
 import { GraphMailSender } from './modules/delivery/infrastructure/graph-mail-sender'
 import { GoogleGenAI } from '@google/genai'
-import { GeminiChatModelClient, UnavailableChatModelClient } from './modules/chat/infrastructure/gemini-chat-model-client'
+import { GeminiChatModelClient, UnavailableChatModelClient, type GeminiChatChunk } from './modules/chat/infrastructure/gemini-chat-model-client'
 import type { ChatModelClient } from './modules/chat/application/chat-model-client'
 
 async function start() {
@@ -46,12 +46,11 @@ function createChatModel(apiKey: string | undefined, timeoutMs: number): ChatMod
   const client = new GoogleGenAI({ apiKey })
   return new GeminiChatModelClient({
     async generateContentStream(request) {
-      const stream = await client.models.generateContentStream(request)
-      // The SDK's chunk type declares `text` as string | undefined; the port asks
-      // only for the text it actually carries.
-      return (async function* () {
-        for await (const chunk of stream) yield chunk.text ? { text: chunk.text } : {}
-      })()
+      const stream = await client.models.generateContentStream(request as never)
+      // The chunk is passed through whole: besides the text it carries the raw
+      // parts, and the adapter needs those for the thought signature that must
+      // travel back with each tool call.
+      return stream as unknown as AsyncIterable<GeminiChatChunk>
     },
   }, { timeoutMs })
 }

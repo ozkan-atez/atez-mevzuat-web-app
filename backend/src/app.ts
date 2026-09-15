@@ -6,6 +6,8 @@ import { PrismaChatRepository } from './modules/chat/infrastructure/prisma-chat-
 import { UnavailableChatModelClient } from './modules/chat/infrastructure/gemini-chat-model-client'
 import type { ChatModelClient } from './modules/chat/application/chat-model-client'
 import type { ChatRepository } from './modules/chat/application/ports'
+import type { AssistantKnowledge } from './modules/chat/application/assistant-knowledge'
+import { PrismaAssistantKnowledge } from './modules/chat/infrastructure/prisma-assistant-knowledge'
 import { prisma } from './platform/database'
 import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-scan-repository'
 import { scanRunsRoutes } from './modules/scan-runs/scan-runs.routes'
@@ -31,6 +33,7 @@ interface BuildAppOptions {
   chatRepository?: ChatRepository
   chatModel?: ChatModelClient
   chatModelName?: string
+  chatKnowledge?: AssistantKnowledge
   healthChecks?: HealthChecks
 }
 
@@ -80,6 +83,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     repository: options.chatRepository ?? new PrismaChatRepository(prisma),
     model: options.chatModel ?? new UnavailableChatModelClient('Gemini API anahtarı yapılandırılmamış.'),
     modelName: options.chatModelName ?? 'gemini-3.6-flash',
+    knowledge: options.chatKnowledge ?? new PrismaAssistantKnowledge(prisma, {
+      getContent: async (objectKey: string) => {
+        if (!options.objectStore) throw new Error('Nesne deposu yapılandırılmamış.')
+        return options.objectStore.getContent(objectKey)
+      },
+    }),
   })
   const topicRepository = options.topicRepository ?? new PrismaTopicAnalysisRepository(prisma)
   app.register(scanRunsRoutes, {
