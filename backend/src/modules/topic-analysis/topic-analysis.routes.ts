@@ -60,7 +60,7 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
     const { id } = request.params as { id: string }
     try {
       return reply.code(202).send(await options.repository.appendRevisionRequest({
-        topicId: id, requestKey: key.data, message: body.data.message, revisionKind: classifyRevisionKind(body.data.message),
+        topicId: id, requestKey: key.data, message: body.data.message, revisionKind: classifyRevisionKind(),
       }))
     } catch (error) {
       if (error instanceof TopicNotFoundError) return reply.code(404).send({ message: error.message })

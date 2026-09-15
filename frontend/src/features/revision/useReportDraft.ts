@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { sendTopicMessage } from '../analysis/api'
+import { getTopic, sendTopicMessage } from '../analysis/api'
 import { DraftConflictError, applyReportEdits, discardReportDraft, getReportDraft, publishReportDraft, revertReportEdit } from './api'
 import type { ReportDraftView } from './types'
 
@@ -119,7 +119,9 @@ export function useReportDraft(topicId: string | undefined): ReportDraftState {
           return
         }
       }
-      if (mounted.current) setError('Talep işlendi ancak rapor üzerinde bir değişiklik oluşmadı. Bu istek analiz revizyonu gerektiriyor olabilir.')
+      // No edit appeared, so report what the assistant actually answered rather
+      // than guessing why — it may have escalated the request or refused it.
+      if (mounted.current) setError(await latestAssistantReply(topicId) ?? 'Talep işlendi ancak rapor üzerinde bir değişiklik oluşmadı.')
     } catch (caught) {
       if (mounted.current) setError(caught instanceof Error ? caught.message : 'Talep gönderilemedi')
     } finally {
@@ -128,4 +130,10 @@ export function useReportDraft(topicId: string | undefined): ReportDraftState {
   }, [topicId, view])
 
   return { view, isLoading, isBusy, isPrompting, error, conflictVersion, editField, revert, publish, discard, submitPrompt, reload }
+}
+
+async function latestAssistantReply(topicId: string): Promise<string | null> {
+  const topic = await getTopic(topicId).catch(() => null)
+  const reply = topic?.thread.messages.filter((message) => message.role === 'ASSISTANT').at(-1)
+  return reply?.content ?? null
 }

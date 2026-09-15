@@ -29,14 +29,10 @@ const k2: ReportSpec = ReportSpecSchema.parse({
 })
 
 describe('classifyRevisionKind', () => {
-  it('sends a wording change to the patch path', () => {
-    expect(classifyRevisionKind('başlığı daha kısa yaz')).toBe('DIRECT_EDIT')
-    expect(classifyRevisionKind('özeti sadeleştir')).toBe('DIRECT_EDIT')
-  })
-
-  it('sends a request that touches evidence to the analysis path', () => {
-    expect(classifyRevisionKind('önceki ve yeni oranı karşılaştır')).toBe('ANALYSIS')
-    expect(classifyRevisionKind('yürürlük tarihini kaynağa göre düzelt')).toBe('ANALYSIS')
+  it('starts every request on the patch path, whatever words it contains', () => {
+    // Keyword routing sent "put only the dates on this line" to the analysis path
+    // because it contains "tarih", even though it only changes wording.
+    expect(classifyRevisionKind()).toBe('DIRECT_EDIT')
   })
 })
 

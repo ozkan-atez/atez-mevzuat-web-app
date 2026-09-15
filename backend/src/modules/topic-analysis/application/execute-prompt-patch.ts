@@ -4,6 +4,7 @@ import { AiProviderError } from '../../ai/domain/ai-errors'
 import { ReportPatchError, type ReportFieldEdit } from '../domain/report-patch'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import type { ReportDraftRepository, TopicObjectStore } from './ports'
+import type { PatchResponse } from './patch-prompts'
 import {
   PatchResponseSchema,
   REPORT_PATCH_PROMPT_VERSION,
@@ -40,6 +41,7 @@ interface RevisionRecorder {
     requestKey?: string
   }): Promise<void>
   getTopicRevisionMessage(topicId: string, messageId: string): Promise<{ id: string; content: string } | null>
+  appendRevisionRequest(input: { topicId: string; requestKey: string; message: string; revisionKind: 'ANALYSIS' | 'DIRECT_EDIT' }): Promise<{ messageId: string; status: 'QUEUED' }>
 }
 
 interface Dependencies {
@@ -48,6 +50,7 @@ interface Dependencies {
   objectStore: Pick<TopicObjectStore, 'getContent'>
   aiModel: AiModelClient
   model: string
+  maxAttempts: number
 }
 
 /**
@@ -55,6 +58,79 @@ interface Dependencies {
  * the inline editor uses. The model never writes the report: it only names which
  * fields change, so a prompt cannot reword anything the user did not ask about.
  */
+interface PatchAttempt {
+  ok: true
+  parsed: { data: PatchResponse }
+}
+
+type PatchResult = PatchAttempt | { ok: false; message: string }
+
+/**
+ * Retries a provider error the same bounded way the analysis path does. A single
+ * attempt made one transient 503 enough to lose the whole request.
+ */
+async function requestPatch(
+  topicId: string,
+  message: { id: string; content: string },
+  spec: ReportSpec,
+  inputHash: string,
+  dependencies: Dependencies,
+): Promise<PatchResult> {
+  let lastMessage = 'Revizyon isteği tamamlanamadı.'
+
+  for (let attemptNo = 1; attemptNo <= Math.max(1, dependencies.maxAttempts); attemptNo += 1) {
+    const execution = await dependencies.repository.startTopicAiExecution({
+      topicId,
+      kind: 'PUBLICATION_REVISION',
+      attemptNo,
+      model: dependencies.model,
+      promptVersion: REPORT_PATCH_PROMPT_VERSION,
+      schemaVersion: 1,
+      inputHash,
+      requestMessageId: message.id,
+    })
+    const startedAt = Date.now()
+
+    try {
+      const response = await dependencies.aiModel.generateStructured({
+        model: dependencies.model,
+        systemInstruction: buildPatchSystemInstruction(),
+        parts: buildPatchPromptParts({ spec, request: message.content }),
+        responseJsonSchema: patchResponseJsonSchema,
+      })
+
+      const parsed = PatchResponseSchema.safeParse(response.json)
+      if (!parsed.success) {
+        lastMessage = 'Model geçerli bir değişiklik listesi döndürmedi.'
+        await dependencies.repository.failTopicAiExecution(execution.id, {
+          category: 'INVALID_RESPONSE', providerStatus: null, message: lastMessage,
+        })
+        // A malformed response is not a provider outage; asking again blindly would
+        // just spend another call on the same prompt.
+        return { ok: false, message: lastMessage }
+      }
+
+      await dependencies.repository.completeTopicAiExecution(execution.id, {
+        providerRequestId: response.providerRequestId,
+        latencyMs: Date.now() - startedAt,
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+      })
+      return { ok: true, parsed: { data: parsed.data } }
+    } catch (error) {
+      const failure = error instanceof AiProviderError
+        ? { category: error.category, providerStatus: error.providerStatus, message: error.message }
+        : { category: 'INVALID_RESPONSE', providerStatus: null, message: 'Revizyon isteği tamamlanamadı.' }
+      lastMessage = failure.message
+      await dependencies.repository.failTopicAiExecution(execution.id, failure)
+      if (error instanceof AiProviderError && error.retryable && attemptNo < dependencies.maxAttempts) continue
+      return { ok: false, message: lastMessage }
+    }
+  }
+
+  return { ok: false, message: lastMessage }
+}
+
 export async function executePromptPatch(
   command: { topicId: string; messageId: string },
   dependencies: Dependencies,
@@ -68,55 +144,26 @@ export async function executePromptPatch(
     return
   }
 
-  const execution = await dependencies.repository.startTopicAiExecution({
-    topicId: command.topicId,
-    kind: 'PUBLICATION_REVISION',
-    attemptNo: 1,
-    model: dependencies.model,
-    promptVersion: REPORT_PATCH_PROMPT_VERSION,
-    schemaVersion: 1,
-    inputHash: createHash('sha256').update(`${JSON.stringify(spec)}\n${message.content}\n${dependencies.model}`).digest('hex'),
-    requestMessageId: message.id,
-  })
-
-  const startedAt = Date.now()
-  let response
-  try {
-    response = await dependencies.aiModel.generateStructured({
-      model: dependencies.model,
-      systemInstruction: buildPatchSystemInstruction(),
-      parts: buildPatchPromptParts({ spec, request: message.content }),
-      responseJsonSchema: patchResponseJsonSchema,
-    })
-  } catch (error) {
-    const failure = error instanceof AiProviderError
-      ? { category: error.category, providerStatus: error.providerStatus, message: error.message }
-      : { category: 'INVALID_RESPONSE', providerStatus: null, message: 'Revizyon isteği tamamlanamadı.' }
-    await dependencies.repository.failTopicAiExecution(execution.id, failure)
-    await recordOutcome(command.topicId, 'ERROR', failure.message, dependencies)
+  const inputHash = createHash('sha256').update(`${JSON.stringify(spec)}\n${message.content}\n${dependencies.model}`).digest('hex')
+  const attempted = await requestPatch(command.topicId, message, spec, inputHash, dependencies)
+  if (!attempted.ok) {
+    await recordOutcome(command.topicId, 'ERROR', attempted.message, dependencies)
     return
   }
-
-  const parsed = PatchResponseSchema.safeParse(response.json)
-  if (!parsed.success) {
-    await dependencies.repository.failTopicAiExecution(execution.id, {
-      category: 'INVALID_RESPONSE', providerStatus: null, message: 'Model geçerli bir değişiklik listesi döndürmedi.',
-    })
-    await recordOutcome(command.topicId, 'ERROR', 'Model geçerli bir değişiklik listesi döndürmedi.', dependencies)
-    return
-  }
-
-  await dependencies.repository.completeTopicAiExecution(execution.id, {
-    providerRequestId: response.providerRequestId,
-    latencyMs: Date.now() - startedAt,
-    inputTokens: response.usage.inputTokens,
-    outputTokens: response.usage.outputTokens,
-  })
+  const parsed = attempted.parsed
 
   if (parsed.data.outcome === 'NEEDS_ANALYSIS') {
+    // The facts have to move, so the request is handed to the analysis path rather
+    // than dropped — the user asked for a change and should get one.
+    await dependencies.repository.appendRevisionRequest({
+      topicId: command.topicId,
+      requestKey: `escalate:${message.id}`,
+      message: message.content,
+      revisionKind: 'ANALYSIS',
+    })
     await recordOutcome(command.topicId, 'REVISION_RESULT',
-      parsed.data.reason ?? 'Bu talep kanıtlı bir olguyu değiştiriyor; alan düzenlemesiyle karşılanamaz, analiz revizyonu gerekir.',
-      dependencies)
+      `${parsed.data.reason ?? 'Bu talep kanıtlı bir olguyu değiştiriyor.'} Analiz revizyonu başlatıldı.`,
+      dependencies, `escalated:${message.id}`)
     return
   }
   if (parsed.data.outcome === 'NOT_POSSIBLE' || !parsed.data.edits?.length) {

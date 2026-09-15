@@ -47,8 +47,8 @@ async function seedRevisionRequest(message: string) {
   return { topicId: topic.id, messageId: request.messageId }
 }
 
-const deps = (topicId: string, aiModel: AiModelClient) => ({
-  repository: topicRepository, draftRepository, objectStore: objectStore(topicId), aiModel, model: 'gemini-test',
+const deps = (topicId: string, aiModel: AiModelClient, maxAttempts = 1) => ({
+  repository: topicRepository, draftRepository, objectStore: objectStore(topicId), aiModel, model: 'gemini-test', maxAttempts,
 })
 
 async function threadMessages(topicId: string) {
@@ -97,16 +97,29 @@ describe('executePromptPatch', () => {
     expect(messages.at(-1)?.content).toMatch(/değiştirilemez/)
   })
 
-  it('routes a request that changes evidenced facts to the analysis path instead', async () => {
+  it('escalates a request that changes evidenced facts to the analysis path', async () => {
     const { topicId, messageId } = await seedRevisionRequest('yeni bir yürürlük tarihi ekle')
-    const model = stubModel({ outcome: 'NEEDS_ANALYSIS', reason: 'Tarih kanıta bağlıdır; analiz revizyonu gerekir.' })
+    const model = stubModel({ outcome: 'NEEDS_ANALYSIS', reason: 'Tarih kanıta bağlıdır.' })
 
     await executePromptPatch({ topicId, messageId }, deps(topicId, model))
 
     expect(await draftRepository.getOpenDraft(topicId)).toBeNull()
+    // The user asked for a change, so the request is handed on rather than dropped.
+    const queued = await prisma.topicOutbox.findMany({ where: { topicId }, orderBy: { createdAt: 'asc' } })
+    expect(queued.map((row) => row.command)).toEqual(['REVISE_FIELDS', 'REVISE_ANALYSIS'])
     const messages = await threadMessages(topicId)
-    expect(messages.at(-1)).toMatchObject({ kind: 'REVISION_RESULT', revisionKind: 'DIRECT_EDIT' })
-    expect(messages.at(-1)?.content).toMatch(/analiz revizyonu/)
+    expect(messages.at(-1)?.content).toMatch(/Analiz revizyonu başlatıldı/)
+  })
+
+  it('does not escalate the same request twice when the command is redelivered', async () => {
+    const { topicId, messageId } = await seedRevisionRequest('yeni bir yürürlük tarihi ekle')
+    const model = stubModel({ outcome: 'NEEDS_ANALYSIS', reason: 'Tarih kanıta bağlıdır.' })
+
+    await executePromptPatch({ topicId, messageId }, deps(topicId, model))
+    await executePromptPatch({ topicId, messageId }, deps(topicId, model))
+
+    const queued = await prisma.topicOutbox.findMany({ where: { topicId, command: 'REVISE_ANALYSIS' } })
+    expect(queued).toHaveLength(1)
   })
 
   it('reports a malformed model response without touching the report', async () => {
@@ -151,5 +164,28 @@ describe('executePromptPatch', () => {
     const outbox = await prisma.topicOutbox.findFirstOrThrow({ where: { topicId } })
 
     expect(outbox.command).toBe('REVISE_FIELDS')
+  })
+
+  it('retries a transient provider error before giving up', async () => {
+    const { topicId, messageId } = await seedRevisionRequest('başlığı kısalt')
+    const generateStructured = vi.fn()
+      .mockRejectedValueOnce(new AiProviderError('PROVIDER_UNAVAILABLE', true, 'Gemini servisi geçici olarak kullanılamıyor.'))
+      .mockResolvedValue({ json: { outcome: 'EDITS', edits: [{ path: 'title', value: 'Kısa Başlık' }] }, providerRequestId: 'req-2', usage: { inputTokens: 5, outputTokens: 2 } })
+
+    await executePromptPatch({ topicId, messageId }, deps(topicId, { generateStructured }, 3))
+
+    expect(generateStructured).toHaveBeenCalledTimes(2)
+    const draft = await draftRepository.getOpenDraft(topicId)
+    expect(draft?.edits).toHaveLength(1)
+    expect(await prisma.topicAiExecution.count({ where: { topicId, kind: 'PUBLICATION_REVISION' } })).toBe(2)
+  })
+
+  it('does not retry a malformed response, which another call would not fix', async () => {
+    const { topicId, messageId } = await seedRevisionRequest('başlığı kısalt')
+    const generateStructured = vi.fn().mockResolvedValue({ json: { outcome: 'REWRITE' }, providerRequestId: 'r', usage: { inputTokens: 1, outputTokens: 1 } })
+
+    await executePromptPatch({ topicId, messageId }, deps(topicId, { generateStructured }, 3))
+
+    expect(generateStructured).toHaveBeenCalledTimes(1)
   })
 })

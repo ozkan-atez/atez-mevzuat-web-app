@@ -1,16 +1,20 @@
 import type { AiInputPart } from '../../ai/application/ai-model-client'
 
 /**
- * Routes a revision request to the path that can honour it.
+ * Every revision request starts on the patch path.
  *
- * `DIRECT_EDIT` supersedes the old `PUBLICATION` route: both cover "the facts
- * stand, the wording changes", but the patch path edits named fields instead of
- * regenerating the whole spec, so untouched fields cannot drift. `PUBLICATION`
- * remains in the enum for rows written before this change.
+ * Routing used to match keywords, which cannot tell "put only the dates on this
+ * line" from "the date is wrong, check the source": both contain "tarih", and the
+ * first — a pure wording change — was sent to the expensive analysis path and
+ * failed there. The patch model sees the request together with the current field
+ * values and answers NEEDS_ANALYSIS when the facts really have to move, so it is
+ * the better judge; `executePromptPatch` escalates on that answer.
+ *
+ * `PUBLICATION` remains in the enum only for rows written before the patch path
+ * existed.
  */
-export function classifyRevisionKind(message: string): 'ANALYSIS' | 'DIRECT_EDIT' {
-  const analysisTerms = /(?:kaynak|kanıt|analiz|etkilenen|oran|tarih|hüküm|mevzuat|karşılaştır|önceki|yeni durum|gtip|gümrük|ithalat|ihracat)/i
-  return analysisTerms.test(message) ? 'ANALYSIS' : 'DIRECT_EDIT'
+export function classifyRevisionKind(): 'DIRECT_EDIT' {
+  return 'DIRECT_EDIT'
 }
 
 export function buildRevisionContext(input: {

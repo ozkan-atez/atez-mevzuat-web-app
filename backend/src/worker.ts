@@ -128,7 +128,8 @@ async function startWorker() {
       if (command.command === 'REVISE_FIELDS') {
         if (!command.messageId) throw new Error('Alan revizyonu komutunda messageId eksik.')
         await executePromptPatch({ topicId: command.topicId, messageId: command.messageId }, {
-          repository: topicRepository, draftRepository, objectStore, aiModel, model: env.gemini.model,
+          repository: topicRepository, draftRepository, objectStore, aiModel,
+          model: env.gemini.model, maxAttempts: env.gemini.maxAttempts,
         })
       } else if (command.command === 'RETRY_ANALYSIS') {
         await retryTopicAnalysis(command.topicId, {
