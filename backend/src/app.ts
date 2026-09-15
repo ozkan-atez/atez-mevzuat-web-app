@@ -2,6 +2,10 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import { authRoutes } from './modules/auth/auth.routes'
 import { chatRoutes } from './modules/chat/chat.routes'
+import { PrismaChatRepository } from './modules/chat/infrastructure/prisma-chat-repository'
+import { UnavailableChatModelClient } from './modules/chat/infrastructure/gemini-chat-model-client'
+import type { ChatModelClient } from './modules/chat/application/chat-model-client'
+import type { ChatRepository } from './modules/chat/application/ports'
 import { prisma } from './platform/database'
 import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-scan-repository'
 import { scanRunsRoutes } from './modules/scan-runs/scan-runs.routes'
@@ -24,6 +28,9 @@ interface BuildAppOptions {
   mailSender?: MailSender
   mailSenderIdentity?: { address: string | undefined; name: string }
   timezone?: string
+  chatRepository?: ChatRepository
+  chatModel?: ChatModelClient
+  chatModelName?: string
   healthChecks?: HealthChecks
 }
 
@@ -68,7 +75,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   // Register Modules
   app.register(authRoutes, { prefix: '/api/auth' })
-  app.register(chatRoutes, { prefix: '/api/chat' })
+  app.register(chatRoutes, {
+    prefix: '/api/v1/chat',
+    repository: options.chatRepository ?? new PrismaChatRepository(prisma),
+    model: options.chatModel ?? new UnavailableChatModelClient('Gemini API anahtarı yapılandırılmamış.'),
+    modelName: options.chatModelName ?? 'gemini-3.6-flash',
+  })
   const topicRepository = options.topicRepository ?? new PrismaTopicAnalysisRepository(prisma)
   app.register(scanRunsRoutes, {
     prefix: '/api/v1/scan-runs',

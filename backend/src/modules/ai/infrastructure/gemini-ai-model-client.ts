@@ -71,7 +71,7 @@ export class GeminiAiModelClient implements AiModelClient {
   }
 }
 
-function mapGeminiError(error: unknown): AiProviderError {
+export function mapGeminiError(error: unknown): AiProviderError {
   if (error instanceof AiProviderError) return error
   const status = readStatus(error)
   if (status === 401) return new AiProviderError('AUTHENTICATION', false, 'Gemini API anahtarı geçersiz veya eksik.', status)

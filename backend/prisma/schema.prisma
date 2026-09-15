@@ -766,12 +766,39 @@ model Job {
   updatedAt      DateTime @updatedAt
 }
 
+enum GeneralChatRole {
+  USER
+  ASSISTANT
+}
+
+enum GeneralChatMessageStatus {
+  COMPLETED
+  FAILED
+}
+
+/// A general assistant conversation. Kept apart from AnalysisThread, which is the
+/// audit record of a report's revisions and must not be deleted or retitled by
+/// ordinary chat.
 model ChatSession {
-  id        String   @id @default(uuid())
-  ownerId   String
+  id        String               @id @default(uuid())
+  ownerId   String?
   title     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  messages  GeneralChatMessage[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+}
+
+model GeneralChatMessage {
+  id          String                   @id @default(uuid())
+  sessionId   String
+  session     ChatSession              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role        GeneralChatRole
+  content     String
+  status      GeneralChatMessageStatus @default(COMPLETED)
+  errorDetail String?
+  createdAt   DateTime                 @default(now())
+
+  @@index([sessionId, createdAt])
 }
 
 enum EmailDispatchStatus {
