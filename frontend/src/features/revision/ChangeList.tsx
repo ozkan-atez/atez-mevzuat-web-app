@@ -94,7 +94,7 @@ export function ChangeList({ edits, onRevert, isBusy }: Props) {
                     <p className="mt-0.5 break-words italic text-slate-600">{edit.prompt}</p>
                   </div>
                 )}
-                {!reverted && !edit.revertsEditId && (
+                {!reverted && !edit.revertsEditId && edit.revertible && (
                   <button
                     type="button"
                     onClick={() => onRevert(edit.id)}
@@ -105,6 +105,9 @@ export function ChangeList({ edits, onRevert, isBusy }: Props) {
                   </button>
                 )}
                 {reverted && <p className="text-[11px] font-medium text-slate-400">Bu değişiklik geri alındı.</p>}
+                {!reverted && !edit.revertsEditId && !edit.revertible && (
+                  <p className="text-[11px] font-medium text-slate-400">Bu alan analiz revizyonundan geldi; tek tek geri alınamaz. Taslağı iptal ederek tümünü bırakabilirsiniz.</p>
+                )}
               </div>
             )}
           </li>

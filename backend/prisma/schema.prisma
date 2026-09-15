@@ -607,6 +607,7 @@ model AnalysisRevision {
   reports           ReportRevision[]
   executions        TopicAiExecution[]
   createdAt         DateTime               @default(now())
+  stagedDrafts      ReportDraft[]
 
   @@unique([topicId, version])
   @@index([topicId, createdAt])
@@ -824,18 +825,21 @@ enum ReportEditSource {
 }
 
 model ReportDraft {
-  id          String            @id @default(uuid())
-  topicId     String
-  topic       TopicProcess      @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  baseVersion Int
-  specJson    Json
-  status      ReportDraftStatus @default(OPEN)
-  createdBy   String?
-  closedAt    DateTime?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  edits       ReportFieldEdit[]
-  revision    ReportRevision?
+  id                 String            @id @default(uuid())
+  topicId            String
+  topic              TopicProcess      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  baseVersion        Int
+  /// Set when an analysis revision staged its result here; publishing binds to it.
+  analysisRevisionId String?
+  analysisRevision   AnalysisRevision? @relation(fields: [analysisRevisionId], references: [id], onDelete: SetNull)
+  specJson           Json
+  status             ReportDraftStatus @default(OPEN)
+  createdBy          String?
+  closedAt           DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  edits              ReportFieldEdit[]
+  revision           ReportRevision?
 
   @@index([topicId, createdAt])
 }

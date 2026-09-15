@@ -72,6 +72,68 @@ describe('executePromptPatch', () => {
     expect((draft?.spec as { title: string }).title).toBe('Kısa Başlık')
   })
 
+  it('applies every request carried by one message', async () => {
+    const { topicId, messageId } = await seedRevisionRequest('başlığı kısalt ve özeti sadeleştir')
+    const model = stubModel({
+      outcome: 'EDITS',
+      requests: [
+        { summary: 'Başlığı kısalt.', outcome: 'EDITS' },
+        { summary: 'Özeti sadeleştir.', outcome: 'EDITS' },
+      ],
+      edits: [
+        { path: 'title', value: 'Kısa Başlık', requestIndex: 0 },
+        { path: 'summary', value: 'Sade özet.', requestIndex: 1 },
+      ],
+    })
+
+    await executePromptPatch({ topicId, messageId }, deps(topicId, model))
+
+    const draft = await draftRepository.getOpenDraft(topicId)
+    expect(draft?.edits.map((edit) => edit.path)).toEqual(['title', 'summary'])
+  })
+
+  it('applies the editable part of a mixed message and escalates only the rest', async () => {
+    const { topicId, messageId } = await seedRevisionRequest('başlığı kısalt ve yeni bir yürürlük tarihi ekle')
+    const model = stubModel({
+      outcome: 'EDITS',
+      requests: [
+        { summary: 'Başlığı kısalt.', outcome: 'EDITS' },
+        { summary: 'Yeni bir yürürlük tarihi ekle.', outcome: 'NEEDS_ANALYSIS', reason: 'Tarih kanıta bağlıdır.' },
+      ],
+      edits: [{ path: 'title', value: 'Kısa Başlık', requestIndex: 0 }],
+    })
+
+    await executePromptPatch({ topicId, messageId }, deps(topicId, model))
+
+    const draft = await draftRepository.getOpenDraft(topicId)
+    expect(draft?.edits.map((edit) => edit.path)).toEqual(['title'])
+    // Only the part that needs evidence goes on to the analysis path.
+    const escalated = await prisma.chatMessage.findFirstOrThrow({ where: { thread: { topicId }, revisionKind: 'ANALYSIS', role: 'USER' } })
+    expect(escalated.content).toBe('Yeni bir yürürlük tarihi ekle.')
+    expect((await threadMessages(topicId)).at(-1)?.content).toMatch(/Analiz revizyonuna aktarıldı/)
+  })
+
+  it('drops edits belonging to a request the model could not fulfil', async () => {
+    const { topicId, messageId } = await seedRevisionRequest('başlığı kısalt ve tabloya satır ekle')
+    const model = stubModel({
+      outcome: 'EDITS',
+      requests: [
+        { summary: 'Başlığı kısalt.', outcome: 'EDITS' },
+        { summary: 'Tabloya satır ekle.', outcome: 'NOT_POSSIBLE', reason: 'Satır eklemek yapı değişikliğidir.' },
+      ],
+      edits: [
+        { path: 'title', value: 'Kısa Başlık', requestIndex: 0 },
+        { path: 'summary', value: 'Uydurma satır özeti.', requestIndex: 1 },
+      ],
+    })
+
+    await executePromptPatch({ topicId, messageId }, deps(topicId, model))
+
+    const draft = await draftRepository.getOpenDraft(topicId)
+    expect(draft?.edits.map((edit) => edit.path)).toEqual(['title'])
+    expect((await threadMessages(topicId)).at(-1)?.content).toMatch(/Satır eklemek yapı değişikliğidir/)
+  })
+
   it('never sends the evidence bundle, only the editable fields and the request', async () => {
     const { topicId, messageId } = await seedRevisionRequest('özeti sadeleştir')
     const model = stubModel({ outcome: 'EDITS', edits: [{ path: 'summary', value: 'Sade özet.' }] })

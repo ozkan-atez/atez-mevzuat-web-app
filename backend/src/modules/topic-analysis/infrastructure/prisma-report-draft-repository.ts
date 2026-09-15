@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
 import type { PublishedReportBase, ReportDraftRecord, ReportDraftRepository } from '../application/ports'
+import { matchEditablePattern } from '../domain/report-patch'
 
 export class DraftConflictError extends Error {}
 
@@ -129,6 +130,10 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
     return mapDraft(draft)
   }
 
+  async setDraftAnalysisRevision(draftId: string, analysisRevisionId: string): Promise<void> {
+    await this.prisma.reportDraft.update({ where: { id: draftId }, data: { analysisRevisionId } })
+  }
+
   async closeDraft(draftId: string, status: 'PUBLISHED' | 'DISCARDED'): Promise<void> {
     await this.prisma.reportDraft.update({
       where: { id: draftId },
@@ -141,6 +146,7 @@ function mapDraft(draft: {
   id: string
   topicId: string
   baseVersion: number
+  analysisRevisionId: string | null
   specJson: Prisma.JsonValue
   status: 'OPEN' | 'PUBLISHED' | 'DISCARDED'
   createdAt: Date
@@ -163,6 +169,7 @@ function mapDraft(draft: {
     id: draft.id,
     topicId: draft.topicId,
     baseVersion: draft.baseVersion,
+    analysisRevisionId: draft.analysisRevisionId,
     spec: draft.specJson,
     status: draft.status,
     createdAt: draft.createdAt.toISOString(),
@@ -178,6 +185,9 @@ function mapDraft(draft: {
       chatMessageId: edit.chatMessageId,
       revertsEditId: edit.revertsEditId,
       revertedByEditId: revertedBy.get(edit.id) ?? null,
+      // Derived rather than stored: whether a path is editable is a rule, not a fact
+      // about this row, and storing it would let the two drift apart.
+      revertible: matchEditablePattern(edit.path) !== null,
       createdAt: edit.createdAt.toISOString(),
     })),
   }

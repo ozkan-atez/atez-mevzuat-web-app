@@ -159,6 +159,8 @@ export interface ReportDraftEditRecord {
   chatMessageId: string | null
   revertsEditId: string | null
   revertedByEditId: string | null
+  /** Structural changes staged by an analysis revision cannot be undone field by field. */
+  revertible: boolean
   createdAt: string
 }
 
@@ -166,6 +168,8 @@ export interface ReportDraftRecord {
   id: string
   topicId: string
   baseVersion: number
+  /** Set when an analysis revision staged its result here. */
+  analysisRevisionId: string | null
   spec: unknown
   status: 'OPEN' | 'PUBLISHED' | 'DISCARDED'
   edits: ReportDraftEditRecord[]
@@ -192,6 +196,8 @@ export interface ReportDraftRepository {
   getPublishedBase(topicId: string): Promise<PublishedReportBase | null>
   getOpenDraft(topicId: string): Promise<ReportDraftRecord | null>
   openDraft(input: { topicId: string; baseVersion: number; spec: unknown; createdBy: string | null }): Promise<ReportDraftRecord>
+  /** Binds the draft to the analysis revision whose result it now carries. */
+  setDraftAnalysisRevision(draftId: string, analysisRevisionId: string): Promise<void>
   appendEdits(input: {
     draftId: string
     spec: unknown

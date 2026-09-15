@@ -152,27 +152,48 @@ export async function executePromptPatch(
   }
   const parsed = attempted.parsed
 
-  if (parsed.data.outcome === 'NEEDS_ANALYSIS') {
-    // The facts have to move, so the request is handed to the analysis path rather
-    // than dropped — the user asked for a change and should get one.
-    await dependencies.repository.appendRevisionRequest({
-      topicId: command.topicId,
-      requestKey: `escalate:${message.id}`,
-      message: message.content,
-      revisionKind: 'ANALYSIS',
-    })
+  // One message can carry several asks; each is decided on its own so a part that
+  // needs analysis no longer sinks the parts that are plain text edits.
+  const requests = parsed.data.requests ?? []
+  const applicable = (parsed.data.edits ?? []).filter((edit) => {
+    const request = edit.requestIndex === undefined ? undefined : requests[edit.requestIndex]
+    return request === undefined || request.outcome === 'EDITS'
+  })
+  const escalations = requests.filter((request) => request.outcome === 'NEEDS_ANALYSIS')
+  const refusals = requests.filter((request) => request.outcome === 'NOT_POSSIBLE')
+
+  if (applicable.length === 0) {
+    if (escalations.length > 0 || parsed.data.outcome === 'NEEDS_ANALYSIS') {
+      // The facts have to move, so the request is handed to the analysis path rather
+      // than dropped — the user asked for a change and should get one.
+      await dependencies.repository.appendRevisionRequest({
+        topicId: command.topicId,
+        requestKey: `escalate:${message.id}`,
+        message: escalations.length > 0 ? escalations.map((request) => request.summary).join('\n') : message.content,
+        revisionKind: 'ANALYSIS',
+      })
+      await recordOutcome(command.topicId, 'REVISION_RESULT',
+        `${escalations[0]?.reason ?? parsed.data.reason ?? 'Bu talep kanıtlı bir olguyu değiştiriyor.'} Alan düzenlemesiyle karşılanamadığı için analiz revizyonu başlatıldı; sonuç kanıtın desteklediği kadarıyla oluşur ve değişiklik listesinde alan kaydı bırakmaz.`,
+        dependencies, `escalated:${message.id}`)
+      return
+    }
     await recordOutcome(command.topicId, 'REVISION_RESULT',
-      `${parsed.data.reason ?? 'Bu talep kanıtlı bir olguyu değiştiriyor.'} Alan düzenlemesiyle karşılanamadığı için analiz revizyonu başlatıldı; sonuç kanıtın desteklediği kadarıyla oluşur ve değişiklik listesinde alan kaydı bırakmaz.`,
-      dependencies, `escalated:${message.id}`)
-    return
-  }
-  if (parsed.data.outcome === 'NOT_POSSIBLE' || !parsed.data.edits?.length) {
-    await recordOutcome(command.topicId, 'REVISION_RESULT',
-      parsed.data.reason ?? 'Talep, düzenlenebilir alanlarla karşılanamadı.', dependencies)
+      refusals[0]?.reason ?? parsed.data.reason ?? 'Talep, düzenlenebilir alanlarla karşılanamadı.', dependencies)
     return
   }
 
-  const edits: ReportFieldEdit[] = parsed.data.edits.map((edit) => ({
+  // Part of the message is an edit and part needs evidence: apply what can be
+  // applied now and let the analysis path pick up the rest.
+  if (escalations.length > 0) {
+    await dependencies.repository.appendRevisionRequest({
+      topicId: command.topicId,
+      requestKey: `escalate:${message.id}`,
+      message: escalations.map((request) => request.summary).join('\n'),
+      revisionKind: 'ANALYSIS',
+    })
+  }
+
+  const edits: ReportFieldEdit[] = applicable.map((edit) => ({
     path: edit.path,
     value: edit.clear ? null : edit.value,
   }))
@@ -190,7 +211,12 @@ export async function executePromptPatch(
 
     // The model may have handled part of a mixed request; the rest must be said out
     // loud or the reader assumes everything they asked for was done.
-    const remark = parsed.data.reason ? ` Yapılamayan kısım: ${parsed.data.reason}` : ''
+    const notes = [
+      ...escalations.map((request) => `Analiz revizyonuna aktarıldı: ${request.summary}`),
+      ...refusals.map((request) => `Yapılamayan kısım: ${request.reason ?? request.summary}`),
+    ]
+    if (notes.length === 0 && parsed.data.reason) notes.push(`Yapılamayan kısım: ${parsed.data.reason}`)
+    const remark = notes.length > 0 ? ` ${notes.join(' ')}` : ''
     await recordOutcome(command.topicId, 'REVISION_RESULT',
       `${view.draft?.edits.length ?? 0} değişiklik taslağa eklendi.${remark}`, dependencies, `patch-result:${message.id}`)
   } catch (error) {

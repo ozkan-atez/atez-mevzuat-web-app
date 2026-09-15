@@ -9,7 +9,9 @@ import type { PrismaTopicAnalysisRepository } from '../infrastructure/prisma-top
 import { buildEvidenceBundle } from './build-evidence-bundle'
 import { buildRevisionContext } from './build-revision-context'
 import { analysisResponseJsonSchema, buildTopicAnalysisSystemInstruction, TOPIC_ANALYSIS_PROMPT_VERSION } from './analysis-prompts'
-import { publishTopicAnalysis } from './execute-run-topic-analyses'
+import { buildReportSpec } from './build-report-spec'
+import { stageAnalysisInDraft } from './stage-analysis-in-draft'
+import type { ReportDraftRepository } from './ports'
 import type { TopicObjectStore } from './ports'
 import { renderAnalysisMarkdown } from './render-analysis-markdown'
 import { renderReportHtml } from './render-report-html'
@@ -17,6 +19,7 @@ import { validateReportHtml } from './validate-report-html'
 
 interface Dependencies {
   repository: PrismaTopicAnalysisRepository
+  draftRepository: ReportDraftRepository
   objectStore: TopicObjectStore
   aiModel: AiModelClient
   model: string
@@ -30,19 +33,23 @@ export async function executeTopicRevision(command: { topicId: string; messageId
     await appendSuccessResult(work, work.requestReport.version, dependencies)
     return
   }
+  // A previous attempt already produced the analysis for this message; finish by
+  // staging its result rather than running the model again.
   if (work.message.revisionKind === 'ANALYSIS' && work.requestAnalysis) {
     const analysis = AnalysisResultSchema.parse(JSON.parse((await dependencies.objectStore.getContent(work.requestAnalysis.analysisObjectKey)).toString('utf8')))
     if (analysis.status === 'PASS') {
-      const context = await dependencies.repository.getRunReportContext(work.runId)
-      if (!context) throw new Error('Run rapor bağlamı bulunamadı.')
-      await publishTopicAnalysis(context, {
-        ...work.requestAnalysis,
-        analysis,
-        requestMessageId: work.message.id,
-      }, await dependencies.repository.getTopicSequence(work.topicId), dependencies)
-    } else {
+      const staged = await stageAnalysisInDraft({
+        topicId: work.topicId,
+        spec: buildReportSpec(analysis, { sequence: await dependencies.repository.getTopicSequence(work.topicId) }),
+        analysisRevisionId: work.requestAnalysis.id,
+        prompt: work.message.content,
+        chatMessageId: work.message.id,
+      }, { repository: dependencies.draftRepository, objectStore: dependencies.objectStore })
       await dependencies.repository.markTopicCompleted(work.topicId)
+      await appendStagedResult(work, staged.stagedChanges, dependencies)
+      return
     }
+    await dependencies.repository.markTopicCompleted(work.topicId)
     await appendSuccessResult(work, work.requestAnalysis.version, dependencies)
     return
   }
@@ -93,12 +100,20 @@ async function executeAnalysisRevision(work: NonNullable<Awaited<ReturnType<Pris
       inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens,
     })
     if (analysis.status === 'PASS') {
-      const context = await dependencies.repository.getRunReportContext(topic.runId)
-      if (!context) throw new Error('Run rapor bağlamı bulunamadı.')
-      await publishTopicAnalysis(context, { ...revision, analysisObjectKey, markdownObjectKey, analysis, requestMessageId: work.message.id }, await dependencies.repository.getTopicSequence(work.topicId), dependencies)
-    } else {
+      // Staged, not published: a revision is the user's decision to make.
+      const spec = buildReportSpec(analysis, { sequence: await dependencies.repository.getTopicSequence(work.topicId) })
+      const staged = await stageAnalysisInDraft({
+        topicId: work.topicId,
+        spec,
+        analysisRevisionId: revision.id,
+        prompt: work.message.content,
+        chatMessageId: work.message.id,
+      }, { repository: dependencies.draftRepository, objectStore: dependencies.objectStore })
       await dependencies.repository.markTopicCompleted(work.topicId)
+      await appendStagedResult(work, staged.stagedChanges, dependencies)
+      return
     }
+    await dependencies.repository.markTopicCompleted(work.topicId)
     await appendSuccessResult(work, version, dependencies)
   } catch (error) {
     await failRevision(work.topicId, execution.id, 'ANALYSIS', error, dependencies)
@@ -150,6 +165,20 @@ async function executePublicationRevision(work: NonNullable<Awaited<ReturnType<P
     await failRevision(work.topicId, execution.id, 'PUBLICATION', error, dependencies)
     throw error
   }
+}
+
+async function appendStagedResult(
+  work: NonNullable<Awaited<ReturnType<PrismaTopicAnalysisRepository['getTopicRevisionWorkItem']>>>,
+  stagedChanges: number,
+  dependencies: Dependencies,
+): Promise<void> {
+  await dependencies.repository.appendRevisionResult(work.topicId, {
+    role: 'ASSISTANT', kind: 'REVISION_RESULT', revisionKind: work.message.revisionKind,
+    content: stagedChanges === 0
+      ? 'Analiz yeniden yapıldı; raporda değişen bir alan çıkmadı.'
+      : `Analiz yeniden yapıldı; ${stagedChanges} alan taslağa eklendi. Yayımlamak için onayınız gerekiyor.`,
+    requestKey: `revision-result:${work.message.id}`,
+  })
 }
 
 async function appendSuccessResult(

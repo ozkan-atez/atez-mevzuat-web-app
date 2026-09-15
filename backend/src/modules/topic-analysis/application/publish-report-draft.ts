@@ -55,7 +55,8 @@ export async function publishReportDraft(
   const stored = await dependencies.topicRepository.createReportRevision({
     scanRunId: base.runId,
     topicId: input.topicId,
-    analysisRevisionId: base.analysisRevisionId,
+    // A staged analysis revision supersedes the one the draft opened on.
+    analysisRevisionId: draft.analysisRevisionId ?? base.analysisRevisionId,
     title: spec.card === 'K6' ? spec.documentTitle : spec.title,
     basename: base.basename,
     card: spec.card,

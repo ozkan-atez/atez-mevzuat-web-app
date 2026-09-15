@@ -5,9 +5,12 @@ import { executeTopicRevision } from '../../src/modules/topic-analysis/applicati
 import type { TopicObjectStore } from '../../src/modules/topic-analysis/application/ports'
 import type { AnalysisResult } from '../../src/modules/topic-analysis/domain/analysis-schemas'
 import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import { PrismaReportDraftRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-report-draft-repository'
+import { buildReportSpec } from '../../src/modules/topic-analysis/application/build-report-spec'
 
 const prisma = new PrismaClient()
 const repository = new PrismaTopicAnalysisRepository(prisma)
+const draftRepository = new PrismaReportDraftRepository(prisma)
 
 class MemoryStore implements TopicObjectStore {
   values = new Map<string, Buffer>()
@@ -32,7 +35,7 @@ describe('executeTopicRevision', () => {
   })
   afterAll(() => prisma.$disconnect())
 
-  it('creates a new immutable analysis and report revision in the same topic thread', async () => {
+  it('stages the revised analysis in the draft instead of publishing a report revision', async () => {
     const object = await prisma.storedObject.create({ data: { sha256: 'a'.repeat(64), bucket: 'test', objectKey: 'objects/current.html', mediaType: 'text/html', byteSize: 20n } })
     const run = await prisma.scanRun.create({ data: {
       requestKey: crypto.randomUUID(), targetDate: new Date('2026-09-11T00:00:00.000Z'), indexSourceUrl: 'https://www.resmigazete.gov.tr/11.09.2026', indexObjectKey: 'index.html', indexSha256: 'b'.repeat(64),
@@ -49,16 +52,29 @@ describe('executeTopicRevision', () => {
     store.values.set('objects/current.html', Buffer.from('<p>İthalatçılar yeni kurala tabidir.</p>'))
     store.values.set('analysis-r1.json', Buffer.from(JSON.stringify(initial)))
     store.values.set('analysis-r1.md', Buffer.from('# İlk analiz'))
+    // The published bulletin the user is looking at: staging diffs against this.
+    const baseAnalysis = (await repository.getTopicDetail(topic.id))!.analyses[0]!
+    const baseSpec = buildReportSpec(initial, { sequence: 1 })
+    store.values.set('report-r1.json', Buffer.from(JSON.stringify(baseSpec)))
+    await repository.createReportRevision({
+      scanRunId: run.id, topicId: topic.id, analysisRevisionId: baseAnalysis.id, title: baseSpec.documentTitle,
+      basename: `01-${topic.id}.html`, card: baseSpec.card, version: 1,
+      specObjectKey: 'report-r1.json', htmlObjectKey: 'report-r1.html',
+    })
     const revised = { ...analysis(topic.id, 'İthalatçıların beyan süreçleri değişti.'), affectedParties: [{ name: 'İthalatçılar', impact: 'Beyan süreçleri değişir.', evidenceIds: ['e1'] }] }
     let aiCalls = 0
     const ai: AiModelClient = { async generateStructured() { aiCalls += 1; return { json: revised, providerRequestId: 'revision-response', usage: { inputTokens: 40, outputTokens: 20 } } } }
 
-    await executeTopicRevision({ topicId: topic.id, messageId: request.messageId }, { repository, objectStore: store, aiModel: ai, model: 'gemini-3.7-flash', maxContextBytes: 1_000_000 })
-    await executeTopicRevision({ topicId: topic.id, messageId: request.messageId }, { repository, objectStore: store, aiModel: ai, model: 'gemini-3.7-flash', maxContextBytes: 1_000_000 })
+    await executeTopicRevision({ topicId: topic.id, messageId: request.messageId }, { repository, objectStore: store, aiModel: ai, model: 'gemini-3.7-flash', maxContextBytes: 1_000_000, draftRepository })
+    await executeTopicRevision({ topicId: topic.id, messageId: request.messageId }, { repository, objectStore: store, aiModel: ai, model: 'gemini-3.7-flash', maxContextBytes: 1_000_000, draftRepository })
 
     expect(await prisma.analysisRevision.count({ where: { topicId: topic.id } })).toBe(2)
+    // No revision without the user's approval: the result waits in the draft.
     expect(await prisma.reportRevision.count({ where: { report: { topicId: topic.id } } })).toBe(1)
     expect(aiCalls).toBe(1)
+    const draft = await draftRepository.getOpenDraft(topic.id)
+    expect(draft?.edits.length).toBeGreaterThan(0)
+    expect(draft?.analysisRevisionId).not.toBeNull()
     const detail = await repository.getTopicDetail(topic.id)
     expect(detail?.thread.messages.at(-1)).toMatchObject({ role: 'ASSISTANT', kind: 'REVISION_RESULT' })
     expect(detail?.thread.messages.filter((message: { kind: string }) => message.kind === 'REVISION_RESULT')).toHaveLength(1)

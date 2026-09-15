@@ -162,3 +162,51 @@ function describeIssues(error: z.ZodError): string {
 function escapeSegment(segment: string): string {
   return segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
+
+export interface SpecDifference {
+  path: string
+  previousValue: unknown
+  nextValue: unknown
+  /** Structural fields can be staged by an analysis revision but not undone field by field. */
+  revertible: boolean
+}
+
+/**
+ * Lists what changed between two specs, so an analysis revision can be staged for
+ * approval as a readable set of changes rather than an opaque new document.
+ *
+ * Unlike a patch this reports every path, including locked ones: an analysis
+ * revision is allowed to move table structure and evidence, and hiding that from
+ * the reviewer would be worse than showing a change they cannot undo piecemeal.
+ */
+export function diffReportSpecs(previous: unknown, next: unknown): SpecDifference[] {
+  const differences: SpecDifference[] = []
+  walk(previous, next, [], differences)
+  return differences
+}
+
+function walk(previous: unknown, next: unknown, path: string[], out: SpecDifference[]): void {
+  if (Array.isArray(previous) && Array.isArray(next) && previous.length === next.length) {
+    previous.forEach((item, index) => walk(item, next[index], [...path, String(index)], out))
+    return
+  }
+  if (isPlainObject(previous) && isPlainObject(next)) {
+    for (const key of new Set([...Object.keys(previous), ...Object.keys(next)])) {
+      walk(previous[key], next[key], [...path, key], out)
+    }
+    return
+  }
+  if (JSON.stringify(previous) === JSON.stringify(next)) return
+
+  const joined = path.join('.')
+  out.push({
+    path: joined,
+    previousValue: previous ?? null,
+    nextValue: next ?? null,
+    revertible: matchEditablePattern(joined) !== null,
+  })
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}

@@ -47,6 +47,8 @@ export interface RunAnalysisResult {
   topicReports: StoredTopicReport[]
   noChangeReport: StoredTopicReport | null
   counts: { total: number; completed: number; awaitingRetry: number; failed: number; reports: number }
+  /** Why each topic did not finish, so a partial run names its cause instead of only its status. */
+  failures: Array<{ topicId: string; message: string }>
 }
 
 export async function executeRunTopicAnalyses(runId: string, dependencies: Dependencies): Promise<RunAnalysisResult> {
@@ -62,14 +64,14 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
     const noChangeReport = await createNoChangeReport(context, dependencies)
     await dependencies.lifecycle?.reportItemFinished()
     await dependencies.lifecycle?.reportsFinished()
-    return { status: 'COMPLETED', topicReports: [], noChangeReport, counts: { total: 0, completed: 0, awaitingRetry: 0, failed: 0, reports: 1 } }
+    return { status: 'COMPLETED', topicReports: [], noChangeReport, counts: { total: 0, completed: 0, awaitingRetry: 0, failed: 0, reports: 1 }, failures: [] }
   }
 
   if (topics.length === 0) {
     await dependencies.lifecycle?.analysisFinished()
     await dependencies.lifecycle?.reportsStarted(0)
     await dependencies.lifecycle?.reportsFinished()
-    return { status: 'COMPLETED', topicReports: [], noChangeReport: null, counts: { total: allTopics.length, completed: allTopics.length, awaitingRetry: 0, failed: 0, reports: 0 } }
+    return { status: 'COMPLETED', topicReports: [], noChangeReport: null, counts: { total: allTopics.length, completed: allTopics.length, awaitingRetry: 0, failed: 0, reports: 0 }, failures: [] }
   }
 
   const outcomes = await executePool(topics.map((topic) => topic.id), dependencies.concurrency, async (topicId) => {
@@ -88,7 +90,7 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
     const noChangeReport = await createNoChangeReport(context, dependencies)
     await dependencies.lifecycle?.reportItemFinished()
     await dependencies.lifecycle?.reportsFinished()
-    return { status: 'COMPLETED', topicReports: [], noChangeReport, counts: { total: topics.length, completed: topics.length, awaitingRetry: 0, failed: 0, reports: 1 } }
+    return { status: 'COMPLETED', topicReports: [], noChangeReport, counts: { total: topics.length, completed: topics.length, awaitingRetry: 0, failed: 0, reports: 1 }, failures: [] }
   }
 
   await Promise.all(noContentAnalyses.map((item) => dependencies.repository.markTopicCompleted(item.analysis.topicId)))
@@ -128,6 +130,10 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
       failed: terminal,
       reports: topicReports.length,
     },
+    failures: failures.map((failure) => ({
+      topicId: failure.topicId,
+      message: failure.error instanceof Error ? failure.error.message.replace(/\s+/g, ' ').slice(0, 300) : String(failure.error),
+    })),
   }
 }
 

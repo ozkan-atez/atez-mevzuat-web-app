@@ -187,7 +187,10 @@ export async function executeScanRun(runId: string, dependencies: Dependencies, 
       return
     }
     if (analysisResult.status === 'PARTIAL' || analysisResult.status === 'FAILED') {
-      throw new Error(`Topic analizi ve raporlama ${analysisResult.status.toLocaleLowerCase('tr-TR')} tamamlandı.`)
+      // The cause travels with the status: a bare "partial" told an operator nothing
+      // about which topic broke or why.
+      const causes = analysisResult.failures.map((failure) => `${failure.topicId}: ${failure.message}`).join(' | ')
+      throw new Error(`Topic analizi ve raporlama ${analysisResult.status.toLocaleLowerCase('tr-TR')} tamamlandı.${causes ? ` Nedenler: ${causes}` : ''}`)
     }
 
     currentStage = 'WRITING_MANIFEST'

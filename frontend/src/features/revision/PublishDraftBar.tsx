@@ -4,6 +4,8 @@ interface Props {
   pendingCount: number
   isBusy: boolean
   conflictVersion: number | null
+  /** The revision these changes would become once approved. */
+  nextVersion: number
   /** The published revision moved on while this draft was open. */
   staleBehindVersion: number | null
   onPublish: () => void
@@ -11,7 +13,7 @@ interface Props {
   onReload: () => void
 }
 
-export function PublishDraftBar({ pendingCount, isBusy, conflictVersion, staleBehindVersion, onPublish, onDiscard, onReload }: Props) {
+export function PublishDraftBar({ pendingCount, isBusy, conflictVersion, nextVersion, staleBehindVersion, onPublish, onDiscard, onReload }: Props) {
   // Surfaced as soon as the report moves on, not only when publishing fails: until
   // then the draft quietly hides the newer revision and a reload changes nothing.
   const behind = conflictVersion ?? staleBehindVersion
@@ -39,7 +41,7 @@ export function PublishDraftBar({ pendingCount, isBusy, conflictVersion, staleBe
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50/70 px-4 py-3">
       <p className="text-xs font-medium text-blue-900">
-        <strong>{pendingCount}</strong> değişiklik yayımlanmayı bekliyor. Yayımlayınca tek bir yeni revizyon oluşur.
+        <strong>{pendingCount}</strong> değişiklik onayınızı bekliyor. Onaylayana kadar yayımlanmış revizyon değişmez; onayladığınızda tümü tek bir r{String(nextVersion).padStart(2, '0')} revizyonuna aktarılır.
       </p>
       <div className="flex items-center gap-2">
         <button
@@ -56,7 +58,7 @@ export function PublishDraftBar({ pendingCount, isBusy, conflictVersion, staleBe
           disabled={isBusy}
           className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50"
         >
-          {isBusy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Revizyonu yayımla
+          {isBusy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Onayla ve r{String(nextVersion).padStart(2, '0')} oluştur
         </button>
       </div>
     </div>

@@ -13,6 +13,26 @@ import type {
 export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
+  /**
+   * Runs a serializable transaction, retrying the write conflicts the isolation
+   * level is expected to produce.
+   *
+   * Topics are analysed concurrently and each one writes through predicate-locked
+   * reads, so Postgres aborts one of them (P2034) now and then. Without the retry
+   * that abort surfaced as a failed topic and turned a healthy run PARTIAL.
+   */
+  private async serializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>, attempts = 5): Promise<T> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(work, { isolationLevel: 'Serializable' })
+      } catch (error) {
+        const conflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034'
+        if (!conflict || attempt >= attempts) throw error
+        await new Promise((resolve) => setTimeout(resolve, attempt * 20))
+      }
+    }
+  }
+
   async ensureTopics(runId: string) {
     return this.prisma.$transaction(async (tx) => {
       const decisions = await tx.documentFilterDecision.findMany({
@@ -128,7 +148,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     inputHash: string
     requestMessageId?: string
   }): Promise<{ id: string }> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       const latest = await tx.topicAiExecution.aggregate({
         where: { topicId: input.topicId, kind: input.kind },
         _max: { attemptNo: true },
@@ -137,7 +157,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         data: { ...input, attemptNo: (latest._max.attemptNo ?? 0) + 1 },
         select: { id: true },
       })
-    }, { isolationLevel: 'Serializable' })
+    })
   }
 
   async completeTopicAiExecution(id: string, input: {
@@ -210,7 +230,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
   }
 
   async createReportRevision(input: CreateTopicReportRevisionInput) {
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       let report = input.topicId
         ? await tx.topicReport.findUnique({ where: { topicId: input.topicId } })
         : await tx.topicReport.findFirst({ where: { scanRunId: input.scanRunId, topicId: null, card: 'K6' } })
@@ -251,7 +271,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         specObjectKey: input.specObjectKey,
         htmlObjectKey: input.htmlObjectKey,
       }
-    }, { isolationLevel: 'Serializable' })
+    })
   }
 
   async markTopicRendering(topicId: string): Promise<void> {
@@ -267,7 +287,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
   }
 
   async createAnalysisRevision(input: CreateTopicAnalysisRevisionInput) {
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       const revision = await tx.analysisRevision.create({
         data: {
           topicId: input.topicId,
@@ -288,7 +308,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         data: { status: 'ANALYZED', lastErrorCategory: null, lastErrorMessage: null },
       })
       return revision
-    }, { isolationLevel: 'Serializable' })
+    })
   }
 
   async getTopic(topicId: string) {

@@ -9,6 +9,8 @@ export interface ReportFieldEditRecord {
   source: ReportEditSource
   prompt: string | null
   chatMessageId: string | null
+  /** Structural changes staged by an analysis revision cannot be undone field by field. */
+  revertible: boolean
   revertsEditId: string | null
   revertedByEditId: string | null
   createdAt: string

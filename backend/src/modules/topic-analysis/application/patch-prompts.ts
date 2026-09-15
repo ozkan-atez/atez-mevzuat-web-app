@@ -4,7 +4,7 @@ import { toGeminiResponseSchema } from '../../ai/application/gemini-json-schema'
 import { EDITABLE_PATH_PATTERNS } from '../domain/report-patch'
 import type { ReportSpec } from '../domain/report-spec-schemas'
 
-export const REPORT_PATCH_PROMPT_VERSION = 'report-patch-v1'
+export const REPORT_PATCH_PROMPT_VERSION = 'report-patch-v2'
 
 /**
  * The model returns edits, never a report.
@@ -13,14 +13,32 @@ export const REPORT_PATCH_PROMPT_VERSION = 'report-patch-v1'
  * (`affectedParties.1`), which keeps the response schema flat — Gemini rejects
  * the union and cardinality constructs a richer shape would need.
  */
+export const PatchOutcomeSchema = z.enum(['EDITS', 'NEEDS_ANALYSIS', 'NOT_POSSIBLE'])
+
 export const PatchResponseSchema = z.object({
-  outcome: z.enum(['EDITS', 'NEEDS_ANALYSIS', 'NOT_POSSIBLE']),
+  /** The message as a whole: EDITS when any part of it produced edits. */
+  outcome: PatchOutcomeSchema,
+  /**
+   * One entry per request found in the message, in the order they appear.
+   *
+   * A single message routinely carries several asks ("remove the dollar sign and
+   * drop the time from the deadline"). Judging them together meant one part that
+   * needed analysis sank the rest, so each is decided on its own and the edits
+   * point back at the request they serve.
+   */
+  requests: z.array(z.object({
+    summary: z.string().trim().min(1).max(300),
+    outcome: PatchOutcomeSchema,
+    reason: z.string().trim().max(500).optional(),
+  }).strict()).max(20).optional(),
   edits: z.array(z.object({
     path: z.string().trim().min(1).max(120),
     value: z.string().max(8_000),
     /** Clears a nullable field such as `note`; `value` is then ignored. */
     clear: z.boolean().optional(),
-  }).strict()).max(20).optional(),
+    /** Index into `requests`; omitted when the message held a single request. */
+    requestIndex: z.number().int().optional(),
+  }).strict()).max(40).optional(),
   reason: z.string().trim().max(1_000).optional(),
 }).strict()
 
@@ -37,6 +55,10 @@ export function buildPatchSystemInstruction(): string {
     'Yeni rapor, HTML, Markdown veya tam spesifikasyon üretme; yalnızca değişecek alanları döndür.',
     'Yalnızca sana verilen düzenlenebilir alan listesindeki yolları kullan; listede olmayan bir yolu asla önerme.',
     'Kullanıcının dokunmadığı alanları değiştirme; talebin gerektirmediği hiçbir yolu yanıta ekleme.',
+    'Kullanıcının mesajı birden fazla bağımsız talep içerebilir. Mesajı taleplere ayır ve her talep için requests dizisine sırayla bir kayıt ekle; summary alanına talebi tek cümleyle yaz.',
+    'Her talebi tek tek değerlendir: bir talebin outcome değeri diğerlerini etkilemez. Bir talep alan düzenlemesiyle karşılanabiliyorsa o talep için EDITS, kanıt gerektiriyorsa NEEDS_ANALYSIS, hiç karşılanamıyorsa NOT_POSSIBLE yaz.',
+    'Ürettiğin her edit kaydında requestIndex alanına o değişikliğin hangi talepten geldiğini (requests dizisindeki sıra numarası, 0 tabanlı) yaz.',
+    'Üst seviyedeki outcome alanı mesajın tamamını özetler: en az bir talep edit üretiyorsa EDITS yaz.',
     'Varsayılanın EDITS olsun. Talep mevcut alan değerleri üzerinde metin işlemiyle karşılanabiliyorsa mutlaka EDITS döndür.',
     'Kısaltma, uzun anlatımı çıkarma, yeniden ifade etme, biçim düzeltme, yazım düzeltme ve kullanıcının birebir verdiği metni yerine koyma daima EDITS demektir.',
     'Örnek: "bu satırda sadece tarih yazsın, açıklamayı kaldır" talebinde ilgili dates.# alanlarını yalnız tarihi bırakacak şekilde kısalt ve EDITS döndür; bu bir olgu değişikliği değildir.',

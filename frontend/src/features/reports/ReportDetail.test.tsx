@@ -106,7 +106,7 @@ describe('ReportDetail', () => {
     stubFetch()
     const { unmount } = renderPage()
     expect(await screen.findByText('İthalat Tebliği')).toBeVisible()
-    expect(screen.queryByRole('button', { name: /Revizyonu yayımla/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Onayla ve r03 oluştur/ })).toBeNull()
     unmount()
 
     stubFetch({
@@ -116,8 +116,8 @@ describe('ReportDetail', () => {
     })
     renderPage()
 
-    expect(await screen.findByRole('button', { name: /Revizyonu yayımla/ })).toBeVisible()
-    expect(screen.getByText((_, element) => element?.textContent === '1 değişiklik yayımlanmayı bekliyor. Yayımlayınca tek bir yeni revizyon oluşur.', { selector: 'p' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: /Onayla ve r03 oluştur/ })).toBeVisible()
+    expect(screen.getByText((_, element) => element?.textContent === '1 değişiklik onayınızı bekliyor. Onaylayana kadar yayımlanmış revizyon değişmez; onayladığınızda tümü tek bir r03 revizyonuna aktarılır.', { selector: 'p' })).toBeVisible()
   })
 
   it('warns that the delivery actions still use the published revision while a draft is open', async () => {
@@ -155,6 +155,6 @@ describe('ReportDetail', () => {
 
     expect(await screen.findByText(/r03 sürümüne güncellendi/)).toBeVisible()
     expect(screen.getByRole('button', { name: /Taslağı bırak, r03 sürümünü aç/ })).toBeVisible()
-    expect(screen.queryByRole('button', { name: /Revizyonu yayımla/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Onayla ve r03 oluştur/ })).toBeNull()
   })
 })

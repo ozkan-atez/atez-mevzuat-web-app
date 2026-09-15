@@ -139,7 +139,8 @@ async function startWorker() {
       } else {
         if (!command.messageId) throw new Error('Revizyon komutunda messageId eksik.')
         await executeTopicRevision({ topicId: command.topicId, messageId: command.messageId }, {
-          repository: topicRepository, objectStore, aiModel, model: env.gemini.model, maxContextBytes: env.gemini.maxContentBytes,
+          repository: topicRepository, draftRepository, objectStore, aiModel,
+          model: env.gemini.model, maxContextBytes: env.gemini.maxContentBytes,
         })
       }
     }

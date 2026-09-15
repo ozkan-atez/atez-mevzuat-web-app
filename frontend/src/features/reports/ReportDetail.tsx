@@ -144,6 +144,7 @@ export function ReportDetail() {
         pendingCount={pendingCount}
         isBusy={draft.isBusy}
         conflictVersion={draft.conflictVersion}
+        nextVersion={draft.view.baseVersion + 1}
         staleBehindVersion={draft.view.isStale ? draft.view.publishedVersion : null}
         onPublish={() => void draft.publish()}
         onDiscard={() => void draft.discard()}
