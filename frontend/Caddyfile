@@ -5,8 +5,21 @@
         reverse_proxy backend:3001
     }
 
+    # Asset filenames carry a content hash, so they may be cached indefinitely.
+    # This block must come before the SPA fallback: without it `try_files` answers a
+    # missing asset with index.html as text/html, and a browser holding a stale
+    # index.html then tries to execute HTML as a script and the app never mounts.
+    handle /assets/* {
+        root * /srv
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }
+
     handle {
         root * /srv
+        # index.html names the current bundle, so it must be revalidated every time
+        # or a deploy stays invisible until the browser decides to look again.
+        header Cache-Control "no-cache"
         try_files {path} /index.html
         file_server
     }
