@@ -124,16 +124,18 @@ Red gerekçeleri dört ayrı sınıfa ayrıldı; hangisinin döndüğü kullanı
 
 ## Aşama 4 — Prompt ile Yama
 
-- [ ] `patch-prompts.ts`: sistem talimatı, sürüm etiketi ve yama yanıt şeması; şema `toGeminiResponseSchema` üzerinden geçsin.
-- [ ] Modele verilen bağlam: güncel taslak spec'i, düzenlenebilir alanlar ve mevcut değerleri, kullanıcının talebi. Kanıt paketi gönderilmez.
-- [ ] `execute-prompt-patch.ts`: `ChatMessage` + outbox + kuyruk yolundan gelen talebi yamaya çevirir ve Aşama 3'teki çekirdeğe uygular.
-- [ ] Model kilitli alana yama önerirse uygulama reddedilir, kullanıcıya nedeni bildirilir ve körlemesine tekrar denenmez.
-- [ ] Model olguyu değiştiren bir talep aldığında (yeni tarih, farklı oran, yeni kaynak) yama üretmez; bunun analiz revizyonu olduğunu bildirir.
-- [ ] `build-revision-context.ts`: prompt'un yama yoluna mı mevcut ANALYSIS yoluna mı gideceğini belirle; ayrım sınanabilir olsun.
-- [ ] `worker.ts` ve `topic-analysis-queue.ts`: `REVISE_FIELDS` komutu.
-- [ ] Testler: sahte model istemcisiyle yama üretimi; kilitli alan önerisinin reddi; olgusal talebin analiz yoluna yönlendirilmesi; üretilen yamanın senkron yolla aynı çekirdekten geçtiği.
+- [x] `patch-prompts.ts`: sistem talimatı, sürüm etiketi ve yama yanıt şeması; şema `toGeminiResponseSchema` üzerinden geçsin.
+- [x] Modele verilen bağlam: güncel taslak spec'i, düzenlenebilir alanlar ve mevcut değerleri, kullanıcının talebi. Kanıt paketi gönderilmez.
+- [x] `execute-prompt-patch.ts`: `ChatMessage` + outbox + kuyruk yolundan gelen talebi yamaya çevirir ve Aşama 3'teki çekirdeğe uygular.
+- [x] Model kilitli alana yama önerirse uygulama reddedilir, kullanıcıya nedeni bildirilir ve körlemesine tekrar denenmez.
+- [x] Model olguyu değiştiren bir talep aldığında (yeni tarih, farklı oran, yeni kaynak) yama üretmez; bunun analiz revizyonu olduğunu bildirir.
+- [x] `build-revision-context.ts`: prompt'un yama yoluna mı mevcut ANALYSIS yoluna mı gideceğini belirle; ayrım sınanabilir olsun.
+- [x] `worker.ts` ve `topic-analysis-queue.ts`: `REVISE_FIELDS` komutu.
+- [x] Testler: sahte model istemcisiyle yama üretimi; kilitli alan önerisinin reddi; olgusal talebin analiz yoluna yönlendirilmesi; üretilen yamanın senkron yolla aynı çekirdekten geçtiği.
 
 **Kabul:** Docked asistana yazılan talep, arka planda spec'i değiştirip önizlemeyi günceller.
+
+`DIRECT_EDIT`, eski `PUBLICATION` yolunun yerini aldı. İkisi de "olgular sabit, ifade değişiyor" durumunu karşılıyordu; yama yolu spec'i baştan üretmediği için dokunulmayan alanlar kayamıyor. `PUBLICATION` yalnızca bu değişiklikten önce yazılmış kayıtlar için enum'da duruyor, yeni talepler oraya gitmiyor.
 
 ## Aşama 5 — Şablon ve Doğrulayıcı
 

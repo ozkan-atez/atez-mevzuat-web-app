@@ -19,6 +19,8 @@ import { ResmiGazeteSearch } from './modules/scan-runs/infrastructure/resmi-gaze
 import { PrismaTopicAnalysisRepository } from './modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
 import { PgBossTopicAnalysisQueue, type TopicAnalysisCommand } from './modules/topic-analysis/infrastructure/topic-analysis-queue'
 import { executeTopicRevision } from './modules/topic-analysis/application/execute-topic-revision'
+import { executePromptPatch } from './modules/topic-analysis/application/execute-prompt-patch'
+import { PrismaReportDraftRepository } from './modules/topic-analysis/infrastructure/prisma-report-draft-repository'
 import { retryTopicAnalysis } from './modules/topic-analysis/application/retry-topic-analysis'
 
 async function startWorker() {
@@ -26,6 +28,7 @@ async function startWorker() {
   const env = loadEnv()
   const repository = new PrismaScanRepository(prisma)
   const topicRepository = new PrismaTopicAnalysisRepository(prisma)
+  const draftRepository = new PrismaReportDraftRepository(prisma)
   const scanQueue = new PgBossScanQueue(queue)
   const topicQueue = new PgBossTopicAnalysisQueue(queue)
   const objectStore = new S3ObjectStore(env.s3)
@@ -122,7 +125,12 @@ async function startWorker() {
     const jobList = Array.isArray(jobs) ? jobs : [jobs]
     for (const job of jobList) {
       const command = job.data as TopicAnalysisCommand
-      if (command.command === 'RETRY_ANALYSIS') {
+      if (command.command === 'REVISE_FIELDS') {
+        if (!command.messageId) throw new Error('Alan revizyonu komutunda messageId eksik.')
+        await executePromptPatch({ topicId: command.topicId, messageId: command.messageId }, {
+          repository: topicRepository, draftRepository, objectStore, aiModel, model: env.gemini.model,
+        })
+      } else if (command.command === 'RETRY_ANALYSIS') {
         await retryTopicAnalysis(command.topicId, {
           repository: topicRepository, scanRepository: repository, objectStore, aiModel, model: env.gemini.model,
           maxAttempts: env.gemini.maxAttempts, maxContextBytes: env.gemini.maxContentBytes,

@@ -87,7 +87,7 @@ describe('report draft HTTP contract', () => {
     })
 
     expect(response.statusCode).toBe(200)
-    expect(response.json().draft).toMatchObject({ baseVersion: 1, status: 'OPEN' })
+    expect(response.json()).toMatchObject({ baseVersion: 1, draft: { status: 'OPEN' } })
     expect(response.json().draft.edits).toHaveLength(1)
     expect(response.json().spec.title).toBe('Düzeltilmiş Başlık')
     expect(response.json().html).toContain('Düzeltilmiş Başlık')
@@ -199,7 +199,10 @@ describe('report draft HTTP contract', () => {
     const discarded = await app.inject({ method: 'DELETE', url: `/api/v1/topics/${topicId}/draft` })
 
     expect(discarded.statusCode).toBe(204)
-    expect((await app.inject({ method: 'GET', url: `/api/v1/topics/${topicId}/draft` })).json()).toEqual({ draft: null })
+    // The published revision is still served, just with no open draft over it.
+    const afterDiscard = await app.inject({ method: 'GET', url: `/api/v1/topics/${topicId}/draft` })
+    expect(afterDiscard.json()).toMatchObject({ draft: null, baseVersion: 1 })
+    expect(afterDiscard.json().spec.title).toBe('İthalat Tebliğinde Değişiklik')
     expect(await prisma.reportRevision.count({ where: { report: { topicId } } })).toBe(1)
     await app.close()
   })

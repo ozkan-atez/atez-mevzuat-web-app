@@ -87,7 +87,8 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
     if (!dependencies) return reply
     const { id } = request.params as { id: string }
     const view = await getReportDraftView(id, dependencies)
-    return reply.send(view ? toDraftPayload(view) : { draft: null })
+    if (!view) return reply.code(404).send({ message: 'Bu mevzuat için yayımlanmış bir bülten yok' })
+    return reply.send(toDraftPayload(view))
   })
 
   app.post('/:id/draft/edits', async (request, reply) => {
@@ -167,13 +168,17 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
 
 function toDraftPayload(view: ReportDraftView) {
   return {
-    draft: {
-      id: view.draft.id,
-      baseVersion: view.draft.baseVersion,
-      status: view.draft.status,
-      updatedAt: view.draft.updatedAt,
-      edits: view.draft.edits,
-    },
+    // Null while the report still matches its published revision; the preview and
+    // the base version are useful either way.
+    draft: view.draft
+      ? {
+        id: view.draft.id,
+        status: view.draft.status,
+        updatedAt: view.draft.updatedAt,
+        edits: view.draft.edits,
+      }
+      : null,
+    baseVersion: view.baseVersion,
     spec: view.spec,
     html: view.html,
   }

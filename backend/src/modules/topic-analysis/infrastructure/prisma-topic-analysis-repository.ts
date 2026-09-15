@@ -330,7 +330,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     return topics.map(mapTopicDetail)
   }
 
-  async appendRevisionRequest(input: { topicId: string; requestKey: string; message: string; revisionKind: 'ANALYSIS' | 'PUBLICATION' }) {
+  async appendRevisionRequest(input: { topicId: string; requestKey: string; message: string; revisionKind: 'ANALYSIS' | 'DIRECT_EDIT' }) {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.chatMessage.findUnique({ where: { requestKey: input.requestKey } })
       if (existing) {
@@ -345,7 +345,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
       await tx.topicOutbox.create({
         data: {
           topicId: input.topicId,
-          command: input.revisionKind === 'ANALYSIS' ? 'REVISE_ANALYSIS' : 'REVISE_PUBLICATION',
+          command: input.revisionKind === 'ANALYSIS' ? 'REVISE_ANALYSIS' : 'REVISE_FIELDS',
           requestKey: `message:${input.requestKey}`,
           messageId: message.id,
         },
@@ -538,6 +538,14 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
       return latestAnalysis.status === 'PASS_NO_RELEVANT_CONTENT'
         || topic.reports.some((report) => report.revisions.length > 0)
     })
+  }
+
+  async getTopicRevisionMessage(topicId: string, messageId: string): Promise<{ id: string; content: string } | null> {
+    const message = await this.prisma.chatMessage.findFirst({
+      where: { id: messageId, thread: { topicId } },
+      select: { id: true, content: true },
+    })
+    return message ?? null
   }
 
   async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: RevisionKind; content: string; requestKey?: string }): Promise<void> {

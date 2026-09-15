@@ -4,7 +4,7 @@ import { topicAnalysisQueueName } from '../../../platform/queue'
 export interface TopicAnalysisCommand {
   outboxId: string
   topicId: string
-  command: 'RETRY_ANALYSIS' | 'REVISE_ANALYSIS' | 'REVISE_PUBLICATION'
+  command: 'RETRY_ANALYSIS' | 'REVISE_ANALYSIS' | 'REVISE_PUBLICATION' | 'REVISE_FIELDS'
   messageId: string | null
 }
 

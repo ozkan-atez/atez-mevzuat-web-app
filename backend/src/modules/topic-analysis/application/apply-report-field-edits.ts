@@ -25,7 +25,9 @@ export interface ApplyReportFieldEditsInput {
 }
 
 export interface ReportDraftView {
-  draft: ReportDraftRecord
+  /** Null while the report still matches its published revision. */
+  draft: ReportDraftRecord | null
+  baseVersion: number
   spec: ReportSpec
   html: string
 }
@@ -47,16 +49,25 @@ export async function applyReportFieldEdits(
   if (input.requestKey) {
     const replayed = await dependencies.repository.findDraftByRequestKey(input.requestKey)
     // A retried request must not append the same edits twice.
-    if (replayed) return toView(replayed)
+    if (replayed) return toView({ draft: replayed, baseVersion: replayed.baseVersion, spec: ReportSpecSchema.parse(replayed.spec) })
   }
 
-  const draft = await loadOrOpenDraft(input.topicId, input.actor, dependencies)
-  if (input.expectedVersion !== undefined && input.expectedVersion !== draft.baseVersion) {
-    throw new ReportDraftConflictError(draft.baseVersion, 'Rapor bu arada güncellendi; taslağı güncel sürüm üzerinden sürdürün.')
+  const current = await loadCurrent(input.topicId, dependencies)
+  if (input.expectedVersion !== undefined && input.expectedVersion !== current.baseVersion) {
+    throw new ReportDraftConflictError(current.baseVersion, 'Rapor bu arada güncellendi; taslağı güncel sürüm üzerinden sürdürün.')
   }
 
-  const { spec, applied } = applyReportPatch(ReportSpecSchema.parse(draft.spec), input.patch)
-  if (applied.length === 0) return toView(draft)
+  // Applied before anything is written, so a rejected patch cannot leave an empty
+  // draft — and therefore cannot block the report with a draft nobody asked for.
+  const { spec, applied } = applyReportPatch(current.spec, input.patch)
+  if (applied.length === 0) return toView(current)
+
+  const draft = current.draft ?? await dependencies.repository.openDraft({
+    topicId: input.topicId,
+    baseVersion: current.baseVersion,
+    spec: current.spec,
+    createdBy: input.actor,
+  })
 
   const updated = await dependencies.repository.appendEdits({
     draftId: draft.id,
@@ -67,7 +78,7 @@ export async function applyReportFieldEdits(
     chatMessageId: input.chatMessageId,
     edits: applied.map((edit) => ({ ...edit, revertsEditId: null })),
   })
-  return toView(updated)
+  return toView({ draft: updated, baseVersion: updated.baseVersion, spec })
 }
 
 /** Undoes one edit by appending its inverse, so the history keeps both. */
@@ -80,12 +91,12 @@ export async function revertReportFieldEdit(
 
   const target = draft.edits.find((edit) => edit.id === input.editId)
   if (!target) throw new ReportNotPublishedError('Geri alınacak değişiklik bulunamadı.')
-  if (target.revertedByEditId) return toView(draft)
+  if (target.revertedByEditId) return toView({ draft, baseVersion: draft.baseVersion, spec: ReportSpecSchema.parse(draft.spec) })
 
   const { spec, applied } = applyReportPatch(ReportSpecSchema.parse(draft.spec), {
     edits: [{ path: target.path, value: target.previousValue as string | string[] | null }],
   })
-  if (applied.length === 0) return toView(draft)
+  if (applied.length === 0) return toView({ draft, baseVersion: draft.baseVersion, spec: ReportSpecSchema.parse(draft.spec) })
 
   const updated = await dependencies.repository.appendEdits({
     draftId: draft.id,
@@ -96,38 +107,39 @@ export async function revertReportFieldEdit(
     chatMessageId: null,
     edits: applied.map((edit) => ({ ...edit, revertsEditId: target.id })),
   })
-  return toView(updated)
+  return toView({ draft: updated, baseVersion: updated.baseVersion, spec })
 }
 
+/** The spec the user is looking at: the open draft if there is one, else the published revision. */
 export async function getReportDraftView(
   topicId: string,
   dependencies: Dependencies,
 ): Promise<ReportDraftView | null> {
   const draft = await dependencies.repository.getOpenDraft(topicId)
-  return draft ? toView(draft) : null
+  if (draft) return toView({ draft, baseVersion: draft.baseVersion, spec: ReportSpecSchema.parse(draft.spec) })
+
+  const base = await dependencies.repository.getPublishedBase(topicId)
+  if (!base) return null
+  return toView({ draft: null, baseVersion: base.version, spec: await loadSpec(base.specObjectKey, dependencies) })
 }
 
-async function loadOrOpenDraft(
+async function loadCurrent(
   topicId: string,
-  actor: string | null,
   dependencies: Dependencies,
-): Promise<ReportDraftRecord> {
-  const open = await dependencies.repository.getOpenDraft(topicId)
-  if (open) return open
+): Promise<{ draft: ReportDraftRecord | null; baseVersion: number; spec: ReportSpec }> {
+  const draft = await dependencies.repository.getOpenDraft(topicId)
+  if (draft) return { draft, baseVersion: draft.baseVersion, spec: ReportSpecSchema.parse(draft.spec) }
 
   const base = await dependencies.repository.getPublishedBase(topicId)
   if (!base) throw new ReportNotPublishedError('Bu mevzuat için yayımlanmış bir bülten yok.')
-
-  const spec = JSON.parse((await dependencies.objectStore.getContent(base.specObjectKey)).toString('utf8')) as unknown
-  return dependencies.repository.openDraft({
-    topicId,
-    baseVersion: base.version,
-    spec: ReportSpecSchema.parse(spec),
-    createdBy: actor,
-  })
+  return { draft: null, baseVersion: base.version, spec: await loadSpec(base.specObjectKey, dependencies) }
 }
 
-async function toView(draft: ReportDraftRecord): Promise<ReportDraftView> {
-  const spec = ReportSpecSchema.parse(draft.spec)
-  return { draft, spec, html: await renderReportHtml(spec) }
+async function loadSpec(specObjectKey: string, dependencies: Dependencies): Promise<ReportSpec> {
+  const raw = JSON.parse((await dependencies.objectStore.getContent(specObjectKey)).toString('utf8')) as unknown
+  return ReportSpecSchema.parse(raw)
+}
+
+async function toView(input: { draft: ReportDraftRecord | null; baseVersion: number; spec: ReportSpec }): Promise<ReportDraftView> {
+  return { ...input, html: await renderReportHtml(input.spec) }
 }
