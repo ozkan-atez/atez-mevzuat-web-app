@@ -62,3 +62,19 @@ body {
     animation: none;
   }
 }
+
+/* The dashboard hands a question to the chat workspace mid-thought, so the two
+   pages cross-fade instead of cutting. Browsers without view transitions simply
+   navigate, and reduced-motion turns it off. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}

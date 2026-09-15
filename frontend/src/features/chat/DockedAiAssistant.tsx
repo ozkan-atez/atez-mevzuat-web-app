@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { LoaderCircle, X } from 'lucide-react'
 import { useActiveReport } from '../revision/ActiveReportContext'
 
@@ -26,18 +27,27 @@ export function DockedAiAssistant({ isOpen, onOpenChange }: DockedAiAssistantPro
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const activeReport = useActiveReport()
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (isOpen) inputRef.current?.focus()
   }, [isOpen])
 
   // On a report page the request becomes a revision for that report. The result
-  // lands in its change list, so no transcript is shown here.
+  // lands in its change list, so no transcript is shown here. Anywhere else it is
+  // a question, and questions belong in the workspace where the answer and the
+  // rest of the conversation are visible — so the message travels there with the
+  // user rather than being answered in a bar they cannot scroll.
   const submit = () => {
     const message = input.trim()
-    if (!message || !activeReport || activeReport.isPrompting) return
+    if (!message || activeReport?.isPrompting) return
     setInput('')
-    void activeReport.submitPrompt(message)
+    if (activeReport) {
+      void activeReport.submitPrompt(message)
+      return
+    }
+    onOpenChange(false)
+    navigate('/chat', { state: { initialMessage: message }, viewTransition: true })
   }
 
   if (!isOpen) {
@@ -105,7 +115,7 @@ export function DockedAiAssistant({ isOpen, onOpenChange }: DockedAiAssistantPro
                 </button>
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
-                <button onClick={submit} disabled={!activeReport || !input.trim() || activeReport.isPrompting} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 disabled:opacity-40" title="Gönder" type="button">
+                <button onClick={submit} disabled={!input.trim() || (activeReport?.isPrompting ?? false)} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 disabled:opacity-40" title="Gönder" type="button">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 19.5V4.5m0 0l-6 6m6-6l6 6" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                 </button>
               </div>

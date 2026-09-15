@@ -18,6 +18,7 @@ export default function App() {
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/groups" element={<GroupsPage />} />
           <Route path="/chat" element={<ChatScreen />} />
+          <Route path="/chat/:sessionId" element={<ChatScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
