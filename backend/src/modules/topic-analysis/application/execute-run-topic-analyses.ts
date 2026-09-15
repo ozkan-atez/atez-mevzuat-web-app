@@ -5,6 +5,7 @@ import type { CreateTopicReportRevisionInput, RunReportContext, StoredTopicRepor
 import { buildReportSpec } from './build-report-spec'
 import { renderReportHtml } from './render-report-html'
 import { validateReportHtml } from './validate-report-html'
+import { parseIssueNumber } from '../../scan-runs/infrastructure/resmi-gazete-parser'
 
 export interface TopicAnalysisOutput {
   id: string
@@ -166,7 +167,7 @@ export async function publishTopicAnalysis(
 
 async function createNoChangeReport(context: RunReportContext, dependencies: Dependencies): Promise<StoredTopicReport> {
   const index = (await dependencies.objectStore.getContent(context.indexObjectKey)).toString('utf8')
-  const issueNumber = extractIssueNumber(index)
+  const issueNumber = parseIssueNumber(index)
   if (!issueNumber) throw new Error('BLOCKED_DATA: Resmî Gazete sayı bilgisi indeks belgesinde bulunamadı.')
   const version = await dependencies.repository.nextReportVersion(context.runId, null)
   const revision = `r${String(version).padStart(2, '0')}`
@@ -215,10 +216,6 @@ async function executePool<T>(ids: string[], concurrency: number, execute: (id: 
   })
   await Promise.all(workers)
   return results
-}
-
-function extractIssueNumber(html: string): string | null {
-  return html.match(/(?:ve\s+)?(\d{4,6})\s+Sayılı\s+Resm[iî]\s+Gazete/i)?.[1] ?? null
 }
 
 function compactDate(value: string): string {

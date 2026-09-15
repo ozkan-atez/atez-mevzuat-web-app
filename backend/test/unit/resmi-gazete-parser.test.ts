@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { candidateIndexUrls, parseAssets, parseEditions } from '../../src/modules/scan-runs/infrastructure/resmi-gazete-parser'
+import { candidateIndexUrls, parseAssets, parseEditions, parseIssueNumber } from '../../src/modules/scan-runs/infrastructure/resmi-gazete-parser'
 
 let indexFixture = ''
 let documentFixture = ''
@@ -65,5 +65,23 @@ describe('Resmî Gazete parser', () => {
       { sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31_dosyalar/image002.jpg', role: 'IMAGE', referenceText: 'Değişiklik tablosu' },
       { sourceUrl: 'https://www.resmigazete.gov.tr/eskiler/2026/07/diagram.gif', role: 'IMAGE', referenceText: 'Şema' },
     ])
+  })
+})
+
+describe('parseIssueNumber', () => {
+  it('reads the issue number from the entity-encoded header the site actually serves', () => {
+    const html = '<h6><u><span id="spanGazeteTarih">14 Eyl&#xFC;l 2026 Tarihli ve 33370 Say&#x131;l&#x131; Resm&#xEE; Gazete</span></u></h6>'
+
+    expect(parseIssueNumber(html)).toBe('33370')
+  })
+
+  it('falls back to the page text when the header element is missing', () => {
+    const html = '<body><p>13 Eyl&#xFC;l 2026 Tarihli ve 33369 Say&#x131;l&#x131; Resm&#xEE; Gazete</p></body>'
+
+    expect(parseIssueNumber(html)).toBe('33369')
+  })
+
+  it('returns null when the page carries no issue number', () => {
+    expect(parseIssueNumber('<body><p>Resm\u00ee Gazete arşivi</p></body>')).toBeNull()
   })
 })

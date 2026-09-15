@@ -19,6 +19,24 @@ export function candidateIndexUrls(date: string): string[] {
   ]
 }
 
+/**
+ * Reads the gazette issue number from the index page.
+ *
+ * The page writes it entity-encoded (`33370 Say&#x131;l&#x131; Resm&#xEE; Gazete`),
+ * so it is parsed rather than matched against the raw HTML — a regex over the source
+ * text never sees "Sayılı". The dedicated header element is the authoritative place;
+ * the whole-page scan is a fallback for markup changes.
+ */
+export function parseIssueNumber(html: string): string | null {
+  const $ = load(html)
+  const header = $('#spanGazeteTarih').text()
+  return matchIssueNumber(header) ?? matchIssueNumber($('body').text()) ?? null
+}
+
+function matchIssueNumber(text: string): string | null {
+  return text.match(/(\d{4,6})\s+Say[ıi]l[ıi]\s+Resm[iî]\s+Gazete/i)?.[1] ?? null
+}
+
 export function parseEditions(html: string, indexUrl: string, targetDate: string): DiscoveredEdition[] {
   const parsedDate = DateTime.fromFormat(targetDate, 'yyyy-MM-dd', { zone: 'Europe/Istanbul' })
   if (!parsedDate.isValid) throw new Error('target date is invalid')
