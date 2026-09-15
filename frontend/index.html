@@ -4,7 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>ATEZ Mevzuat Radarı</title>
+    <script>
+      /*
+       * A tab left open across a deploy still holds the old index.html, whose bundle
+       * filename no longer exists. The script then 404s and the page stays blank with
+       * nothing to explain it. Reloading once picks up the current index.html; the
+       * session flag stops that from becoming a loop when the asset is really gone,
+       * and main.tsx clears it as soon as the app mounts.
+       */
+      window.addEventListener('error', function (event) {
+        var target = event.target
+        if (!target || target.tagName !== 'SCRIPT') return
+        if (sessionStorage.getItem('atez-shell-reloaded')) return
+        sessionStorage.setItem('atez-shell-reloaded', '1')
+        window.location.reload()
+      }, true)
+    </script>
   </head>
   <body>
     <div id="root"></div>
