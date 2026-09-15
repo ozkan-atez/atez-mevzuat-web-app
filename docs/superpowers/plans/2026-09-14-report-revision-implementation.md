@@ -35,7 +35,7 @@
 - `backend/src/modules/topic-analysis/application/patch-prompts.ts`: Sürümlü yama system prompt'u ve Gemini yanıt şeması.
 - `backend/src/modules/topic-analysis/application/execute-prompt-patch.ts`: Kuyruk yolundan gelen prompt talebini yamaya çevirir ve çekirdeğe uygular.
 - `backend/src/modules/topic-analysis/infrastructure/prisma-report-draft-repository.ts`: Taslak ve yama kayıtları için Prisma adaptörü.
-- `backend/src/modules/topic-analysis/report-draft.routes.ts`: Taslak okuma, yama, yayımlama, iptal ve geri alma uçları.
+- `backend/src/modules/topic-analysis/topic-analysis.schemas.ts`: Taslak HTTP istek şemaları (modül konvansiyonu gereği rotalardan ayrı).
 - `backend/prisma/migrations/<timestamp>_add_report_draft/migration.sql`: `ReportDraft`, `ReportFieldEdit`, `DIRECT_EDIT`, `ReportRevision.draftId`.
 
 ### Backend files to modify
@@ -45,7 +45,7 @@
 - `backend/src/modules/topic-analysis/application/validate-report-html.ts`: `data-field` özniteliğine izin, diğer kısıtlar aynen.
 - `backend/src/modules/topic-analysis/application/build-revision-context.ts`: Prompt'un yama yoluna mı analiz yoluna mı gideceğinin ayrımı.
 - `backend/src/modules/topic-analysis/infrastructure/topic-analysis-queue.ts`: `REVISE_FIELDS` komutu.
-- `backend/src/modules/topic-analysis/topic-analysis.routes.ts`: Taslak rotalarının bağlanması.
+- `backend/src/modules/topic-analysis/topic-analysis.routes.ts`: Taslak uçları (modül başına tek routes dosyası konvansiyonu).
 - `backend/src/app.ts`: Taslak repository'sinin enjeksiyonu.
 - `backend/src/worker.ts`: `REVISE_FIELDS` işleyicisi.
 
@@ -113,12 +113,12 @@ Red gerekçeleri dört ayrı sınıfa ayrıldı; hangisinin döndüğü kullanı
 
 ## Aşama 3 — Use-Case'ler ve HTTP Yüzeyi
 
-- [ ] `apply-report-field-edits.ts`: taslak yoksa son yayımlanmış revizyondan aç, yamayı uygula, kaydı yaz, taslak önizleme HTML'ini döndür.
-- [ ] `publish-report-draft.ts`: `baseVersion` ile güncel sürümü karşılaştır, uyuşmazsa çakışma hatası; uyuşuyorsa `renderReportHtml` + `validateReportHtml` + spec/HTML nesnelerini yaz + yeni `ReportRevision` (aynı `analysisRevisionId`).
-- [ ] `discard-report-draft.ts`: taslağı kapat, yayımlanmış revizyonlara dokunma.
-- [ ] `report-draft.routes.ts`: `GET /:id/draft`, `POST /:id/draft/edits`, `POST /:id/draft/edits/:editId/revert`, `POST /:id/draft/publish`, `DELETE /:id/draft`.
-- [ ] Senkron yolda `Idempotency-Key` zorunlu; aynı anahtarla gelen ikinci yama tekrar uygulanmaz.
-- [ ] Sözleşme testleri: yama 200 ve güncel önizleme döner; kilitli alan 400; eskimiş taslak yayımlamada 409; yayımlama tek yeni `rNN` üretir ve yeni analiz revizyonu oluşmaz; tekrarlanan idempotency anahtarı iki kez uygulanmaz.
+- [x] `apply-report-field-edits.ts`: taslak yoksa son yayımlanmış revizyondan aç, yamayı uygula, kaydı yaz, taslak önizleme HTML'ini döndür.
+- [x] `publish-report-draft.ts`: `baseVersion` ile güncel sürümü karşılaştır, uyuşmazsa çakışma hatası; uyuşuyorsa `renderReportHtml` + `validateReportHtml` + spec/HTML nesnelerini yaz + yeni `ReportRevision` (aynı `analysisRevisionId`).
+- [x] `discard-report-draft.ts`: taslağı kapat, yayımlanmış revizyonlara dokunma.
+- [x] `report-draft.routes.ts`: `GET /:id/draft`, `POST /:id/draft/edits`, `POST /:id/draft/edits/:editId/revert`, `POST /:id/draft/publish`, `DELETE /:id/draft`.
+- [x] Senkron yolda `Idempotency-Key` zorunlu; aynı anahtarla gelen ikinci yama tekrar uygulanmaz.
+- [x] Sözleşme testleri: yama 200 ve güncel önizleme döner; kilitli alan 400; eskimiş taslak yayımlamada 409; yayımlama tek yeni `rNN` üretir ve yeni analiz revizyonu oluşmaz; tekrarlanan idempotency anahtarı iki kez uygulanmaz.
 
 **Kabul:** Doğrudan düzenleme uçtan uca çalışır ve model hiç devreye girmez.
 

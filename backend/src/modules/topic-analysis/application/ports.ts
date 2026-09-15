@@ -123,6 +123,8 @@ export interface CreateTopicReportRevisionInput {
   specObjectKey: string
   htmlObjectKey: string
   requestMessageId?: string
+  /** Set when the revision came from a published draft, linking it to its edits. */
+  draftId?: string
 }
 
 export interface StoredTopicReport {

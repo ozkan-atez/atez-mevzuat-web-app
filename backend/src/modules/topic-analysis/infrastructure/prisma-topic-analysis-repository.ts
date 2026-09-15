@@ -233,6 +233,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
           specObjectKey: input.specObjectKey,
           htmlObjectKey: input.htmlObjectKey,
           requestMessageId: input.requestMessageId ?? null,
+          draftId: input.draftId ?? null,
         },
       })
       await tx.topicReport.update({

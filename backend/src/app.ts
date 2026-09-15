@@ -7,6 +7,8 @@ import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-
 import { scanRunsRoutes } from './modules/scan-runs/scan-runs.routes'
 import { PrismaTopicAnalysisRepository } from './modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
 import { topicAnalysisRoutes } from './modules/topic-analysis/topic-analysis.routes'
+import { PrismaReportDraftRepository } from './modules/topic-analysis/infrastructure/prisma-report-draft-repository'
+import type { ReportDraftRepository } from './modules/topic-analysis/application/ports'
 import { customerGroupRoutes, topicDeliveryRoutes } from './modules/delivery/delivery.routes'
 import { PrismaDeliveryRepository } from './modules/delivery/infrastructure/prisma-delivery-repository'
 import type { MailSender, PdfRenderer } from './modules/delivery/application/ports'
@@ -15,7 +17,8 @@ import type { TopicObjectStore } from './modules/topic-analysis/application/port
 interface BuildAppOptions {
   scanRepository?: PrismaScanRepository
   topicRepository?: PrismaTopicAnalysisRepository
-  objectStore?: Pick<TopicObjectStore, 'getContent'>
+  objectStore?: Pick<TopicObjectStore, 'getContent'> & Partial<Pick<TopicObjectStore, 'putRunFile'>>
+  draftRepository?: ReportDraftRepository
   deliveryRepository?: PrismaDeliveryRepository
   pdfRenderer?: PdfRenderer
   mailSender?: MailSender
@@ -74,7 +77,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     topicRepository,
     ...(options.objectStore ? { objectStore: options.objectStore } : {}),
   })
-  app.register(topicAnalysisRoutes, { prefix: '/api/v1/topics', repository: topicRepository, ...(options.objectStore ? { objectStore: options.objectStore } : {}) })
+  app.register(topicAnalysisRoutes, {
+    prefix: '/api/v1/topics',
+    repository: topicRepository,
+    draftRepository: options.draftRepository ?? new PrismaReportDraftRepository(prisma),
+    ...(options.objectStore ? { objectStore: options.objectStore } : {}),
+  })
 
   const deliveryRepository = options.deliveryRepository ?? new PrismaDeliveryRepository(prisma)
   app.register(customerGroupRoutes, { prefix: '/api/v1/customer-groups', repository: deliveryRepository })
