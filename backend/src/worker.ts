@@ -98,10 +98,12 @@ async function startWorker() {
     }
   })
 
-  await queue.work(manualScanQueueName, async (jobs) => {
+  await queue.work(manualScanQueueName, { includeMetadata: true }, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs]
     for (const job of jobList) {
       const command = job.data as ScanCommand
+      // A redelivery means the queue gave up on the previous worker, so this run is
+      // stalled rather than in progress and must be resumed rather than skipped.
       await executeScanRun(command.runId, {
         repository,
         http,
@@ -117,7 +119,7 @@ async function startWorker() {
           previousSourceConcurrency: env.gemini.previousSourceConcurrency,
           topicConcurrency: env.gemini.topicConcurrency,
         },
-      }, command.type)
+      }, command.type, { resumeStalled: job.retryCount > 0 })
     }
   })
 

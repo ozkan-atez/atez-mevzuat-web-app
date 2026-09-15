@@ -213,6 +213,22 @@ describe('manual scan acceptance', () => {
     await app.close()
   })
 
+  it('resumes a run left RUNNING by a dead worker when the queue redelivers it', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-11' })
+    // What a crashed worker leaves behind: the run claims to be in progress and
+    // nothing will ever move it again.
+    await prisma.scanRun.update({ where: { id: run.id }, data: { status: 'RUNNING', currentStage: 'DOWNLOADING_DOCUMENTS' } })
+    const dependencies = { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch }
+
+    // A first delivery must keep its hands off a run another worker may be holding.
+    await executeScanRun(run.id, dependencies)
+    expect((await repository.getRun(run.id))?.status).toBe('RUNNING')
+
+    await executeScanRun(run.id, dependencies, 'START_SCAN', { resumeStalled: true })
+
+    expect((await repository.getRun(run.id))?.status).toBe('COMPLETED')
+  })
+
   it('recovers editions from an archived index after a mid-discovery crash', async () => {
     const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-11' })
     const indexUrl = 'https://www.resmigazete.gov.tr/eskiler/2026/09/20260911.htm'

@@ -25,11 +25,22 @@ interface Dependencies {
   gemini: { model: string; maxAttempts: number; maxContentBytes: number; previousSourceConcurrency: number; topicConcurrency: number }
 }
 
-export async function executeScanRun(runId: string, dependencies: Dependencies, command: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES' = 'START_SCAN'): Promise<void> {
+export async function executeScanRun(
+  runId: string,
+  dependencies: Dependencies,
+  command: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES' = 'START_SCAN',
+  options: { resumeStalled?: boolean } = {},
+): Promise<void> {
   const { repository, http, objectStore, maxRunBytes } = dependencies
   const run = await repository.getExecutionRun(runId)
   if (!run) throw new Error(`Scan run not found: ${runId}`)
-  if (command === 'START_SCAN' && ['RUNNING', 'AWAITING_RETRY', 'COMPLETED', 'CANCELLED'].includes(run.status)) return
+  // RUNNING normally means another worker holds this run. It also means a worker
+  // died holding it, and the queue only redelivers the job once it decides that
+  // worker is gone — so on a redelivery, RUNNING is ours to take over. Without
+  // this the redelivery returned silently and the run hung in its stage forever.
+  const takeOver = options.resumeStalled === true && run.status === 'RUNNING'
+  const blocked = takeOver ? ['AWAITING_RETRY', 'COMPLETED', 'CANCELLED'] : ['RUNNING', 'AWAITING_RETRY', 'COMPLETED', 'CANCELLED']
+  if (command === 'START_SCAN' && blocked.includes(run.status)) return
   const tempDirectory = await mkdtemp(join(tmpdir(), `atez-scan-${runId}-`))
   let currentStage: ScanStage = 'DISCOVERING'
   let bytes = run.downloadedBytes
