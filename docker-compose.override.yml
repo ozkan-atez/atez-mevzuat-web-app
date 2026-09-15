@@ -1,0 +1,27 @@
+# Local development. Compose applies this file automatically on top of
+# docker-compose.yml, so `docker compose up` serves the frontend from Vite against
+# a bind-mounted source tree: a frontend edit shows up on http://localhost:8888
+# straight away, with no image rebuild.
+#
+# To run the production build locally instead — the baked, Caddy-served bundle —
+# name the base file explicitly, which skips this override:
+#
+#   docker compose -f docker-compose.yml up -d --build web
+services:
+  web:
+    # The base service bakes `npm run build` into an image; in dev there is no
+    # image to build, only a node runtime over the mounted sources.
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      VITE_DEV_CONTAINER: "true"
+      VITE_API_PROXY_TARGET: http://backend:3001
+    volumes:
+      - ./frontend:/app
+      # Keeps the host's node_modules — built for darwin — out of the linux container.
+      - frontend_node_modules:/app/node_modules
+
+volumes:
+  frontend_node_modules:
