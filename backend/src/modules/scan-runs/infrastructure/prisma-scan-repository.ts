@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
+import { scheduleRequestKey, type ScanScheduleSlotKey } from '../domain/scan-schedule'
 import type { ScanRunStatus, ScanStage } from '../domain/scan-run'
 import type {
   AiCallCompletion,
@@ -53,6 +54,67 @@ export class PrismaScanRepository {
       status: run.status,
       targetDate: run.targetDate.toISOString().slice(0, 10),
     }
+  }
+
+  /**
+   * Idempotent per (date, slot): the request key is unique, so a cron firing twice
+   * — a retry, a restarted worker — reuses the run instead of scanning again.
+   */
+  async createScheduledRun(input: { targetDate: string; slotKey: ScanScheduleSlotKey }): Promise<{
+    id: string
+    status: ScanRunStatus
+    targetDate: string
+    created: boolean
+  }> {
+    const requestKey = scheduleRequestKey(input.targetDate, input.slotKey)
+    const result = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.scanRun.findUnique({ where: { requestKey } })
+      if (existing) return { run: existing, created: false }
+      const run = await tx.scanRun.create({
+        data: {
+          requestKey,
+          scheduleSlot: input.slotKey,
+          trigger: 'CRON',
+          targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
+          timezone: 'Europe/Istanbul',
+          outbox: { create: { requestKey } },
+        },
+      })
+      return { run, created: true }
+    })
+
+    return {
+      id: result.run.id,
+      status: result.run.status,
+      targetDate: result.run.targetDate.toISOString().slice(0, 10),
+      created: result.created,
+    }
+  }
+
+  async listScheduledRunsForDate(targetDate: string) {
+    const runs = await this.prisma.scanRun.findMany({
+      where: { targetDate: new Date(`${targetDate}T00:00:00.000Z`), scheduleSlot: { not: null } },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true, scheduleSlot: true, status: true, currentStage: true, errorSummary: true,
+        startedAt: true, completedAt: true, createdAt: true,
+        _count: { select: { editions: true, topicReports: true } },
+        editions: { select: { _count: { select: { documents: true } } } },
+      },
+    })
+    return runs.map((run) => ({
+      id: run.id,
+      slotKey: run.scheduleSlot as ScanScheduleSlotKey,
+      status: run.status,
+      currentStage: run.currentStage,
+      errorSummary: run.errorSummary,
+      startedAt: run.startedAt?.toISOString() ?? null,
+      completedAt: run.completedAt?.toISOString() ?? null,
+      createdAt: run.createdAt.toISOString(),
+      editionCount: run._count.editions,
+      reportCount: run._count.topicReports,
+      documentCount: run.editions.reduce((total, edition) => total + edition._count.documents, 0),
+    }))
   }
 
   async claimPendingOutbox(limit: number): Promise<Array<{ id: string; scanRunId: string; commandType: 'START_SCAN' | 'RETRY_AI_FILTER' | 'RETRY_PREVIOUS_SOURCES'; attempts: number }>> {

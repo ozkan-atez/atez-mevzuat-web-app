@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify'
+import { DateTime } from 'luxon'
+import { buildScheduleView } from './application/build-schedule-view'
 import { AiFilterRetryConflictError, PreviousSourceRetryConflictError, type PrismaScanRepository } from './infrastructure/prisma-scan-repository'
 import { createScanRunSchema, idempotencyKeySchema } from './scan-runs.schemas'
 import type { PrismaTopicAnalysisRepository } from '../topic-analysis/infrastructure/prisma-topic-analysis-repository'
@@ -8,6 +10,7 @@ interface Options {
   repository: PrismaScanRepository
   topicRepository?: PrismaTopicAnalysisRepository
   objectStore?: Pick<TopicObjectStore, 'getContent'>
+  timezone?: string
 }
 
 const terminalStatuses = new Set(['AWAITING_RETRY', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'])
@@ -28,6 +31,20 @@ export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
     const run = await options.repository.getExecutionRun(id)
     if (!run) return reply.code(404).send({ message: 'Tarama bulunamadı' })
     return reply.send({ topics: await options.topicRepository.listRunTopicDetails(id) })
+  })
+
+  app.get('/schedule', async (request) => {
+    const query = request.query as { date?: string }
+    const now = DateTime.now().setZone(options.timezone ?? 'Europe/Istanbul')
+    const requested = query.date && DateTime.fromFormat(query.date, 'yyyy-MM-dd', { zone: options.timezone ?? 'Europe/Istanbul' }).isValid
+      ? query.date
+      : now.toFormat('yyyy-MM-dd')
+    return buildScheduleView({
+      targetDate: requested,
+      // "Due" only means overdue for today; a past day's unrun slots are all overdue.
+      localHour: requested === now.toFormat('yyyy-MM-dd') ? now.hour : 24,
+      runs: await options.repository.listScheduledRunsForDate(requested),
+    })
   })
 
   app.get('/', async (request) => {

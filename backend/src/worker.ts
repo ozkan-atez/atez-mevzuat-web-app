@@ -1,4 +1,4 @@
-import { startQueue, manualScanQueueName, topicAnalysisQueueName } from './platform/queue'
+import { startQueue, manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName } from './platform/queue'
 import { prisma } from './platform/database'
 import { loadEnv } from './config/env'
 import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-scan-repository'
@@ -7,6 +7,9 @@ import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-stor
 import { OfficialHttpClient } from './modules/scan-runs/infrastructure/official-http-client'
 import { SourcePolicy } from './modules/scan-runs/domain/source-policy'
 import { executeScanRun } from './modules/scan-runs/application/execute-scan-run'
+import { registerScanSchedules, resolveScheduledTargetDate } from './modules/scan-runs/application/register-scan-schedules'
+import { findScheduleSlot, type ScanScheduleSlotKey } from './modules/scan-runs/domain/scan-schedule'
+import { DateTime } from 'luxon'
 import { GoogleGenAI } from '@google/genai'
 import type { AiModelClient } from './modules/ai/application/ai-model-client'
 import { AiProviderError } from './modules/ai/domain/ai-errors'
@@ -62,6 +65,35 @@ async function startWorker() {
   }
   await dispatch()
   setInterval(() => void dispatch().catch((error) => console.error('Outbox dispatch error:', error)), 1_000)
+
+  const { registered } = await registerScanSchedules({
+    schedule: (name, cron, data, options) => queue.schedule(name, cron, data, options),
+    unschedule: (name, cron) => queue.unschedule(name, cron),
+    getSchedules: async () => (await queue.getSchedules()).map((schedule) => ({ name: schedule.name, key: schedule.key ?? '' })),
+  }, { queueName: scheduledScanQueueName, timezone: env.timezone })
+  console.log(`⏰ Günlük tarama zamanlamaları kuruldu (${env.timezone}): ${registered.join(', ')}`)
+
+  await queue.work(scheduledScanQueueName, async (jobs) => {
+    const jobList = Array.isArray(jobs) ? jobs : [jobs]
+    for (const job of jobList) {
+      const { slotKey } = job.data as { slotKey: ScanScheduleSlotKey }
+      const slot = findScheduleSlot(slotKey)
+      if (!slot) {
+        console.error(`Bilinmeyen zamanlama slotu: ${slotKey}`)
+        continue
+      }
+      // The gazette day is the local calendar day, not UTC: the 23:00 Istanbul run
+      // must still target that same day, and a recovered firing its own day.
+      const now = DateTime.now().setZone(env.timezone)
+      const targetDate = resolveScheduledTargetDate({
+        slotHour: slot.hour, localHour: now.hour, localDate: now.toFormat('yyyy-MM-dd'),
+      })
+      const run = await repository.createScheduledRun({ targetDate, slotKey })
+      console.log(run.created
+        ? `⏰ ${slot.label} taraması oluşturuldu (${targetDate}): ${run.id}`
+        : `⏰ ${slot.label} taraması zaten var (${targetDate}): ${run.id}`)
+    }
+  })
 
   await queue.work(manualScanQueueName, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs]

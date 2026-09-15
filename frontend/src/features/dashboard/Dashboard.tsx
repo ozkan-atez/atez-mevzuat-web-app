@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { TriggerWorkflowModal } from './TriggerWorkflowModal';
 import { RecentScanRuns } from './RecentScanRuns';
+import { ScanScheduleTimeline } from './ScanScheduleTimeline';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -58,92 +59,7 @@ export function Dashboard() {
           </p>
         </div>
         
-        {/* Hero Metadata Footer Grid */}
-        <div className="pt-6 border-t border-slate-800/80 mt-2 space-y-5 relative z-10" data-purpose="live-cron-process-bar">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3.5">
-              <div className="relative flex items-center justify-center w-8 h-8 rounded-full border-2 border-indigo-400/30 text-indigo-400">
-                <svg className="animate-spin w-8 h-8 -rotate-90 absolute text-indigo-500" fill="none" viewBox="0 0 36 36">
-                  <circle cx="18" cy="18" r="14" stroke="currentColor" strokeDasharray="70 30" strokeLinecap="round" strokeWidth="3.5"></circle>
-                </svg>
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse"></span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-lg font-bold text-white tracking-tight leading-none">Aktif Tarama Yürütülüyor</h4>
-                  <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                  </span>
-                </div>
-                <p className="text-[11px] font-mono tracking-wider uppercase text-slate-400 mt-1">
-                  GEÇEN SÜRE 2S 14D &nbsp;•&nbsp; 3 AJAN AKTİF
-                </p>
-              </div>
-            </div>
-            <div>
-              <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold tracking-wider uppercase bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 backdrop-blur-sm">
-                14:00 2. MÜKERRER TARAMASI
-              </span>
-            </div>
-          </div>
-          
-          {/* Stepper Progress Bar */}
-          <div className="relative px-2 pt-2">
-            <div className="relative flex items-center justify-between mb-4">
-              <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-[3px] bg-slate-800 rounded-full z-0"></div>
-              <div className="absolute left-4 w-[68%] top-1/2 -translate-y-1/2 h-[3px] bg-indigo-500 rounded-full z-0 shadow-sm shadow-indigo-500/50"></div>
-              
-              <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 border-2 border-indigo-400 shadow-md shadow-indigo-900/50 text-white font-bold text-xs">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                  <path d="M4.5 12.75l6 6 9-13.5" strokeLinecap="round" strokeLinejoin="round"></path>
-                </svg>
-              </div>
-              <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 border-2 border-indigo-400 shadow-md shadow-indigo-900/50 text-white font-bold text-xs">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                  <path d="M4.5 12.75l6 6 9-13.5" strokeLinecap="round" strokeLinejoin="round"></path>
-                </svg>
-              </div>
-              <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-slate-900 border-2 border-indigo-400 ring-4 ring-indigo-500/20 shadow-lg text-indigo-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping"></span>
-              </div>
-              <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-slate-800 border-2 border-slate-700 text-slate-500 text-xs font-bold">
-                <span className="w-2 h-2 rounded-full bg-slate-600"></span>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-200">04:00 Ana Sayı</span>
-                  <span className="text-[10px] text-emerald-400 font-semibold">• Tamamlandı</span>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">14 Tebliğ ve 3 Karar incelendi, Rapor #142 bültene aktarıldı.</p>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-200">09:00 1. Mükerrer</span>
-                  <span className="text-[10px] text-emerald-400 font-semibold">• Tamamlandı</span>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">1 İthalat Rejimi Kararı tespit edildi, gözetim analizi #143 hazırlandı.</p>
-              </div>
-              <div className="space-y-1 bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-500/30 -mt-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">14:00 2. Mükerrer</span>
-                  <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-1.5 py-0.5 rounded font-semibold animate-pulse">İşleniyor</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">Resmi Gazete taranıyor, mevzuat ve GTİP karşılaştırma ajanları devrede.</p>
-              </div>
-              <div className="space-y-1 opacity-75">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">22:00 Gün Sonu</span>
-                  <span className="text-[10px] text-slate-500 font-medium">• Beklemede</span>
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed">Günlük sentez bülteni, gün sonu mükerrer taraması & arşivleme.</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ScanScheduleTimeline />
       </section>
 
       {/* KPI Metrics Section */}

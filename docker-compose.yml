@@ -29,6 +29,11 @@ services:
       - miniodata:/data
     restart: unless-stopped
 
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    command: ["gotenberg", "--chromium-disable-javascript=true", "--chromium-allow-list=file:///tmp/.*"]
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -36,6 +41,12 @@ services:
     environment: &backend-environment
       DATABASE_URL: postgresql://atez:atezpassword@db:5432/atez_db?schema=public
       PORT: "3001"
+      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
+      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+      GRAPH_SENDER_ADDRESS: ${GRAPH_SENDER_ADDRESS:-}
+      GRAPH_SENDER_NAME: ${GRAPH_SENDER_NAME:-ATEZ Mevzuat Radarı}
       SCAN_TIMEZONE: ${SCAN_TIMEZONE:-Europe/Istanbul}
       SOURCE_HOSTS: ${SOURCE_HOSTS:-resmigazete.gov.tr,www.resmigazete.gov.tr}
       SOURCE_DELAY_MS: ${SOURCE_DELAY_MS:-750}

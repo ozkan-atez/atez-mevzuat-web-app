@@ -2,12 +2,18 @@ import { buildApp } from './app'
 import { loadEnv } from './config/env'
 import { prisma } from './platform/database'
 import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-store'
+import { GotenbergPdfRenderer } from './modules/delivery/infrastructure/gotenberg-pdf-renderer'
+import { GraphMailSender } from './modules/delivery/infrastructure/graph-mail-sender'
 
 async function start() {
   const env = loadEnv()
   const objectStore = new S3ObjectStore(env.s3)
   const app = await buildApp({
     objectStore,
+    timezone: env.timezone,
+    pdfRenderer: new GotenbergPdfRenderer({ url: env.gotenberg.url, timeoutMs: env.gotenberg.timeoutMs }),
+    mailSender: new GraphMailSender(env.graph),
+    mailSenderIdentity: { address: env.graph.senderAddress, name: env.graph.senderName },
     healthChecks: {
       database: async () => { await prisma.$queryRawUnsafe('SELECT 1') },
       queue: async () => {

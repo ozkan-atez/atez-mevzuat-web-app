@@ -172,4 +172,26 @@ describe('scan run HTTP contract', () => {
     expect(response.json()).toMatchObject({ previousSources: { status: 'RUNNING', retryAvailable: false } })
     await app.close()
   })
+
+  it('exposes today\'s scheduled slots with their runs for the dashboard', async () => {
+    const created = await repository.createScheduledRun({ targetDate: todayInIstanbul(), slotKey: 'ANA_SAYI' })
+    const repeated = await repository.createScheduledRun({ targetDate: todayInIstanbul(), slotKey: 'ANA_SAYI' })
+    const app = await buildApp({ scanRepository: repository, timezone: 'Europe/Istanbul' })
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/scan-runs/schedule' })
+
+    expect(response.statusCode).toBe(200)
+    const slots = response.json().slots as Array<{ key: string; time: string; run: { id: string } | null }>
+    expect(slots.map((slot) => slot.time)).toEqual(['05:00', '10:00', '15:00', '23:00'])
+    expect(slots[0]?.run?.id).toBe(created.id)
+    // A second firing of the same slot must reuse the run, never scan twice.
+    expect(repeated.id).toBe(created.id)
+    expect(repeated.created).toBe(false)
+    expect(slots.slice(1).every((slot) => slot.run === null)).toBe(true)
+    await app.close()
+  })
 })
+
+function todayInIstanbul(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+}

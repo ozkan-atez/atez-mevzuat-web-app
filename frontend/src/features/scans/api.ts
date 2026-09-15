@@ -1,4 +1,4 @@
-import type { ScanRunDetail, ScanRunStatus, ScanRunSummary } from './types'
+import type { ScanRunDetail, ScanRunStatus, ScanRunSummary, ScheduleView } from './types'
 
 export class ScanApiError extends Error {
   readonly status: number
@@ -81,4 +81,10 @@ export async function listScanRuns(limit = 10): Promise<ScanRunSummary[]> {
   }
   const body = await response.json() as { runs: ScanRunSummary[] }
   return body.runs
+}
+
+export async function getScanSchedule(date?: string): Promise<ScheduleView> {
+  const response = await fetch(`/api/v1/scan-runs/schedule${date ? `?date=${date}` : ''}`)
+  if (!response.ok) throw new ScanApiError(response.status, 'Tarama zamanlaması alınamadı')
+  return response.json() as Promise<ScheduleView>
 }

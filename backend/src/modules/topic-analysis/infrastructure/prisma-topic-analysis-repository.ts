@@ -393,6 +393,68 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     return revision?.htmlObjectKey ?? null
   }
 
+  async getTopicReportContext(topicId: string, version: number): Promise<
+    | null
+    | {
+        topicId: string
+        title: string
+        sourceUrl: string
+        runId: string
+        targetDate: string
+        reportVersion: number
+        basename: string
+        htmlObjectKey: string
+        analysisObjectKey: string | null
+        previousSource: { title: string; sourceUrl: string } | null
+      }
+  > {
+    const revision = await this.prisma.reportRevision.findFirst({
+      where: { report: { topicId }, version, status: 'VALIDATED' },
+      select: {
+        version: true,
+        htmlObjectKey: true,
+        analysisRevision: { select: { analysisObjectKey: true } },
+        report: {
+          select: {
+            basename: true,
+            title: true,
+            topic: {
+              select: {
+                id: true,
+                scanRunId: true,
+                document: {
+                  select: {
+                    title: true,
+                    sourceUrl: true,
+                    edition: { select: { publicationDate: true } },
+                    previousSourceJob: { select: { outcome: true, source: { select: { title: true, sourceUrl: true } } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+    const topic = revision?.report.topic
+    if (!revision || !topic) return null
+    return {
+      topicId: topic.id,
+      title: topic.document.title,
+      sourceUrl: topic.document.sourceUrl,
+      runId: topic.scanRunId,
+      targetDate: toIsoDate(topic.document.edition.publicationDate),
+      reportVersion: revision.version,
+      basename: revision.report.basename,
+      htmlObjectKey: revision.htmlObjectKey,
+      analysisObjectKey: revision.analysisRevision?.analysisObjectKey ?? null,
+      // Only a verified match is a source; an unverified candidate is a guess.
+      previousSource: topic.document.previousSourceJob?.outcome === 'VERIFIED'
+        ? topic.document.previousSourceJob.source ?? null
+        : null,
+    }
+  }
+
   async getRunReportHtmlKey(runId: string, reportId: string): Promise<string | null> {
     const report = await this.prisma.topicReport.findFirst({
       where: { id: reportId, scanRunId: runId },
@@ -555,6 +617,10 @@ function mapTopicDetail(topic: any) {
     retryAvailable: topic.status === 'AWAITING_RETRY',
     errorCategory: topic.lastErrorCategory,
     errorMessage: topic.lastErrorMessage,
+    analysisVersion: latestAnalysis?.version ?? null,
+    reportVersion: latestReport?.version ?? null,
+    reportCard: latestReport?.card ?? null,
+    reportBasename: latestReport?.basename ?? null,
     latestAnalysis,
     latestReport,
     analyses,

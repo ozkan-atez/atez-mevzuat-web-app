@@ -206,6 +206,7 @@ enum TopicAiExecutionKind {
 model ScanRun {
   id                 String              @id @default(uuid())
   requestKey         String              @unique
+  scheduleSlot       String?
   trigger            ScanTrigger         @default(MANUAL)
   targetDate         DateTime            @db.Date
   timezone           String              @default("Europe/Istanbul")
@@ -549,6 +550,7 @@ model TopicProcess {
   updatedAt         DateTime           @updatedAt
 
   @@index([scanRunId, status])
+  dispatches   EmailDispatch[]
 }
 
 model EvidenceBundle {
@@ -764,4 +766,43 @@ model ChatSession {
   title     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum EmailDispatchStatus {
+  PENDING
+  SENT
+  FAILED
+  SIMULATED
+}
+
+model CustomerGroup {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  emails      String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, name])
+}
+
+model EmailDispatch {
+  id             String              @id @default(uuid())
+  topicId        String
+  topic          TopicProcess        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  reportVersion  Int
+  requestKey     String              @unique
+  recipients     String[]
+  groupIds       String[]
+  subject        String
+  bodyHtml       String
+  attachmentName String?
+  status         EmailDispatchStatus @default(PENDING)
+  providerMessageId String?
+  errorMessage   String?
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+
+  @@index([topicId, createdAt])
 }

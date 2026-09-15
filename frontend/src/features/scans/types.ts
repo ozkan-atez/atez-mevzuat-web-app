@@ -111,3 +111,29 @@ export const terminalScanStatuses = new Set<ScanRunStatus>([
   'FAILED',
   'CANCELLED',
 ])
+
+export type ScheduleSlotState = 'COMPLETED' | 'RUNNING' | 'ATTENTION' | 'DUE' | 'PENDING'
+
+export interface ScheduleSlot {
+  key: 'ANA_SAYI' | 'MUKERRER_1' | 'MUKERRER_2' | 'GUN_SONU'
+  label: string
+  time: string
+  description: string
+  state: ScheduleSlotState
+  run: null | {
+    id: string
+    status: ScanRunStatus
+    currentStage: ScanStage | null
+    errorSummary: string | null
+    editionCount: number
+    documentCount: number
+    reportCount: number
+    startedAt: string | null
+    completedAt: string | null
+  }
+}
+
+export interface ScheduleView {
+  targetDate: string
+  slots: ScheduleSlot[]
+}

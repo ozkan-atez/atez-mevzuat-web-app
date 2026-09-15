@@ -1,5 +1,10 @@
 import { z } from 'zod'
 
+const optionalText = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().min(1).optional(),
+)
+
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   PORT: z.coerce.number().int().positive().default(3001),
@@ -16,16 +21,21 @@ const schema = z.object({
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('true'),
-  GEMINI_API_KEY: z.preprocess(
-    (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
-    z.string().trim().min(1).optional(),
-  ),
+  GEMINI_API_KEY: optionalText,
   GEMINI_MODEL: z.string().min(1).default('gemini-3.7-flash'),
   GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
   GEMINI_MAX_CONTENT_BYTES: z.coerce.number().int().positive().default(8_000_000),
   PREVIOUS_SOURCE_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
   TOPIC_ANALYSIS_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
+  GOTENBERG_URL: z.string().url().default('http://gotenberg:3000'),
+  GOTENBERG_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  GRAPH_TENANT_ID: optionalText,
+  GRAPH_CLIENT_ID: optionalText,
+  GRAPH_CLIENT_SECRET: optionalText,
+  GRAPH_SENDER_ADDRESS: optionalText,
+  GRAPH_SENDER_NAME: z.string().default('ATEZ Mevzuat Radarı'),
+  MAIL_MAX_ATTACHMENT_BYTES: z.coerce.number().int().positive().default(3 * 1024 * 1024),
 })
 
 export interface AppEnv {
@@ -54,6 +64,18 @@ export interface AppEnv {
     maxContentBytes: number
     previousSourceConcurrency: number
     topicConcurrency: number
+  }
+  gotenberg: {
+    url: string
+    timeoutMs: number
+  }
+  graph: {
+    tenantId: string | undefined
+    clientId: string | undefined
+    clientSecret: string | undefined
+    senderAddress: string | undefined
+    senderName: string
+    maxAttachmentBytes: number
   }
 }
 
@@ -85,6 +107,18 @@ export function loadEnv(input: NodeJS.ProcessEnv = process.env): AppEnv {
       maxContentBytes: value.GEMINI_MAX_CONTENT_BYTES,
       previousSourceConcurrency: value.PREVIOUS_SOURCE_CONCURRENCY,
       topicConcurrency: value.TOPIC_ANALYSIS_CONCURRENCY,
+    },
+    gotenberg: {
+      url: value.GOTENBERG_URL,
+      timeoutMs: value.GOTENBERG_TIMEOUT_MS,
+    },
+    graph: {
+      tenantId: value.GRAPH_TENANT_ID,
+      clientId: value.GRAPH_CLIENT_ID,
+      clientSecret: value.GRAPH_CLIENT_SECRET,
+      senderAddress: value.GRAPH_SENDER_ADDRESS,
+      senderName: value.GRAPH_SENDER_NAME,
+      maxAttachmentBytes: value.MAIL_MAX_ATTACHMENT_BYTES,
     },
   }
 }

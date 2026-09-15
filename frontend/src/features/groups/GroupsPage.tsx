@@ -1,273 +1,166 @@
-import { useState, useEffect } from 'react';
-import { Users, Plus, Trash2, Edit2, Check, X, RefreshCw, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Check, LoaderCircle, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { createCustomerGroup, deleteCustomerGroup, listCustomerGroups, parseEmailList, updateCustomerGroup } from '../delivery/api'
+import type { CustomerGroup } from '../delivery/types'
 
-interface CustomerGroup {
-  id: string;
-  name: string;
-  description: string | null;
-  emails: string;
-  isActive: boolean;
+interface FormState {
+  name: string
+  description: string
+  emails: string
 }
 
-const DUMMY_GROUPS: CustomerGroup[] = [
-  {
-    id: "group-1",
-    name: "Yönetim Kurulu & Direktörler",
-    description: "Tüm kritik mevzuat bültenleri anlık olarak iletilir.",
-    emails: "genel-mudur@atez.com, yonetim@atez.com",
-    isActive: true,
-  },
-  {
-    id: "group-2",
-    name: "Gümrük Operasyon Ekibi",
-    description: "Tarife ve GTİP değişiklikleri, damping kararları.",
-    emails: "gumruk-operasyon@atez.com, mevzuat-takip@atez.com",
-    isActive: true,
-  },
-];
+const EMPTY_FORM: FormState = { name: '', description: '', emails: '' }
 
 export function GroupsPage() {
-  const [groups, setGroups] = useState<CustomerGroup[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', description: '', emails: '' });
-  const [isSaving, setIsSaving] = useState(false);
+  const [groups, setGroups] = useState<CustomerGroup[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [isSaving, setIsSaving] = useState(false)
 
-  useEffect(() => {
-    fetchGroups();
-  }, []);
-
-  const fetchGroups = async () => {
-    setIsLoading(true);
+  const load = useCallback(async () => {
+    setIsLoading(true)
     try {
-      const res = await fetch('/api/customer-groups');
-      if (res.ok) {
-        setGroups(await res.json());
-      } else {
-        setGroups(DUMMY_GROUPS);
-      }
-    } catch {
-      setGroups(DUMMY_GROUPS);
+      setGroups(await listCustomerGroups())
+      setError(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Müşteri grupları alınamadı')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }, [])
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.emails) {
-      alert('İsim ve e-posta alanları zorunludur.');
-      return;
-    }
+  useEffect(() => { void load() }, [load])
 
-    setIsSaving(true);
+  const startCreate = () => { setEditingId('new'); setForm(EMPTY_FORM) }
+  const startEdit = (group: CustomerGroup) => {
+    setEditingId(group.id)
+    setForm({ name: group.name, description: group.description ?? '', emails: group.emails.join(', ') })
+  }
+  const cancel = () => { setEditingId(null); setForm(EMPTY_FORM) }
+
+  const save = async () => {
+    const emails = parseEmailList(form.emails)
+    if (!form.name.trim() || emails.length === 0 || isSaving) return
+    setIsSaving(true)
+    setError(null)
     try {
-      const url = isEditing === 'new' ? '/api/customer-groups' : `/api/customer-groups/${isEditing}`;
-      const method = isEditing === 'new' ? 'POST' : 'PUT';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, isActive: true }),
-      });
-
-      if (res.ok) {
-        setIsEditing(null);
-        setFormData({ name: '', description: '', emails: '' });
-        fetchGroups();
-      } else {
-        // Local state fallback for mock
-        if (isEditing === 'new') {
-          setGroups(prev => [
-            ...prev,
-            { id: `group-${Date.now()}`, ...formData, description: formData.description || null, isActive: true }
-          ]);
-        } else {
-          setGroups(prev => prev.map(g => g.id === isEditing ? { ...g, ...formData } : g));
-        }
-        setIsEditing(null);
-        setFormData({ name: '', description: '', emails: '' });
-      }
-    } catch {
-      if (isEditing === 'new') {
-        setGroups(prev => [
-          ...prev,
-          { id: `group-${Date.now()}`, ...formData, description: formData.description || null, isActive: true }
-        ]);
-      }
-      setIsEditing(null);
-      setFormData({ name: '', description: '', emails: '' });
+      const payload = { name: form.name.trim(), description: form.description.trim() || null, emails }
+      if (editingId === 'new') await createCustomerGroup(payload)
+      else if (editingId) await updateCustomerGroup(editingId, payload)
+      cancel()
+      await load()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Grup kaydedilemedi')
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
-  };
+  }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Bu grubu silmek istediğinize emin misiniz?')) return;
+  const remove = async (group: CustomerGroup) => {
+    if (!window.confirm(`"${group.name}" grubu silinsin mi?`)) return
+    setError(null)
     try {
-      await fetch(`/api/customer-groups/${id}`, { method: 'DELETE' });
-    } catch {}
-    setGroups(prev => prev.filter(g => g.id !== id));
-  };
+      await deleteCustomerGroup(group.id)
+      await load()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Grup silinemedi')
+    }
+  }
+
+  const toggleActive = async (group: CustomerGroup) => {
+    setError(null)
+    try {
+      await updateCustomerGroup(group.id, { isActive: !group.isActive })
+      await load()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Grup güncellenemedi')
+    }
+  }
 
   return (
-    <div className="space-y-6 w-full pb-10">
-      {/* Üst Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-6 py-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+    <div className="space-y-4 pb-10">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <Link
-            to="/"
-            className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
+          <Link to="/" aria-label="Ana sayfaya dön" className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></Link>
           <div>
-            <h1 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Users className="w-5 h-5 text-blue-600" />
-              <span>E-Posta Dağıtım Grupları</span>
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Mevzuat bültenlerinin otomatik veya tek tıkla iletileceği alıcı listeleri
-            </p>
+            <h1 className="flex items-center gap-2 text-base font-bold text-slate-900"><Users className="h-4 w-4" />Müşteri Grupları</h1>
+            <p className="mt-0.5 text-xs text-slate-500">Bülten dağıtımında kullanılacak e-posta listeleri.</p>
           </div>
         </div>
+        <button type="button" onClick={startCreate} disabled={editingId === 'new'} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          <Plus className="h-4 w-4" />Yeni Grup
+        </button>
+      </header>
 
-        <button
-          onClick={() => {
-            setIsEditing('new');
-            setFormData({ name: '', description: '', emails: '' });
-          }}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Yeni Grup Ekle</span>
+      {error && <p className="rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-medium text-red-700">{error}</p>}
+
+      {editingId === 'new' && <GroupForm form={form} setForm={setForm} onSave={() => void save()} onCancel={cancel} isSaving={isSaving} />}
+
+      {isLoading && <p className="flex items-center gap-2 text-sm text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Gruplar yükleniyor…</p>}
+
+      {!isLoading && groups.length === 0 && editingId !== 'new' && (
+        <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Henüz müşteri grubu yok. &lsquo;Yeni Grup&rsquo; ile ekleyebilirsiniz.</p>
+      )}
+
+      <div className="space-y-3">
+        {groups.map((group) => editingId === group.id
+          ? <GroupForm key={group.id} form={form} setForm={setForm} onSave={() => void save()} onCancel={cancel} isSaving={isSaving} />
+          : (
+            <article key={group.id} className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+              <div className="min-w-0">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  {group.name}
+                  <span className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ${group.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {group.isActive ? 'Aktif' : 'Pasif'}
+                  </span>
+                </h2>
+                {group.description && <p className="mt-1 text-xs text-slate-500">{group.description}</p>}
+                <p className="mt-2 break-words text-xs text-slate-600">{group.emails.join(', ')}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => void toggleActive(group)} className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                  {group.isActive ? 'Pasifleştir' : 'Aktifleştir'}
+                </button>
+                <button type="button" onClick={() => startEdit(group)} aria-label={`${group.name} grubunu düzenle`} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5" /></button>
+                <button type="button" onClick={() => void remove(group)} aria-label={`${group.name} grubunu sil`} className="rounded-xl border border-slate-200 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+            </article>
+          ))}
+      </div>
+    </div>
+  )
+}
+
+function GroupForm({ form, setForm, onSave, onCancel, isSaving }: {
+  form: FormState
+  setForm: (value: FormState) => void
+  onSave: () => void
+  onCancel: () => void
+  isSaving: boolean
+}) {
+  return (
+    <section className="space-y-3 rounded-2xl border border-blue-200 bg-white px-5 py-4 shadow-sm">
+      <label className="block">
+        <span className="text-xs font-bold text-slate-700">Grup adı</span>
+        <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 text-sm outline-none focus:border-blue-500" />
+      </label>
+      <label className="block">
+        <span className="text-xs font-bold text-slate-700">Açıklama</span>
+        <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-200 p-2.5 text-sm outline-none focus:border-blue-500" />
+      </label>
+      <label className="block">
+        <span className="text-xs font-bold text-slate-700">E-postalar (virgülle ayırın)</span>
+        <textarea value={form.emails} onChange={(event) => setForm({ ...form, emails: event.target.value })} className="mt-1.5 min-h-20 w-full resize-none rounded-xl border border-slate-200 p-2.5 text-sm outline-none focus:border-blue-500" />
+      </label>
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600"><X className="h-3.5 w-3.5" />Vazgeç</button>
+        <button type="button" onClick={onSave} disabled={isSaving || !form.name.trim() || !form.emails.trim()} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Kaydet
         </button>
       </div>
-
-      {/* Form (Yeni / Düzenle) */}
-      {isEditing && (
-        <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl border border-blue-200 shadow-sm space-y-4 animate-in fade-in">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-sm font-bold text-slate-900">
-              {isEditing === 'new' ? 'Yeni Müşteri/Departman Grubu' : 'Grubu Düzenle'}
-            </h3>
-            <button
-              type="button"
-              onClick={() => setIsEditing(null)}
-              className="text-slate-400 hover:text-slate-600 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700">Grup Adı</label>
-              <input
-                type="text"
-                placeholder="Örn: Finans & Muhasebe"
-                value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700">Açıklama (Opsiyonel)</label>
-              <input
-                type="text"
-                placeholder="Örn: Vergi ve mevzuat takibi yapan departman"
-                value={formData.description}
-                onChange={e => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1 text-xs">
-            <label className="font-semibold text-slate-700">E-Posta Adresleri (Virgülle ayırın)</label>
-            <textarea
-              rows={3}
-              placeholder="ahmet@sirket.com, mehmet@sirket.com"
-              value={formData.emails}
-              onChange={e => setFormData({ ...formData, emails: e.target.value })}
-              className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono text-xs"
-              required
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setIsEditing(null)}
-              className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800"
-            >
-              İptal
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer"
-            >
-              {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-              <span>Kaydet</span>
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Gruplar Listesi */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center p-12 gap-2 text-slate-400">
-          <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
-          <span className="text-xs">Gruplar yükleniyor...</span>
-        </div>
-      ) : groups.length === 0 ? (
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
-          Henüz kayıtlı grup bulunmuyor. Yeni bir grup oluşturabilirsiniz.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {groups.map(group => (
-            <div key={group.id} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">{group.name}</h3>
-                  {group.description && <p className="text-xs text-slate-500 mt-0.5">{group.description}</p>}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => {
-                      setIsEditing(group.id);
-                      setFormData({
-                        name: group.name,
-                        description: group.description || '',
-                        emails: group.emails,
-                      });
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                    title="Düzenle"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(group.id)}
-                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                    title="Sil"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs font-mono text-slate-600 break-all leading-relaxed">
-                {group.emails}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+    </section>
+  )
 }
