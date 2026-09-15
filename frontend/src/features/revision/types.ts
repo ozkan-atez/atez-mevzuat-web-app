@@ -25,6 +25,9 @@ export interface ReportDraftView {
   /** Null while the report still matches its published revision. */
   draft: ReportDraftSummary | null
   baseVersion: number
+  publishedVersion: number
+  /** The report gained a revision while this draft was open. */
+  isStale: boolean
   spec: Record<string, unknown>
   html: string
 }

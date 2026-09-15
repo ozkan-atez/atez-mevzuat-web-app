@@ -102,4 +102,15 @@ describe('buildPatchSystemInstruction', () => {
     expect(instruction).toMatch(/sadece tarih yazsın/)
     expect(instruction).toMatch(/Mevcut metni kısaltmak veya yeniden yazmak yeni olgu gerektirmez/)
   })
+
+  it('applies the part of a mixed request it can, instead of refusing all of it', () => {
+    // "Drop USD from the table and trim the time from the title" mixes a locked
+    // structural change with a plain wording one; refusing both left the user with
+    // an analysis run that changed nothing.
+    const instruction = buildPatchSystemInstruction()
+
+    expect(instruction).toMatch(/Karma talepte tamamını reddetme/)
+    expect(instruction).toMatch(/hiçbir parçası alan düzenlemesiyle karşılanamıyorsa/)
+    expect(instruction).toMatch(/Tablodan satır eklemek veya çıkarmak yapı değişikliğidir/)
+  })
 })

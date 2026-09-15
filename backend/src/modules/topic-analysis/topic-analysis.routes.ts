@@ -179,6 +179,8 @@ function toDraftPayload(view: ReportDraftView) {
       }
       : null,
     baseVersion: view.baseVersion,
+    publishedVersion: view.publishedVersion,
+    isStale: view.draft !== null && view.publishedVersion > view.baseVersion,
     spec: view.spec,
     html: view.html,
   }

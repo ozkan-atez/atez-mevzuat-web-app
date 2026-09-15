@@ -144,6 +144,7 @@ export function ReportDetail() {
         pendingCount={pendingCount}
         isBusy={draft.isBusy}
         conflictVersion={draft.conflictVersion}
+        staleBehindVersion={draft.view.isStale ? draft.view.publishedVersion : null}
         onPublish={() => void draft.publish()}
         onDiscard={() => void draft.discard()}
         onReload={() => { void draft.reload(); void loadTopic() }}
@@ -172,7 +173,7 @@ export function ReportDetail() {
           {draft.error && <p className="border-b border-amber-100 bg-amber-50 px-5 py-2 text-xs font-medium text-amber-800">{draft.error}</p>}
           {pendingCount > 0 && (
             <p className="border-b border-blue-100 bg-blue-50/60 px-5 py-2 text-xs font-medium text-blue-800">
-              Taslak görüntüleniyor. PDF ve e-posta hâlâ yayımlanmış r{String(publishedVersion).padStart(2, '0')} sürümünü kullanır.
+              Taslak görüntüleniyor. PDF ve e-posta hâlâ yayımlanmış r{String(draft.view.publishedVersion).padStart(2, '0')} sürümünü kullanır.
             </p>
           )}
 
@@ -180,7 +181,7 @@ export function ReportDetail() {
             <EditableReportPreview
               html={draft.view.html}
               zoom={zoom}
-              editable={!draft.isBusy && draft.conflictVersion === null}
+              editable={!draft.isBusy && draft.conflictVersion === null && !draft.view.isStale}
               onEditField={(path, value) => void draft.editField(path, value)}
             />
           </div>

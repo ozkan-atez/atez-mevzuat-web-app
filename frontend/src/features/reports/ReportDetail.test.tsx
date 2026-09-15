@@ -26,9 +26,17 @@ function draftPayload(edits: unknown[] = []) {
   return {
     draft: edits.length ? { id: 'draft-1', status: 'OPEN', updatedAt: '2026-09-11T06:00:00Z', edits } : null,
     baseVersion: 2,
+    publishedVersion: 2,
+    isStale: false,
     spec: { title: 'İthalat Tebliğinde Değişiklik' },
     html: previewHtml,
   }
+}
+
+function staleDraftPayload() {
+  return { ...draftPayload([
+    { id: 'edit-1', sequence: 1, path: 'title', previousValue: 'Eski', nextValue: 'Yeni', source: 'USER', prompt: null, chatMessageId: null, revertsEditId: null, revertedByEditId: null, createdAt: '2026-09-11T06:00:00Z' },
+  ]), publishedVersion: 3, isStale: true }
 }
 
 function stubFetch(handlers: { draft?: unknown } = {}) {
@@ -136,5 +144,17 @@ describe('ReportDetail', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Bülten kaydı bulunamadı')).toBeVisible())
+  })
+
+  it('warns at once when the report gained a revision while the draft was open', async () => {
+    // Otherwise the draft quietly hides the newer revision and reloading changes
+    // nothing, so the reader believes their request never ran.
+    stubFetch({ draft: staleDraftPayload() })
+
+    renderPage()
+
+    expect(await screen.findByText(/r03 sürümüne güncellendi/)).toBeVisible()
+    expect(screen.getByRole('button', { name: /Taslağı bırak, r03 sürümünü aç/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Revizyonu yayımla/ })).toBeNull()
   })
 })

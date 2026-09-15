@@ -188,8 +188,11 @@ export async function executePromptPatch(
       actor: null,
     }, { repository: dependencies.draftRepository, objectStore: dependencies.objectStore })
 
+    // The model may have handled part of a mixed request; the rest must be said out
+    // loud or the reader assumes everything they asked for was done.
+    const remark = parsed.data.reason ? ` Yapılamayan kısım: ${parsed.data.reason}` : ''
     await recordOutcome(command.topicId, 'REVISION_RESULT',
-      `${view.draft?.edits.length ?? 0} değişiklik taslağa eklendi.`, dependencies, `patch-result:${message.id}`)
+      `${view.draft?.edits.length ?? 0} değişiklik taslağa eklendi.${remark}`, dependencies, `patch-result:${message.id}`)
   } catch (error) {
     // A model that proposes a locked field is corrected, not retried blindly.
     const reason = error instanceof ReportPatchError
