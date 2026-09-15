@@ -189,12 +189,14 @@ enum ChatMessageKind {
 enum RevisionKind {
   ANALYSIS
   PUBLICATION
+  DIRECT_EDIT
 }
 
 enum TopicOutboxCommand {
   RETRY_ANALYSIS
   REVISE_ANALYSIS
   REVISE_PUBLICATION
+  REVISE_FIELDS
 }
 
 enum TopicAiExecutionKind {
@@ -548,9 +550,10 @@ model TopicProcess {
   outbox            TopicOutbox[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  dispatches        EmailDispatch[]
+  drafts            ReportDraft[]
 
   @@index([scanRunId, status])
-  dispatches   EmailDispatch[]
 }
 
 model EvidenceBundle {
@@ -600,7 +603,7 @@ model AnalysisRevision {
   schemaVersion     Int
   inputTokens       Int?
   outputTokens      Int?
-  requestMessageId  String?                  @unique
+  requestMessageId  String?                @unique
   reports           ReportRevision[]
   executions        TopicAiExecution[]
   createdAt         DateTime               @default(now())
@@ -640,6 +643,8 @@ model ReportRevision {
   htmlObjectKey      String               @unique
   validationError    String?
   requestMessageId   String?              @unique
+  draftId            String?              @unique
+  draft              ReportDraft?         @relation(fields: [draftId], references: [id], onDelete: SetNull)
   createdAt          DateTime             @default(now())
 
   @@unique([reportId, version])
@@ -788,21 +793,70 @@ model CustomerGroup {
 }
 
 model EmailDispatch {
-  id             String              @id @default(uuid())
-  topicId        String
-  topic          TopicProcess        @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  reportVersion  Int
-  requestKey     String              @unique
-  recipients     String[]
-  groupIds       String[]
-  subject        String
-  bodyHtml       String
-  attachmentName String?
-  status         EmailDispatchStatus @default(PENDING)
+  id                String              @id @default(uuid())
+  topicId           String
+  topic             TopicProcess        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  reportVersion     Int
+  requestKey        String              @unique
+  recipients        String[]
+  groupIds          String[]
+  subject           String
+  bodyHtml          String
+  attachmentName    String?
+  status            EmailDispatchStatus @default(PENDING)
   providerMessageId String?
-  errorMessage   String?
-  sentAt         DateTime?
-  createdAt      DateTime            @default(now())
+  errorMessage      String?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
 
   @@index([topicId, createdAt])
+}
+
+enum ReportDraftStatus {
+  OPEN
+  PUBLISHED
+  DISCARDED
+}
+
+enum ReportEditSource {
+  USER
+  AI
+}
+
+model ReportDraft {
+  id          String            @id @default(uuid())
+  topicId     String
+  topic       TopicProcess      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  baseVersion Int
+  specJson    Json
+  status      ReportDraftStatus @default(OPEN)
+  createdBy   String?
+  closedAt    DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  edits       ReportFieldEdit[]
+  revision    ReportRevision?
+
+  @@index([topicId, createdAt])
+}
+
+model ReportFieldEdit {
+  id            String           @id @default(uuid())
+  draftId       String
+  draft         ReportDraft      @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  sequence      Int
+  path          String
+  previousValue Json?
+  nextValue     Json?
+  source        ReportEditSource
+  prompt        String?
+  chatMessageId String?
+  requestKey    String?          @unique
+  revertsEditId String?          @unique
+  revertsEdit   ReportFieldEdit? @relation("EditRevert", fields: [revertsEditId], references: [id], onDelete: SetNull)
+  revertedBy    ReportFieldEdit? @relation("EditRevert")
+  createdAt     DateTime         @default(now())
+
+  @@unique([draftId, sequence])
+  @@index([draftId, createdAt])
 }

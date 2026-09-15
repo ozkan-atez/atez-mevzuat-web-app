@@ -102,12 +102,12 @@ Red gerekçeleri dört ayrı sınıfa ayrıldı; hangisinin döndüğü kullanı
 
 ## Aşama 2 — Taslak Kalıcılığı
 
-- [ ] `schema.prisma`: `ReportDraft` (topicId, baseVersion, specJson, status, createdBy, zaman damgaları) ve `ReportFieldEdit` (draftId, sequence, path, previousValue, nextValue, source, chatMessageId, revertedByEditId).
-- [ ] `RevisionKind`'a `DIRECT_EDIT`, `TopicOutboxCommand`'a `REVISE_FIELDS`, `ReportRevision`'a `draftId` ekle.
-- [ ] Migration üret ve hem geliştirme hem test veritabanına uygula.
-- [ ] `prisma-report-draft-repository.ts`: taslak aç/getir, yama ekle, geri al, yayımla, iptal et.
-- [ ] Rapor başına en fazla bir açık taslak kısıtını veritabanı düzeyinde zorla (kısmi benzersiz indeks).
-- [ ] Entegrasyon testleri: açık taslak tekilliği; yama sırasının korunması; geri almanın kayıt silmemesi.
+- [x] `schema.prisma`: `ReportDraft` (topicId, baseVersion, specJson, status, createdBy, zaman damgaları) ve `ReportFieldEdit` (draftId, sequence, path, previousValue, nextValue, source, chatMessageId, revertedByEditId).
+- [x] `RevisionKind`'a `DIRECT_EDIT`, `TopicOutboxCommand`'a `REVISE_FIELDS`, `ReportRevision`'a `draftId` ekle.
+- [x] Migration üret ve hem geliştirme hem test veritabanına uygula.
+- [x] `prisma-report-draft-repository.ts`: taslak aç/getir, yama ekle, geri al, yayımla, iptal et.
+- [x] Rapor başına en fazla bir açık taslak kısıtını veritabanı düzeyinde zorla (kısmi benzersiz indeks).
+- [x] Entegrasyon testleri: açık taslak tekilliği; yama sırasının korunması; geri almanın kayıt silmemesi.
 
 **Kabul:** Taslak ve yamalar kalıcı, sıralı ve tekil.
 

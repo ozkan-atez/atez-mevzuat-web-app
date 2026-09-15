@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client'
+import { Prisma, type PrismaClient, type RevisionKind } from '@prisma/client'
 import type { AiCallFailure } from '../../scan-runs/application/ports'
 import type {
   CreateTopicAnalysisRevisionInput,
@@ -539,7 +539,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     })
   }
 
-  async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: 'ANALYSIS' | 'PUBLICATION'; content: string; requestKey?: string }): Promise<void> {
+  async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: RevisionKind; content: string; requestKey?: string }): Promise<void> {
     const thread = await this.prisma.analysisThread.findUnique({ where: { topicId } })
     if (!thread) throw new TopicNotFoundError('Topic konuşması bulunamadı.')
     if (input.requestKey) {

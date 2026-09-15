@@ -145,3 +145,61 @@ export interface RunTopicAnalysisRepository extends TopicAnalysisRepository {
   markTopicValidating(topicId: string): Promise<void>
   markTopicCompleted(topicId: string): Promise<void>
 }
+
+export interface ReportDraftEditRecord {
+  id: string
+  sequence: number
+  path: string
+  previousValue: unknown
+  nextValue: unknown
+  source: 'USER' | 'AI'
+  prompt: string | null
+  chatMessageId: string | null
+  revertsEditId: string | null
+  revertedByEditId: string | null
+  createdAt: string
+}
+
+export interface ReportDraftRecord {
+  id: string
+  topicId: string
+  baseVersion: number
+  spec: unknown
+  status: 'OPEN' | 'PUBLISHED' | 'DISCARDED'
+  edits: ReportDraftEditRecord[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PublishedReportBase {
+  runId: string
+  targetDate: string
+  version: number
+  analysisRevisionId: string | null
+  basename: string
+  /** The use-case loads the spec itself; only the object store can read it. */
+  specObjectKey: string
+}
+
+/**
+ * Persistence boundary for revision drafts. The use-cases depend on this, not on
+ * Prisma, so the patch and publish logic stays testable without a database.
+ */
+export interface ReportDraftRepository {
+  /** The latest validated revision a draft can be based on. */
+  getPublishedBase(topicId: string): Promise<PublishedReportBase | null>
+  getOpenDraft(topicId: string): Promise<ReportDraftRecord | null>
+  openDraft(input: { topicId: string; baseVersion: number; spec: unknown; createdBy: string | null }): Promise<ReportDraftRecord>
+  appendEdits(input: {
+    draftId: string
+    spec: unknown
+    requestKey: string | null
+    source: 'USER' | 'AI'
+    prompt: string | null
+    chatMessageId: string | null
+    edits: Array<{ path: string; previousValue: unknown; nextValue: unknown; revertsEditId: string | null }>
+  }): Promise<ReportDraftRecord>
+  /** Returns the draft unchanged when the same request key was already applied. */
+  findDraftByRequestKey(requestKey: string): Promise<ReportDraftRecord | null>
+  closeDraft(draftId: string, status: 'PUBLISHED' | 'DISCARDED'): Promise<void>
+}

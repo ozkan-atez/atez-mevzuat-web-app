@@ -157,10 +157,10 @@ async function appendSuccessResult(
   version: number,
   dependencies: Dependencies,
 ): Promise<void> {
-  const publication = work.message.revisionKind === 'PUBLICATION'
+  const label = { ANALYSIS: 'Analiz', PUBLICATION: 'Rapor', DIRECT_EDIT: 'Alan' }[work.message.revisionKind]
   await dependencies.repository.appendRevisionResult(work.topicId, {
     role: 'ASSISTANT', kind: 'REVISION_RESULT', revisionKind: work.message.revisionKind,
-    content: `${publication ? 'Rapor' : 'Analiz'} revizyonu r${String(version).padStart(2, '0')} oluşturuldu.`,
+    content: `${label} revizyonu r${String(version).padStart(2, '0')} oluşturuldu.`,
     requestKey: `revision-result:${work.message.id}`,
   })
 }
