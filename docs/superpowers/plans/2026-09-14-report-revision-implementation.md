@@ -68,17 +68,35 @@
 
 Inline düzenlemenin taşıyıcı varsayımı önce ölçülmeli; yanlışsa bütün frontend tasarımı değişir.
 
-- [ ] `srcDoc` ile yüklenen ve `sandbox="allow-same-origin"` taşıyan (fakat `allow-scripts` taşımayan) bir iframe'in `contentDocument`'ına ebeveyn sayfadan erişilebildiğini doğrula.
-- [ ] Ebeveynden `[data-field]` düğümlerine olay bağlanabildiğini ve `contenteditable` ile metin düzenlenebildiğini doğrula.
-- [ ] Doğrulanırsa: şablon tek kaynak kalır, önizleme yayımlanan HTML ile birebir aynıdır, belgeye script enjekte edilmez.
-- [ ] Doğrulanmazsa: önizleme iframe'i korunur ve düzenleme, tıklanan alana çapalanan bir popover ile yapılır; bu durumda `EditableReportPreview` sözleşmesi değişir, plan güncellenir.
+- [x] `srcDoc` ile yüklenen ve `sandbox="allow-same-origin"` taşıyan (fakat `allow-scripts` taşımayan) bir iframe'in `contentDocument`'ına ebeveyn sayfadan erişilebildiğini doğrula.
+- [x] Ebeveynden `[data-field]` düğümlerine olay bağlanabildiğini ve `contenteditable` ile metin düzenlenebildiğini doğrula.
+- [x] Belgedeki inline `<script>` ve `onerror` özniteliğinin **çalışmadığını** doğrula.
+
+**Sonuç: doğrulandı.** Chromium'da ölçüldü:
+
+| sandbox | Ebeveyn DOM erişimi | Belgedeki script |
+| --- | --- | --- |
+| `allow-same-origin` | evet | çalışmaz |
+| `allow-same-origin allow-scripts` | evet | çalışır |
+| mevcut `allow-popups …` | hayır | çalışmaz |
+
+Aşama 6 `sandbox="allow-same-origin"` ile ilerler: düzenleme katmanı ebeveyn sayfada yaşar, belgeye script enjekte edilmez, şablon tek kaynak kalır ve önizleme yayımlanan HTML ile birebir aynıdır. `allow-scripts` hiçbir koşulda eklenmez.
 
 ## Aşama 1 — Yama Çekirdeği (modelsiz)
 
-- [ ] `report-patch.ts` içinde düzenlenebilir yol kalıplarını ve yama şemasını tanımla; `path` serbest JSONPath değil, kalıp eşleşmeli.
-- [ ] Yama uygulama fonksiyonunu yaz: spec kopyası üzerinde çalış, yolu çöz, değeri yaz, `ReportSpecSchema.parse` ile doğrula.
-- [ ] Kilitli bir yol geldiğinde yamanın tamamını reddet; kısmi uygulama olmasın.
-- [ ] Birim testleri: izinli alan uygulanır; kilitli alan reddedilir; dokunulmayan alanlar birebir korunur; şemayı bozan yama (boş zorunlu alan, satır/sütun uyuşmazlığı) reddedilir; bilinmeyen yol reddedilir.
+- [x] `report-patch.ts` içinde düzenlenebilir yol kalıplarını ve yama şemasını tanımla; `path` serbest JSONPath değil, kalıp eşleşmeli.
+- [x] Yama uygulama fonksiyonunu yaz: spec kopyası üzerinde çalış, yolu çöz, değeri yaz, `ReportSpecSchema.parse` ile doğrula.
+- [x] Kilitli bir yol geldiğinde yamanın tamamını reddet; kısmi uygulama olmasın.
+- [x] Birim testleri: izinli alan uygulanır; kilitli alan reddedilir; dokunulmayan alanlar birebir korunur; şemayı bozan yama (boş zorunlu alan, satır/sütun uyuşmazlığı) reddedilir; bilinmeyen yol reddedilir.
+
+Red gerekçeleri dört ayrı sınıfa ayrıldı; hangisinin döndüğü kullanıcıya ne söyleyeceğimizi belirliyor:
+
+| Durum | Gerekçe |
+| --- | --- |
+| Alan spec'te var, izin listesinde yok | `LOCKED_PATH` |
+| Alan spec'te de yok | `UNKNOWN_PATH` |
+| Alan izinli ama bu kartta yok (K3'ün `oldDeadline`'ı K2'de) veya dizi indeksi aralık dışı | `MISSING_TARGET` |
+| Yama uygulanır ama şemayı bozar | `SCHEMA_VIOLATION` |
 
 **Kabul:** Yama çekirdeği modelden ve veritabanından bağımsız olarak test edilebilir durumda.
 
