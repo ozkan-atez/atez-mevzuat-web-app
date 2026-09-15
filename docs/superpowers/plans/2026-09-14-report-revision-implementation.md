@@ -41,7 +41,7 @@
 ### Backend files to modify
 
 - `backend/prisma/schema.prisma`: Yeni modeller, `RevisionKind.DIRECT_EDIT`, `TopicOutboxCommand.REVISE_FIELDS`.
-- `backend/src/modules/topic-analysis/templates/bulten-v2.ts`: Düzenlenebilir düğümlere `data-field` öznitelikleri.
+- `backend/src/modules/topic-analysis/application/render-report-html.ts`: Düzenlenebilir düğümlere `data-field` öznitelikleri (işaretleme render'da, iskelet şablonda).
 - `backend/src/modules/topic-analysis/application/validate-report-html.ts`: `data-field` özniteliğine izin, diğer kısıtlar aynen.
 - `backend/src/modules/topic-analysis/application/build-revision-context.ts`: Prompt'un yama yoluna mı analiz yoluna mı gideceğinin ayrımı.
 - `backend/src/modules/topic-analysis/infrastructure/topic-analysis-queue.ts`: `REVISE_FIELDS` komutu.
@@ -139,12 +139,14 @@ Red gerekçeleri dört ayrı sınıfa ayrıldı; hangisinin döndüğü kullanı
 
 ## Aşama 5 — Şablon ve Doğrulayıcı
 
-- [ ] `bulten-v2.ts`: düzenlenebilir düğümlere `data-field="<path>"` ekle; yol değerleri `report-patch.ts` izin listesiyle birebir eşleşsin.
-- [ ] Tablo hücrelerine satır/sütun indeksli yollar ver.
-- [ ] `validate-report-html.ts`: `data-field` özniteliğine izin ver; script, iframe, form, olay özniteliği ve dış kaynak yasakları aynen kalsın.
-- [ ] Testler: `data-field` taşıyan HTML doğrulamayı geçer; script içeren HTML hâlâ reddedilir; her izinli yolun şablonda karşılığı bulunduğu.
+- [x] `bulten-v2.ts`: düzenlenebilir düğümlere `data-field="<path>"` ekle; yol değerleri `report-patch.ts` izin listesiyle birebir eşleşsin.
+- [x] Tablo hücrelerine satır/sütun indeksli yollar ver.
+- [x] `validate-report-html.ts`: `data-field` özniteliğine izin ver; script, iframe, form, olay özniteliği ve dış kaynak yasakları aynen kalsın.
+- [x] Testler: `data-field` taşıyan HTML doğrulamayı geçer; script içeren HTML hâlâ reddedilir; her izinli yolun şablonda karşılığı bulunduğu.
 
 **Kabul:** Yayımlanan HTML hem düzenlenebilir hem de yayın sözleşmesine uygun.
+
+Doğrulayıcı artık `data-field` dışındaki her `data-*` özniteliğini reddediyor; işaretleme şablonu genişletmek için bir kapı açmıyor.
 
 ## Aşama 6 — Arayüz
 

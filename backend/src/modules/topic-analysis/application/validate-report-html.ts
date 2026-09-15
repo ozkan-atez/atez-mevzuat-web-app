@@ -6,6 +6,9 @@ export interface ReportValidationExpectation {
   basename: string
 }
 
+/** Editable nodes carry `data-field`, so structural checks must allow attributes. */
+const DATA_FIELD_ATTRIBUTE = /^(?: data-field="[A-Za-z0-9.]+")?$/
+
 export function validateReportHtml(html: string, expected: ReportValidationExpectation): void {
   const errors: string[] = []
   const body = html.replace(/<style>[\s\S]*?<\/style>/i, '').replace(/data:image\/[^"'\s]+/g, '')
@@ -24,10 +27,14 @@ export function validateReportHtml(html: string, expected: ReportValidationExpec
   if (expected.card === 'K6' && expected.topicId !== null) errors.push('K6 topic kimliği taşımamalı.')
   if (expected.card !== 'K6' && (!expected.topicId || !html.includes(`content="${expected.topicId}"`))) errors.push('Topic meta alanı eşleşmiyor.')
   for (const match of html.matchAll(/class="([^"]+)"/g)) for (const name of match[1]!.split(/\s+/)) if (!ALLOWED_CSS_CLASSES.has(name)) errors.push(`Katalog dışı CSS sınıfı: ${name}`)
-  if (/<(?:p|li|td)>\s*(?:|—|-|UYGULANMAZ|N\/A|değerlendirilmektedir|takip edilecektir)\s*<\//i.test(body)) errors.push('Boş veya dolgu blok var.')
+  // Only `data-field` may appear as a data attribute; anything else is off-template.
+  for (const match of html.matchAll(/(\sdata-[a-z-]+="[^"]*")/g)) {
+    if (!DATA_FIELD_ATTRIBUTE.test(match[1] as string)) errors.push(`İzinsiz data özniteliği: ${match[1]!.trim()}`)
+  }
+  if (/<(?:p|li|td)(?:\s+data-field="[^"]*")?>\s*(?:|—|-|UYGULANMAZ|N\/A|değerlendirilmektedir|takip edilecektir)\s*<\//i.test(body)) errors.push('Boş veya dolgu blok var.')
   const noteCount = (body.match(/<aside class="note(?: note--alert)?">/g) ?? []).length
   if (noteCount > 2) errors.push('İkiden fazla not bloğu var.')
-  if ((body.match(/<section class="block"><h2>Kimleri etkiliyor\?<\/h2>[\s\S]*?<\/section>/g)?.[0]?.match(/<li>/g) ?? []).length > 3) errors.push('Etkilenenler sınırı aşıldı.')
+  if ((body.match(/<section class="block"><h2>Kimleri etkiliyor\?<\/h2>[\s\S]*?<\/section>/g)?.[0]?.match(/<li(?:\s|>)/g) ?? []).length > 3) errors.push('Etkilenenler sınırı aşıldı.')
   if ((body.match(/<div class="timeline-row">/g) ?? []).length > 3) errors.push('Takvim sınırı aşıldı.')
   const tableColumns = (body.match(/<th>/g) ?? []).length
   if ((tableColumns >= 5) !== body.includes('data-table--wide') && tableColumns > 0) errors.push('Geniş tablo sınıfı hatalı.')
