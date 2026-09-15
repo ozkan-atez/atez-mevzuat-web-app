@@ -3,11 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { TriggerWorkflowModal } from './TriggerWorkflowModal';
 import { RecentScanRuns } from './RecentScanRuns';
-import { ScanScheduleTimeline } from './ScanScheduleTimeline';
+import { ScanScheduleStatus, ScanScheduleTimeline } from './ScanScheduleTimeline';
+import { useScanSchedule } from './useScanSchedule';
+import atezLogo from '../../assets/atez-logo.png';
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [isTriggerOpen, setIsTriggerOpen] = useState(false);
+  const schedule = useScanSchedule();
 
   return (
     <div className="space-y-8">
@@ -16,15 +19,17 @@ export function Dashboard() {
         {/* Ambient light effect */}
         <div className="absolute -right-20 -top-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
         
-        {/* Top Row: Status Badge & Header Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          {/* Live Status Pill */}
-          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-slate-900/60 border border-slate-700/60 text-xs sm:text-sm font-medium text-slate-200 backdrop-blur-md">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span>Sistem Aktif & İzlemede</span>
+        {/* Top Row: Brand, Live Schedule Status & Header Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 relative z-10">
+          {/* Brand + live schedule status */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+            <img
+              src={atezLogo}
+              alt="ATEZ Yazılım Teknolojileri"
+              className="h-7 sm:h-8 w-auto shrink-0"
+            />
+            <span className="hidden sm:block h-9 w-px bg-slate-700/70" aria-hidden="true"></span>
+            <ScanScheduleStatus schedule={schedule} />
           </div>
           
           {/* Hero Actions */}
@@ -59,7 +64,7 @@ export function Dashboard() {
           </p>
         </div>
         
-        <ScanScheduleTimeline />
+        <ScanScheduleTimeline schedule={schedule} />
       </section>
 
       {/* KPI Metrics Section */}
