@@ -162,7 +162,7 @@ export async function executePromptPatch(
       revisionKind: 'ANALYSIS',
     })
     await recordOutcome(command.topicId, 'REVISION_RESULT',
-      `${parsed.data.reason ?? 'Bu talep kanıtlı bir olguyu değiştiriyor.'} Analiz revizyonu başlatıldı.`,
+      `${parsed.data.reason ?? 'Bu talep kanıtlı bir olguyu değiştiriyor.'} Alan düzenlemesiyle karşılanamadığı için analiz revizyonu başlatıldı; sonuç kanıtın desteklediği kadarıyla oluşur ve değişiklik listesinde alan kaydı bırakmaz.`,
       dependencies, `escalated:${message.id}`)
     return
   }

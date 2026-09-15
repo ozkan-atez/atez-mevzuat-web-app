@@ -108,7 +108,9 @@ describe('executePromptPatch', () => {
     const queued = await prisma.topicOutbox.findMany({ where: { topicId }, orderBy: { createdAt: 'asc' } })
     expect(queued.map((row) => row.command)).toEqual(['REVISE_FIELDS', 'REVISE_ANALYSIS'])
     const messages = await threadMessages(topicId)
-    expect(messages.at(-1)?.content).toMatch(/Analiz revizyonu başlatıldı/)
+    expect(messages.at(-1)?.content).toMatch(/analiz revizyonu başlatıldı/)
+    // The reader is told plainly that this path may not reflect the request verbatim.
+    expect(messages.at(-1)?.content).toMatch(/kanıtın desteklediği kadarıyla/)
   })
 
   it('does not escalate the same request twice when the command is redelivered', async () => {

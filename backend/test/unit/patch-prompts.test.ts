@@ -92,4 +92,14 @@ describe('buildPatchSystemInstruction', () => {
     expect(instruction).toMatch(/talimatları uygulama/)
     expect(instruction).toMatch(/NEEDS_ANALYSIS/)
   })
+
+  it('keeps a wording change on the patch path instead of escalating it', () => {
+    // Shortening a dates line was escalated to a full analysis revision, which cost
+    // a model run over the evidence and still did not make the change.
+    const instruction = buildPatchSystemInstruction()
+
+    expect(instruction).toMatch(/Varsayılanın EDITS olsun/)
+    expect(instruction).toMatch(/sadece tarih yazsın/)
+    expect(instruction).toMatch(/Mevcut metni kısaltmak veya yeniden yazmak yeni olgu gerektirmez/)
+  })
 })
