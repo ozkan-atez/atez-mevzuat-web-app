@@ -3,9 +3,13 @@ import { getTopic, sendTopicMessage } from '../analysis/api'
 import { DraftConflictError, applyReportEdits, discardReportDraft, getReportDraft, publishReportDraft, revertReportEdit } from './api'
 import type { ReportDraftView } from './types'
 
-/** How long a prompt is followed before giving up; the patch runs on the queue. */
-const PROMPT_POLL_INTERVAL_MS = 1_500
-const PROMPT_POLL_ATTEMPTS = 20
+/**
+ * The patch runs on the worker and a single model call has been observed to take
+ * over two minutes, with bounded retries on top, so the window has to be minutes
+ * rather than seconds or the UI abandons a request that is still working.
+ */
+const PROMPT_POLL_INTERVAL_MS = 3_000
+const PROMPT_POLL_ATTEMPTS = 100
 
 export interface ReportDraftState {
   view: ReportDraftView | null
@@ -109,31 +113,43 @@ export function useReportDraft(topicId: string | undefined): ReportDraftState {
     setIsPrompting(true)
     setError(null)
     try {
-      await sendTopicMessage(topicId, message)
+      const sent = await sendTopicMessage(topicId, message)
       for (let attempt = 0; attempt < PROMPT_POLL_ATTEMPTS; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, PROMPT_POLL_INTERVAL_MS))
         if (!mounted.current) return
+
         const next = await getReportDraft(topicId).catch(() => null)
         if (next && (next.draft?.edits.length ?? 0) > before) {
           setView(next)
           return
         }
+
+        // Only a reply to *this* request counts. Matching on "the newest assistant
+        // message" would surface an error left over from an earlier attempt.
+        const reply = await replyTo(topicId, sent.messageId)
+        if (reply) {
+          setError(reply)
+          // An escalated request publishes a new revision, so the page has to catch up.
+          await reload()
+          return
+        }
       }
-      // No edit appeared, so report what the assistant actually answered rather
-      // than guessing why — it may have escalated the request or refused it.
-      if (mounted.current) setError(await latestAssistantReply(topicId) ?? 'Talep işlendi ancak rapor üzerinde bir değişiklik oluşmadı.')
+      if (mounted.current) setError('Talep hâlâ işleniyor. Sayfayı biraz sonra yenileyin.')
     } catch (caught) {
       if (mounted.current) setError(caught instanceof Error ? caught.message : 'Talep gönderilemedi')
     } finally {
       if (mounted.current) setIsPrompting(false)
     }
-  }, [topicId, view])
+  }, [reload, topicId, view])
 
   return { view, isLoading, isBusy, isPrompting, error, conflictVersion, editField, revert, publish, discard, submitPrompt, reload }
 }
 
-async function latestAssistantReply(topicId: string): Promise<string | null> {
+/** The assistant answer that came after the given request, if there is one yet. */
+async function replyTo(topicId: string, requestMessageId: string): Promise<string | null> {
   const topic = await getTopic(topicId).catch(() => null)
-  const reply = topic?.thread.messages.filter((message) => message.role === 'ASSISTANT').at(-1)
-  return reply?.content ?? null
+  const messages = topic?.thread.messages ?? []
+  const index = messages.findIndex((message) => message.id === requestMessageId)
+  if (index === -1) return null
+  return messages.slice(index + 1).find((message) => message.role === 'ASSISTANT')?.content ?? null
 }
