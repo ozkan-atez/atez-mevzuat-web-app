@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { LoaderCircle, X } from 'lucide-react'
+import { useActiveReport } from '../revision/ActiveReportContext'
 
 interface DockedAiAssistantProps {
   isOpen: boolean
@@ -24,10 +25,20 @@ function AssistantLauncherIcon() {
 export function DockedAiAssistant({ isOpen, onOpenChange }: DockedAiAssistantProps) {
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const activeReport = useActiveReport()
 
   useEffect(() => {
     if (isOpen) inputRef.current?.focus()
   }, [isOpen])
+
+  // On a report page the request becomes a revision for that report. The result
+  // lands in its change list, so no transcript is shown here.
+  const submit = () => {
+    const message = input.trim()
+    if (!message || !activeReport || activeReport.isPrompting) return
+    setInput('')
+    void activeReport.submitPrompt(message)
+  }
 
   if (!isOpen) {
     return (
@@ -74,10 +85,17 @@ export function DockedAiAssistant({ isOpen, onOpenChange }: DockedAiAssistantPro
                 ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                className="w-full bg-transparent border-0 text-slate-100 text-sm sm:text-base placeholder-slate-400 font-normal p-0 focus:ring-0 outline-none leading-relaxed"
-                placeholder="Ne değiştirmek veya oluşturmak istiyorsunuz?"
+                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submit() } }}
+                disabled={activeReport?.isPrompting ?? false}
+                className="w-full bg-transparent border-0 text-slate-100 text-sm sm:text-base placeholder-slate-400 font-normal p-0 focus:ring-0 outline-none leading-relaxed disabled:opacity-60"
+                placeholder={activeReport ? `“${activeReport.title.slice(0, 48)}” için revizyon isteyin…` : 'Ne değiştirmek veya oluşturmak istiyorsunuz?'}
                 type="text"
               />
+              {activeReport?.isPrompting && (
+                <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-indigo-300">
+                  <LoaderCircle className="h-3 w-3 animate-spin" />Talebiniz rapora uygulanıyor…
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-3 pt-1">
@@ -87,7 +105,7 @@ export function DockedAiAssistant({ isOpen, onOpenChange }: DockedAiAssistantPro
                 </button>
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
-                <button className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95" title="Gönder" type="submit">
+                <button onClick={submit} disabled={!activeReport || !input.trim() || activeReport.isPrompting} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 disabled:opacity-40" title="Gönder" type="button">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 19.5V4.5m0 0l-6 6m6-6l6 6" strokeLinecap="round" strokeLinejoin="round"></path></svg>
                 </button>
               </div>

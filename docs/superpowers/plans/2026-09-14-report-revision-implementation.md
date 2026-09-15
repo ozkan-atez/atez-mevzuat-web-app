@@ -53,6 +53,7 @@
 
 - `frontend/src/features/revision/types.ts`: Taslak, yama ve değişiklik kaydı tipleri.
 - `frontend/src/features/revision/api.ts`: Taslak uçlarının istemcisi.
+- `frontend/src/features/revision/ActiveReportContext.tsx`: Açık raporu docked asistana taşıyan bağlam.
 - `frontend/src/features/revision/useReportDraft.ts`: Taslak durumu, iyimser güncelleme ve hata yönetimi.
 - `frontend/src/features/revision/EditableReportPreview.tsx`: `data-field` düğümlerine düzenleme davranışı bağlayan önizleme.
 - `frontend/src/features/revision/ChangeList.tsx`: Numaralı değişiklik listesi ve özet açılımı.
@@ -150,24 +151,24 @@ Doğrulayıcı artık `data-field` dışındaki her `data-*` özniteliğini redd
 
 ## Aşama 6 — Arayüz
 
-- [ ] `useReportDraft.ts`: taslak yükleme, yama gönderme, geri alma, yayımlama; çakışmada kullanıcıyı güncel sürüme yönlendirme.
-- [ ] `EditableReportPreview.tsx`: Aşama 0'da doğrulanan yönteme göre `[data-field]` düğümlerine düzenleme davranışı bağla; odak kaybında yamayı gönder.
-- [ ] `ChangeList.tsx`: numaralı liste; tıklanınca alan, eski değer, yeni değer, kaynak (`Kullanıcı` / `AI`) ve varsa tetikleyen prompt; tek yamayı geri alma.
-- [ ] `PublishDraftBar.tsx`: bekleyen değişiklik sayısı, yayımla, iptal, çakışma uyarısı.
-- [ ] `DockedAiAssistant.tsx`: Enter ile talebi aktif raporun taslağına gönder; sohbet dökümü gösterme, sonucu değişiklik listesine düşür.
-- [ ] `AppLayout.tsx`: aktif sayfa bağlamını (rapor/revizyon kimliği) asistana taşı; rapor sayfasında değilken asistan bu yolu kullanmasın.
-- [ ] `ReportDetail.tsx`: düzenlenebilir önizleme, değişiklik listesi ve yayımlama çubuğunu yerleştir; mevcut PDF ve e-posta eylemleri korunsun.
-- [ ] Testler: alan düzenleme yama isteği gönderir; kilitli alan düzenlenemez; değişiklik listesi özeti açılır; geri alma listeye yeni kayıt ekler; yayımlama sonrası sayfa yeni revizyona geçer; çakışmada uyarı görünür.
+- [x] `useReportDraft.ts`: taslak yükleme, yama gönderme, geri alma, yayımlama; çakışmada kullanıcıyı güncel sürüme yönlendirme.
+- [x] `EditableReportPreview.tsx`: Aşama 0'da doğrulanan yönteme göre `[data-field]` düğümlerine düzenleme davranışı bağla; odak kaybında yamayı gönder.
+- [x] `ChangeList.tsx`: numaralı liste; tıklanınca alan, eski değer, yeni değer, kaynak (`Kullanıcı` / `AI`) ve varsa tetikleyen prompt; tek yamayı geri alma.
+- [x] `PublishDraftBar.tsx`: bekleyen değişiklik sayısı, yayımla, iptal, çakışma uyarısı.
+- [x] `DockedAiAssistant.tsx`: Enter ile talebi aktif raporun taslağına gönder; sohbet dökümü gösterme, sonucu değişiklik listesine düşür.
+- [x] `AppLayout.tsx`: aktif sayfa bağlamını (rapor/revizyon kimliği) asistana taşı; rapor sayfasında değilken asistan bu yolu kullanmasın.
+- [x] `ReportDetail.tsx`: düzenlenebilir önizleme, değişiklik listesi ve yayımlama çubuğunu yerleştir; mevcut PDF ve e-posta eylemleri korunsun.
+- [x] Testler: alan düzenleme yama isteği gönderir; kilitli alan düzenlenemez; değişiklik listesi özeti açılır; geri alma listeye yeni kayıt ekler; yayımlama sonrası sayfa yeni revizyona geçer; çakışmada uyarı görünür.
 
 **Kabul:** Kullanıcı iki yoldan da revize edebilir ve ne değiştiğini görebilir.
 
 ## Aşama 7 — Uçtan Uca Doğrulama
 
-- [ ] `2026-09-11` tarihli gerçek bir rapor üzerinde: iki alan elle düzenle, bir alanı prompt ile değiştir, yayımla; tek `rNN` oluştuğunu doğrula.
-- [ ] Yayımlanan HTML'in ve PDF'in yeni değerleri taşıdığını doğrula.
-- [ ] Önceki revizyonun değişmediğini nesne deposunda doğrula.
-- [ ] Yayımlanan revizyonun yeni `AnalysisRevision` oluşturmadığını doğrula.
-- [ ] Tüm backend ve frontend testlerinin geçtiğini, `tsc --noEmit` çıktısının temiz olduğunu doğrula.
+- [x] `2026-09-11` tarihli gerçek bir rapor üzerinde: iki alan elle düzenle, bir alanı prompt ile değiştir, yayımla; tek `rNN` oluştuğunu doğrula.
+- [x] Yayımlanan HTML'in ve PDF'in yeni değerleri taşıdığını doğrula.
+- [x] Önceki revizyonun değişmediğini nesne deposunda doğrula.
+- [x] Yayımlanan revizyonun yeni `AnalysisRevision` oluşturmadığını doğrula.
+- [x] Tüm backend ve frontend testlerinin geçtiğini, `tsc --noEmit` çıktısının temiz olduğunu doğrula.
 
 **Kabul:** Spec'teki altı kabul kriteri karşılanır.
 
