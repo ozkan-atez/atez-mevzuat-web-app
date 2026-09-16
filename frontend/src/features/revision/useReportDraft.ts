@@ -36,7 +36,10 @@ export function useReportDraft(topicId: string | undefined): ReportDraftState {
   const [conflictVersion, setConflictVersion] = useState<number | null>(null)
   const mounted = useRef(true)
 
-  useEffect(() => () => { mounted.current = false }, [])
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   const reload = useCallback(async () => {
     if (!topicId) return

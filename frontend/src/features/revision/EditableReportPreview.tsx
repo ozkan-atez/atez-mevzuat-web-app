@@ -27,12 +27,12 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
 
     const attach = () => {
       const doc = frame.contentDocument
-      if (!doc) return
+      if (!doc?.head) return null
 
       doc.getElementById('atez-edit-style')?.remove()
       if (!editable) {
         for (const node of doc.querySelectorAll<HTMLElement>('[data-field]')) node.removeAttribute('contenteditable')
-        return
+        return doc
       }
 
       // Injected into the preview only; the stored artefact never carries it.
@@ -49,6 +49,7 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
         node.setAttribute('contenteditable', 'plaintext-only')
         node.spellcheck = false
       }
+      return doc
     }
 
     const handleBlur = (event: FocusEvent) => {
@@ -67,8 +68,7 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
     }
 
     const bind = () => {
-      attach()
-      const doc = frame.contentDocument
+      const doc = attach()
       if (!doc) return
       doc.addEventListener('focusin', handleFocus as EventListener)
       doc.addEventListener('focusout', handleBlur as EventListener)

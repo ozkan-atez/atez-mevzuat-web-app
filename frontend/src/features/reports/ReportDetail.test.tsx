@@ -2,6 +2,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { StrictMode } from 'react'
 import { ReportDetail } from './ReportDetail'
 import { ActiveReportProvider } from '../revision/ActiveReportContext'
 
@@ -50,18 +51,28 @@ function stubFetch(handlers: { draft?: unknown } = {}) {
   return fetchMock
 }
 
-function renderPage() {
-  return render(
+function renderPage(strict = false) {
+  const page = (
     <MemoryRouter initialEntries={['/reports/topic-1']}>
       <ActiveReportProvider>
         <Routes><Route path="/reports/:id" element={<ReportDetail />} /></Routes>
       </ActiveReportProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+  return render(strict ? <StrictMode>{page}</StrictMode> : page)
 }
 
 describe('ReportDetail', () => {
   afterEach(cleanup)
+
+  it('finishes loading the draft when StrictMode replays effects', async () => {
+    stubFetch()
+
+    renderPage(true)
+
+    expect(await screen.findByText('İthalat Tebliği')).toBeVisible()
+    expect(screen.queryByText('Mevzuat bülteni yükleniyor…')).not.toBeInTheDocument()
+  })
 
   it('renders the published bulletin with its sources and actions', async () => {
     stubFetch()
