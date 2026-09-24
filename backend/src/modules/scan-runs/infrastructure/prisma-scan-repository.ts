@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
+import { listRunnableSourceKeys } from '../../managed-sources/runnable-sources'
 import { scheduleRequestKey, type ScanScheduleSlotKey } from '../domain/scan-schedule'
 import type { ScanRunStatus, ScanStage } from '../domain/scan-run'
 import type {
@@ -30,7 +31,9 @@ import type {
 export class PrismaScanRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async createManualRun(input: { requestKey: string; targetDate: string }): Promise<{
+  async listRunnableSourceKeys(): Promise<string[]> { return listRunnableSourceKeys(this.prisma) }
+
+  async createManualRun(input: { requestKey: string; targetDate: string; sourceKeys?: string[] }): Promise<{
     id: string
     status: ScanRunStatus
     targetDate: string
@@ -43,6 +46,7 @@ export class PrismaScanRepository {
         data: {
           requestKey: input.requestKey,
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
+          sourceKeys: input.sourceKeys ?? ['resmi-gazete'],
           timezone: 'Europe/Istanbul',
           outbox: { create: { requestKey: input.requestKey } },
         },
@@ -60,7 +64,7 @@ export class PrismaScanRepository {
    * Idempotent per (date, slot): the request key is unique, so a cron firing twice
    * — a retry, a restarted worker — reuses the run instead of scanning again.
    */
-  async createScheduledRun(input: { targetDate: string; slotKey: ScanScheduleSlotKey }): Promise<{
+  async createScheduledRun(input: { targetDate: string; slotKey: ScanScheduleSlotKey; sourceKeys?: string[] }): Promise<{
     id: string
     status: ScanRunStatus
     targetDate: string
@@ -76,6 +80,7 @@ export class PrismaScanRepository {
           scheduleSlot: input.slotKey,
           trigger: 'CRON',
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
+          sourceKeys: input.sourceKeys ?? ['resmi-gazete'],
           timezone: 'Europe/Istanbul',
           outbox: { create: { requestKey } },
         },
@@ -156,12 +161,15 @@ export class PrismaScanRepository {
     })
   }
 
-  async getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint; indexObjectKey: string | null; indexSourceUrl: string | null } | null> {
-    const run = await this.prisma.scanRun.findUnique({ where: { id: runId } })
+  async getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; currentStage: ScanStage | null; stages: Array<{ stage: ScanStage; status: string }>; targetDate: string; sourceKeys: string[]; downloadedBytes: bigint; indexObjectKey: string | null; indexSourceUrl: string | null } | null> {
+    const run = await this.prisma.scanRun.findUnique({ where: { id: runId }, include: { stages: { select: { stage: true, status: true } } } })
     return run ? {
       id: run.id,
       status: run.status,
+      currentStage: run.currentStage,
+      stages: run.stages,
       targetDate: run.targetDate.toISOString().slice(0, 10),
+      sourceKeys: run.sourceKeys,
       downloadedBytes: run.downloadedBytes,
       indexObjectKey: run.indexObjectKey,
       indexSourceUrl: run.indexSourceUrl,
@@ -169,7 +177,8 @@ export class PrismaScanRepository {
   }
 
   async startRun(runId: string): Promise<void> {
-    await this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'RUNNING', startedAt: new Date(), errorSummary: null } })
+    const run = await this.prisma.scanRun.findUniqueOrThrow({ where: { id: runId }, select: { startedAt: true } })
+    await this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'RUNNING', startedAt: run.startedAt ?? new Date(), completedAt: null, errorSummary: null } })
   }
 
   async startStage(runId: string, stage: ScanStage, totalItems: number): Promise<void> {
@@ -303,6 +312,27 @@ export class PrismaScanRepository {
     await this.prisma.scanRun.update({ where: { id: runId }, data: { status, errorSummary: error, completedAt: new Date() } })
   }
 
+  async requestRunRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.scanOutbox.findUnique({ where: { requestKey } })
+      if (existing) {
+        if (existing.scanRunId !== runId || existing.commandType !== 'START_SCAN') throw new RunRetryConflictError('Idempotency key belongs to another command')
+        return { runId, commandId: existing.id, status: 'QUEUED' as const }
+      }
+      const claimed = await tx.scanRun.updateMany({
+        where: { id: runId, status: { in: ['FAILED', 'PARTIAL'] } },
+        data: { status: 'QUEUED', errorSummary: null, completedAt: null },
+      })
+      if (claimed.count !== 1) throw new RunRetryConflictError('Run is not ready for retry')
+      const command = await tx.scanOutbox.create({ data: { scanRunId: runId, commandType: 'START_SCAN', requestKey } })
+      await tx.stageExecution.updateMany({
+        where: { scanRunId: runId, status: 'FAILED' },
+        data: { status: 'PENDING', errorSummary: null, completedAt: null },
+      })
+      return { runId, commandId: command.id, status: 'QUEUED' as const }
+    })
+  }
+
   async getRun(runId: string): Promise<ScanRunDetailDto | null> {
     const run = await this.prisma.scanRun.findUnique({
       where: { id: runId },
@@ -315,6 +345,7 @@ export class PrismaScanRepository {
           include: { document: true, analyses: { orderBy: { version: 'desc' }, take: 1 }, reports: { include: { revisions: { orderBy: { version: 'desc' }, take: 1 } } } },
         },
         topicReports: { include: { revisions: { where: { status: 'VALIDATED' }, orderBy: { version: 'desc' }, take: 1 } } },
+        sourceRuns: { orderBy: { createdAt: 'asc' }, include: { source: { select: { name: true, key: true } }, documents: { select: { id: true, title: true, url: true, publishedOn: true }, orderBy: { publishedOn: 'desc' } }, _count: { select: { documents: true } } } },
         editions: { orderBy: { discoveryOrder: 'asc' }, include: { documents: { orderBy: { publicationOrder: 'asc' }, include: { _count: { select: { assets: true } } } } } },
       },
     })
@@ -348,6 +379,11 @@ export class PrismaScanRepository {
     })
     return {
       id: run.id, status: run.status, currentStage: run.currentStage,
+      sourceKeys: run.sourceKeys,
+      sourceResults: run.sourceRuns.map((item) => ({ id: item.id, sourceKey: item.source.key, sourceName: item.source.name ?? item.source.key, status: item.status, documentCount: item._count.documents, errorSummary: item.errorSummary, hasReport: item._count.documents > 0 && Boolean(item.reportHtml), documents: item.documents.map((document) => ({ id: document.id, title: document.title, url: document.url, publishedOn: document.publishedOn?.toISOString().slice(0, 10) ?? null })) })),
+      reportDuplicateStatus: run.reportDuplicateStatus,
+      reportDuplicateGroups: Array.isArray(run.reportDuplicateGroups) ? run.reportDuplicateGroups as unknown as Array<{ reportIds: string[]; reason: string }> : [],
+      reportDuplicateError: run.reportDuplicateError,
       targetDate: run.targetDate.toISOString().slice(0, 10), startedAt: run.startedAt?.toISOString() ?? null,
       completedAt: run.completedAt?.toISOString() ?? null, errorSummary: run.errorSummary,
       filter: filterJob ? {
@@ -379,7 +415,9 @@ export class PrismaScanRepository {
           const reportRevision = report?.revisions[0]
           return {
             id: topic.id, documentId: topic.documentId, title: topic.document.title, status: topic.status,
-            retryAvailable: topic.status === 'AWAITING_RETRY', errorCategory: topic.lastErrorCategory, errorMessage: topic.lastErrorMessage,
+            retryAvailable: topic.status === 'AWAITING_RETRY',
+            errorCategory: topic.status === 'COMPLETED' ? null : topic.lastErrorCategory,
+            errorMessage: topic.status === 'COMPLETED' ? null : topic.lastErrorMessage,
             analysisVersion: analysis?.version ?? null, reportVersion: reportRevision?.version ?? null,
             reportCard: reportRevision?.card ?? null, reportBasename: report?.basename ?? null,
           }
@@ -425,6 +463,7 @@ export class PrismaScanRepository {
     })
     return runs.map((run) => ({
       id: run.id,
+      sourceKeys: run.sourceKeys,
       trigger: run.trigger,
       status: run.status,
       currentStage: run.currentStage,
@@ -615,6 +654,15 @@ export class PrismaScanRepository {
       this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'AWAITING_RETRY', currentStage: 'AI_FILTERING', errorSummary: error.message } }),
       this.prisma.aiJob.update({ where: { id: jobId }, data: { status: 'AWAITING_RETRY', lastErrorCategory: error.category, lastErrorMessage: error.message } }),
       this.prisma.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { status: 'AWAITING_RETRY', errorSummary: error.message } }),
+    ])
+  }
+
+  async markFilterFailed(runId: string, jobId: string, error: AiCallFailure): Promise<void> {
+    const completedAt = new Date()
+    await this.prisma.$transaction([
+      this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'FAILED', currentStage: 'AI_FILTERING', errorSummary: error.message, completedAt } }),
+      this.prisma.aiJob.update({ where: { id: jobId }, data: { status: 'FAILED', lastErrorCategory: error.category, lastErrorMessage: error.message } }),
+      this.prisma.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { status: 'FAILED', errorSummary: error.message, completedAt } }),
     ])
   }
 
@@ -903,6 +951,13 @@ export class PrismaScanRepository {
     })
   }
 
+  async markPreviousSourceFailed(jobId: string, error: AiCallFailure): Promise<void> {
+    await this.prisma.previousSourceJob.update({
+      where: { id: jobId },
+      data: { status: 'FAILED', completedAt: new Date(), lastErrorCategory: error.category, lastErrorMessage: error.message },
+    })
+  }
+
   async getPreviousSourceProgress(runId: string): Promise<{ total: number; completed: number; awaitingRetry: number }> {
     const [total, completed, awaitingRetry] = await Promise.all([
       this.prisma.previousSourceJob.count({ where: { scanRunId: runId } }),
@@ -919,6 +974,18 @@ export class PrismaScanRepository {
       this.prisma.stageExecution.update({
         where: { scanRunId_stage: { scanRunId: runId, stage: 'DISCOVERING_PREVIOUS_SOURCES' } },
         data: { status: 'AWAITING_RETRY', totalItems: progress.total, completedItems: progress.completed, failedItems: progress.awaitingRetry, errorSummary: message },
+      }),
+    ])
+  }
+
+  async markPreviousSourceStageFailed(runId: string, message: string): Promise<void> {
+    const progress = await this.getPreviousSourceProgress(runId)
+    const completedAt = new Date()
+    await this.prisma.$transaction([
+      this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'FAILED', currentStage: 'DISCOVERING_PREVIOUS_SOURCES', completedItems: progress.completed, failedItems: progress.total - progress.completed, errorSummary: message, completedAt } }),
+      this.prisma.stageExecution.update({
+        where: { scanRunId_stage: { scanRunId: runId, stage: 'DISCOVERING_PREVIOUS_SOURCES' } },
+        data: { status: 'FAILED', totalItems: progress.total, completedItems: progress.completed, failedItems: progress.total - progress.completed, errorSummary: message, completedAt },
       }),
     ])
   }
@@ -1145,6 +1212,10 @@ export class PrismaScanRepository {
       tx.stageExecution.update({ where: { scanRunId_stage: { scanRunId: runId, stage: 'AI_FILTERING' } }, data: { completedItems } }),
     ])
   }
+}
+
+export class RunRetryConflictError extends Error {
+  override readonly name = 'RunRetryConflictError'
 }
 
 export class AiFilterRetryConflictError extends Error {

@@ -24,10 +24,18 @@ export async function buildEvidenceBundle(
     ] : []),
   ]
 
-  const totalBytes = candidates.reduce((total, candidate) => total + candidate.object.byteSize, 0n)
-  if (totalBytes > BigInt(options.maxContextBytes)) {
-    throw new Error(`Topic kanıt paketi Gemini bağlam sınırını aşıyor: ${totalBytes} > ${options.maxContextBytes}`)
+  const officialBytes = candidates.reduce((total, candidate) => total + candidate.object.byteSize, 0n)
+  if (officialBytes > BigInt(options.maxContextBytes)) {
+    throw new Error(`Topic kanıt paketi Gemini bağlam sınırını aşıyor: ${officialBytes} > ${options.maxContextBytes}`)
   }
+  // Curated references are supplementary; they must never crowd out official evidence.
+  let remaining = BigInt(options.maxContextBytes) - officialBytes
+  const managedSources = (topic.managedSources ?? []).filter((source) => {
+    const size = BigInt(Buffer.byteLength(source.contentText) + Buffer.byteLength(source.title + source.sourceUrl + (source.description ?? '')) + 300)
+    if (size > remaining) return false
+    remaining -= size
+    return true
+  })
 
   const parts: EvidencePart[] = []
   const aiParts: AiInputPart[] = [{ text: `Topic kimliği: ${topic.topicId}\nHedef tarih: ${topic.targetDate}\nBelge başlığı: ${topic.document.title}` }]
@@ -46,13 +54,29 @@ export async function buildEvidenceBundle(
     aiParts.push({ text: `Kanıt kimliği: ${candidate.sourceId}\nKaynak URL: ${candidate.sourceUrl}` })
     aiParts.push(...toAiParts(candidate, bytes))
   }
+  for (const source of managedSources) {
+    aiParts.push({ text: [
+      `Destekleyici kullanıcı kaynağı kimliği: managed-source:${source.id}`,
+      `Başlık: ${source.title}`,
+      `Kaynak URL: ${source.sourceUrl}`,
+      `Alınma zamanı: ${source.fetchedAt}`,
+      source.description ? `Açıklama: ${source.description}` : '',
+      'Bu kaynak resmî Resmî Gazete belgesi değildir; resmî metinle çelişirse resmî metni esas al.',
+      `Kaynak metni:\n${source.contentText}`,
+    ].filter(Boolean).join('\n') })
+  }
 
   const manifestValue = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     topicId: topic.topicId,
     runId: topic.runId,
     targetDate: topic.targetDate,
     parts,
+    managedSources: managedSources.map((source) => ({
+      id: source.id, title: source.title, sourceUrl: source.sourceUrl, fetchedAt: source.fetchedAt,
+      textSha256: createHash('sha256').update(source.contentText).digest('hex'),
+      contentText: source.contentText,
+    })),
   }
   const manifest = Buffer.from(JSON.stringify(manifestValue))
   const signature = createHash('sha256').update(manifest).digest('hex')

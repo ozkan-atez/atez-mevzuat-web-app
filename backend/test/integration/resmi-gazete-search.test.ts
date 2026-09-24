@@ -3,6 +3,14 @@ import { ResmiGazeteSearch } from '../../src/modules/scan-runs/infrastructure/re
 import { SourcePolicy } from '../../src/modules/scan-runs/domain/source-policy'
 
 describe('ResmiGazeteSearch', () => {
+  it('treats repeated index anchors to the same document as one match', async () => {
+    const title = 'İthalatta Gözetim Uygulanmasına İlişkin Tebliğ'
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(`<html><body><a href="unrelated.pdf"><img src="icon.png"></a><a href="20251231M4-39.pdf">${title}</a><a href="20251231M4-39.pdf">${title}</a></body></html>`, { status: 200 }))
+    const gateway = new ResmiGazeteSearch(new SourcePolicy(['www.resmigazete.gov.tr']), { fetch: fetchFn, timeoutMs: 5_000 })
+    const resolved = await gateway.resolveDocumentUrl({ query: 'Gözetim', title, publicationDate: '2025-12-31', gazetteNo: null, mukerrer: 'EVET4', url: 'https://www.resmigazete.gov.tr/fihrist?tarih=2025-12-31&mukerrer=4', regulationType: null }, { targetRegulationIdentifier: null, targetRegulationTitle: title })
+    expect(resolved).toBe('https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf')
+  })
+
   it('sends the bounded title query and resolves the matching mukerrer PDF', async () => {
     const fetchFn = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{

@@ -87,6 +87,8 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
     schemaVersion: 4,
     runId: snapshot.run.id,
     source: 'RESMI_GAZETE',
+    selectedSources: snapshot.run.sourceKeys,
+    sourceRuns: snapshot.run.sourceResults.map((source) => ({ id: source.id, key: source.sourceKey, status: source.status, documentCount: source.documentCount, hasReport: source.hasReport })),
     targetDate: snapshot.run.targetDate,
     createdAt: snapshot.run.completedAt ?? snapshot.run.startedAt,
     index: snapshot.index,

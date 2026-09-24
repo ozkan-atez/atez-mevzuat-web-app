@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { LoaderCircle } from 'lucide-react'
 import { listScanRuns } from '../scans/api'
 import type { ScanRunStatus, ScanRunSummary } from '../scans/types'
 
@@ -31,10 +32,16 @@ export function RecentScanRuns() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    void listScanRuns(10)
-      .then(setRuns)
-      .catch((caught) => setError(caught instanceof Error ? caught.message : 'Taramalar alınamadı'))
-      .finally(() => setLoading(false))
+    let active = true
+    const load = () => {
+      void listScanRuns(10)
+        .then((next) => { if (active) { setRuns(next); setError(null) } })
+        .catch((caught) => { if (active) setError(caught instanceof Error ? caught.message : 'Taramalar alınamadı') })
+        .finally(() => { if (active) setLoading(false) })
+    }
+    load()
+    const interval = window.setInterval(load, 15_000)
+    return () => { active = false; window.clearInterval(interval) }
   }, [])
 
   return (
@@ -58,7 +65,7 @@ export function RecentScanRuns() {
                 <td className="px-6 py-4"><div className="font-mono text-xs font-semibold text-slate-800">{run.id.slice(0, 8)}</div><div className="mt-1 text-xs text-slate-500">{run.counts.documents} belge · {run.counts.assets} bağlı dosya · {run.counts.editions} sayı</div></td>
                 <td className="whitespace-nowrap px-6 py-4"><span className="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">Resmî Gazete · {run.trigger === 'MANUAL' ? 'Manuel' : 'Cron'}</span></td>
                 <td className="whitespace-nowrap px-6 py-4"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusClasses[run.status]}`}>{statusLabels[run.status]}</span></td>
-                <td className="whitespace-nowrap px-6 py-4 text-right"><Link to={`/runs/${run.id}`} className="inline-flex rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:text-blue-600">İncele</Link></td>
+                <td className="whitespace-nowrap px-6 py-4 text-right"><div className="inline-flex items-center gap-3"><Link to={`/runs/${run.id}`} className="inline-flex rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:text-blue-600">İncele</Link>{run.status === 'RUNNING' && <span role="status" aria-label="Tarama çalışıyor"><LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin text-slate-400 motion-reduce:animate-none" /></span>}</div></td>
               </tr>
             ))}
           </tbody>

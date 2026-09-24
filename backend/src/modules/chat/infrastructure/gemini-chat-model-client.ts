@@ -4,6 +4,8 @@ import type { ChatModelChunk, ChatModelClient, ChatModelRequest, ChatTurn } from
 
 export interface GeminiChatPart {
   text?: string
+  inlineData?: { mimeType: string; data: string }
+  thought?: boolean
   functionCall?: { name: string; args?: Record<string, unknown> }
   functionResponse?: { name: string; response: Record<string, unknown> }
   thoughtSignature?: string
@@ -60,7 +62,11 @@ export class GeminiChatModelClient implements ChatModelClient {
       })
       for await (const chunk of stream) {
         if (timedOut) throw new AiProviderError('TIMEOUT', true, 'Gemini isteği zaman aşımına uğradı.')
-        if (chunk.text) yield { type: 'text', text: chunk.text }
+        const visibleText = chunk.text || chunk.candidates?.[0]?.content?.parts
+          ?.filter((part) => !part.thought)
+          .map((part) => part.text ?? '')
+          .join('')
+        if (visibleText) yield { type: 'text', text: visibleText }
         for (const call of toolCallsOf(chunk)) yield { type: 'tool-call', call }
       }
       if (timedOut) throw new AiProviderError('TIMEOUT', true, 'Gemini isteği zaman aşımına uğradı.')
@@ -79,7 +85,10 @@ export class GeminiChatModelClient implements ChatModelClient {
 function toContent(turn: ChatTurn): { role: 'user' | 'model'; parts: GeminiChatPart[] } {
   switch (turn.role) {
     case 'user':
-      return { role: 'user', parts: [{ text: turn.content }] }
+      return { role: 'user', parts: [
+        { text: turn.content },
+        ...(turn.attachment ? attachmentParts(turn.attachment) : []),
+      ] }
     case 'model':
       return { role: 'model', parts: [{ text: turn.content }] }
     case 'tool-calls':
@@ -94,6 +103,18 @@ function toContent(turn: ChatTurn): { role: 'user' | 'model'; parts: GeminiChatP
         functionResponse: { name: result.name, response: asRecord(result.response) },
       })) }
   }
+}
+
+function attachmentParts(attachment: { name: string; mediaType: string; data: string }): GeminiChatPart[] {
+  if (attachment.mediaType.startsWith('text/') || attachment.mediaType === 'application/json') {
+    const text = Buffer.from(attachment.data, 'base64').toString('utf8')
+    const limit = 60_000
+    return [{ text: `Ekli dosya (${attachment.name}):\n${text.slice(0, limit)}${text.length > limit ? '\n[Dosya metni kısaltıldı.]' : ''}` }]
+  }
+  return [
+    { text: `Ekli dosya: ${attachment.name}` },
+    { inlineData: { mimeType: attachment.mediaType, data: attachment.data } },
+  ]
 }
 
 /**

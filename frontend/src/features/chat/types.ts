@@ -8,6 +8,7 @@ export interface ChatMessage {
   status: ChatMessageStatus
   errorDetail: string | null
   createdAt: string
+  attachment?: { id: string; name: string; mediaType: string; byteSize: number }
 }
 
 export interface ChatSession {
@@ -21,11 +22,14 @@ export interface ChatHistoryItem {
   id: string
   type: 'GENERAL' | 'REPORT_REVISION'
   title: string
+  titlePending?: boolean
   preview: string | null
   messageCount: number
   updatedAt: string
   /** Where selecting this item goes: a chat route, or the report it belongs to. */
   target: string
+  /** The scan that owns a report conversation. Absent for general chats. */
+  run?: { id: string; targetDate: string; status?: string }
 }
 
 export type ChatStreamEvent =
@@ -37,3 +41,4 @@ export type ChatStreamEvent =
   | { type: 'error'; message: string }
 
 export const MAX_MESSAGE_LENGTH = 8_000
+export const MAX_CHAT_FILE_BYTES = 5_000_000

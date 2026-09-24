@@ -8,6 +8,7 @@ describe('buildManifest', () => {
       run: {
         id: 'run-1', status: 'RUNNING', currentStage: 'WRITING_MANIFEST', targetDate: '2026-09-11',
         startedAt: '2026-09-11T04:00:00.000Z', completedAt: null, errorSummary: null,
+        sourceKeys: ['resmi-gazete'], sourceResults: [],
         counts: { editions: 1, documents: 1, assets: 1, completedItems: 1, totalItems: 1, failedItems: 0 },
         stages: [],
         analysis: null,

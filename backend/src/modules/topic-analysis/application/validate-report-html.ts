@@ -17,7 +17,6 @@ export function validateReportHtml(html: string, expected: ReportValidationExpec
   if (!/src="data:image\/png;base64,/.test(html)) errors.push('Gömülü PNG logo eksik.')
   if (/<(?:script|link|iframe|form|object|embed)\b/i.test(html) || /\son[a-z]+\s*=|\sstyle\s*=|javascript:/i.test(html)) errors.push('Yasaklı HTML etiketi veya niteliği var.')
   if (/<img\b[^>]*\bsrc=["']https?:/i.test(html)) errors.push('Harici görsel var.')
-  if (/(?:doğrulanamadı|teyit edilemedi|güvensiz|emin değiliz|kesin değil|belirsiz|muhtemelen|sanıyoruz|şüpheli|garanti edilemez)/i.test(body)) errors.push('Belirsizlik ifadesi var.')
   if (!html.includes('<meta name="x-atez-template" content="bulten-v2">') || !html.includes('class="topbar"') || !html.includes('class="header"') || !html.includes('class="fine"') || !html.includes('class="footer"')) errors.push('Sabit iskelet eksik.')
   if (!/<\/header>\s*<section class="feed">/.test(html) || /class="(?:overview|stats|stat|section-heading)"/.test(html)) errors.push('Feed yerleşimi geçersiz.')
   const cards = html.match(/<article class="card(?: [^"]+)?">/g) ?? []
@@ -31,7 +30,10 @@ export function validateReportHtml(html: string, expected: ReportValidationExpec
   for (const match of html.matchAll(/(\sdata-[a-z-]+="[^"]*")/g)) {
     if (!DATA_FIELD_ATTRIBUTE.test(match[1] as string)) errors.push(`İzinsiz data özniteliği: ${match[1]!.trim()}`)
   }
-  if (/<(?:p|li|td)(?:\s+data-field="[^"]*")?>\s*(?:|—|-|UYGULANMAZ|N\/A|değerlendirilmektedir|takip edilecektir)\s*<\//i.test(body)) errors.push('Boş veya dolgu blok var.')
+  // An official rate table may intentionally contain an empty cell. Narrative
+  // paragraphs and list items must still contain meaningful text.
+  if (/<(?:p|li)(?:\s+data-field="[^"]*")?>\s*(?:|—|-|UYGULANMAZ|N\/A|değerlendirilmektedir|takip edilecektir)\s*<\//i.test(body)
+    || /<td(?:\s+data-field="[^"]*")?>\s*(?:—|-|UYGULANMAZ|N\/A|değerlendirilmektedir|takip edilecektir)\s*<\//i.test(body)) errors.push('Boş veya dolgu blok var.')
   const noteCount = (body.match(/<aside class="note(?: note--alert)?">/g) ?? []).length
   if (noteCount > 2) errors.push('İkiden fazla not bloğu var.')
   if ((body.match(/<section class="block"><h2>Kimleri etkiliyor\?<\/h2>[\s\S]*?<\/section>/g)?.[0]?.match(/<li(?:\s|>)/g) ?? []).length > 3) errors.push('Etkilenenler sınırı aşıldı.')

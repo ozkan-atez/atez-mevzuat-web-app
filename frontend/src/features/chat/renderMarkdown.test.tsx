@@ -26,4 +26,12 @@ describe('renderMarkdown', () => {
     expect(container.querySelector('b')).toBeNull()
     expect(container.textContent).toContain('<img src=x onerror="alert(1)">')
   })
+
+  it('shows report and official source links while leaving unsafe links as text', () => {
+    render(<>{renderMarkdown('[Rapor](/runs/run-1/reports/report-1) ve [Resmî Gazete](https://www.resmigazete.gov.tr/x) ve [kötü](javascript:alert)')}</>)
+
+    expect(screen.getByRole('link', { name: 'Rapor' })).toHaveAttribute('href', '/runs/run-1/reports/report-1')
+    expect(screen.getByRole('link', { name: 'Resmî Gazete' })).toHaveAttribute('target', '_blank')
+    expect(screen.queryByRole('link', { name: 'kötü' })).not.toBeInTheDocument()
+  })
 })

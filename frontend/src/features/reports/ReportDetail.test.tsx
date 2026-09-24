@@ -131,7 +131,7 @@ describe('ReportDetail', () => {
     expect(screen.getByText((_, element) => element?.textContent === '1 değişiklik onayınızı bekliyor. Onaylayana kadar yayımlanmış revizyon değişmez; onayladığınızda tümü tek bir r03 revizyonuna aktarılır.', { selector: 'p' })).toBeVisible()
   })
 
-  it('warns that the delivery actions still use the published revision while a draft is open', async () => {
+  it('blocks email delivery while a revision awaits approval', async () => {
     stubFetch({
       draft: draftPayload([
         { id: 'edit-1', sequence: 1, path: 'title', previousValue: 'Eski', nextValue: 'Yeni', source: 'USER', prompt: null, chatMessageId: null, revertsEditId: null, revertedByEditId: null, createdAt: '2026-09-11T06:00:00Z' },
@@ -140,7 +140,8 @@ describe('ReportDetail', () => {
 
     renderPage()
 
-    expect(await screen.findByText(/PDF ve e-posta hâlâ yayımlanmış r02/)).toBeVisible()
+    expect(await screen.findByText(/Revizyon onaylanana veya iptal edilene kadar e-posta gönderimi kapalıdır/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'E-Posta ile Dağıt' })).toBeDisabled()
   })
 
   it('shows a real error instead of demo content', async () => {

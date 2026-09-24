@@ -6,6 +6,9 @@ import { ReportDetail } from './features/reports/ReportDetail';
 import { RunReportDetail } from './features/reports/RunReportDetail';
 import { RunDetail } from './features/runs/RunDetail';
 import { GroupsPage } from './features/groups/GroupsPage';
+import { TemplatesPage } from './features/templates/TemplatesPage';
+import { SourcesPage } from './features/sources/SourcesPage';
+import { SourceRunDetail } from './features/sources/SourceRunDetail';
 
 export default function App() {
   return (
@@ -17,6 +20,9 @@ export default function App() {
           <Route path="/runs/:runId/reports/:reportId" element={<RunReportDetail />} />
           <Route path="/runs/:id" element={<RunDetail />} />
           <Route path="/groups" element={<GroupsPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/sources" element={<SourcesPage />} />
+          <Route path="/source-runs/:id" element={<SourceRunDetail />} />
           <Route path="/chat" element={<ChatScreen />} />
           <Route path="/chat/:sessionId" element={<ChatScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />

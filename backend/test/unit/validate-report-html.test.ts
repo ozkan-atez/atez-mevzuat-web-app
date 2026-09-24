@@ -17,6 +17,27 @@ describe('validateReportHtml', () => {
     expect(() => validateReportHtml(html, { card: 'K1', topicId, basename: `01-${topicId}.html` })).not.toThrow()
   })
 
+  it('accepts genuine empty cells in an official rates table', async () => {
+    const html = await renderReportHtml({
+      ...spec, card: 'K2', table: {
+        title: 'Döviz kurları', columns: ['Para birimi', 'Alış', 'Satış'],
+        rows: [['ABD Doları', '42,10', ''], ['Avro', '', '45,20']], note: null,
+      }, blocks: ['B1', 'B2', 'B3', 'B8', 'B10'],
+    })
+    expect(html).toContain('<td data-field="table.rows.0.2"></td>')
+    expect(() => validateReportHtml(html, { card: 'K2', topicId, basename: `01-${topicId}.html` })).not.toThrow()
+  })
+
+  it('does not reject report content based on uncertainty words', async () => {
+    const html = await renderReportHtml({
+      ...spec,
+      summary: 'Gümrük süreçlerindeki onay belirsizliği giderilmiştir.',
+      note: 'Önceki uygulama kesin değil olarak değerlendirilmişti.',
+      blocks: ['B1', 'B2', 'B3', 'B7', 'B10'],
+    })
+    expect(() => validateReportHtml(html, { card: 'K1', topicId, basename: `01-${topicId}.html` })).not.toThrow()
+  })
+
   it('rejects scripts, unresolved placeholders and external images', () => {
     expect(() => validateReportHtml('<script>alert(1)</script>{{TITLE}}<img src="https://x">', { card: 'K1', topicId, basename: `01-${topicId}.html` })).toThrow()
   })

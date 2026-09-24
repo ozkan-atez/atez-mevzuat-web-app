@@ -8,6 +8,7 @@ const optionalText = z.preprocess(
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   PORT: z.coerce.number().int().positive().default(3001),
+  CORS_ORIGIN: optionalText,
   SCAN_TIMEZONE: z.string().default('Europe/Istanbul'),
   SOURCE_HOSTS: z.string().default('resmigazete.gov.tr,www.resmigazete.gov.tr'),
   SOURCE_DELAY_MS: z.coerce.number().int().min(750).default(750),
@@ -41,6 +42,7 @@ const schema = z.object({
 export interface AppEnv {
   databaseUrl: string
   port: number
+  corsOrigins: string[] | undefined
   timezone: string
   sourceHosts: string[]
   sourceDelayMs: number
@@ -84,6 +86,7 @@ export function loadEnv(input: NodeJS.ProcessEnv = process.env): AppEnv {
   return {
     databaseUrl: value.DATABASE_URL,
     port: value.PORT,
+    corsOrigins: value.CORS_ORIGIN?.split(',').map((origin) => origin.trim()).filter(Boolean),
     timezone: value.SCAN_TIMEZONE,
     sourceHosts: value.SOURCE_HOSTS.split(',').map((host) => host.trim()).filter(Boolean),
     sourceDelayMs: value.SOURCE_DELAY_MS,

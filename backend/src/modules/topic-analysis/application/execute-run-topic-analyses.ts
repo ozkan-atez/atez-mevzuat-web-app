@@ -1,5 +1,6 @@
 import { AiProviderError } from '../../ai/domain/ai-errors'
-import type { AnalysisResult } from '../domain/analysis-schemas'
+import { ZodError } from 'zod'
+import { AnalysisResultSchema, type AnalysisResult } from '../domain/analysis-schemas'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import type { CreateTopicReportRevisionInput, RunReportContext, StoredTopicReport, TopicObjectStore } from './ports'
 import { buildReportSpec } from './build-report-spec'
@@ -18,13 +19,15 @@ export interface TopicAnalysisOutput {
 
 export interface TopicPublicationRepository {
   ensureTopics(runId: string): Promise<Array<{ id: string; documentId: string; status: string }>>
+  getReusableTopicAnalysis?(topicId: string): Promise<{ id: string; version: number; analysisObjectKey: string; markdownObjectKey: string; requestMessageId: string | null } | null>
+  getExistingNoChangeReport?(runId: string): Promise<StoredTopicReport | null>
   getRunReportContext(runId: string): Promise<RunReportContext | null>
   nextReportVersion(runId: string, topicId: string | null): Promise<number>
   createReportRevision(input: CreateTopicReportRevisionInput): Promise<StoredTopicReport>
   markTopicRendering(topicId: string): Promise<void>
   markTopicValidating(topicId: string): Promise<void>
   markTopicCompleted(topicId: string): Promise<void>
-  markTopicBlocked(topicId: string, message: string): Promise<void>
+  markTopicBlocked(topicId: string, message: string, category?: 'INVALID_RESPONSE' | 'UNKNOWN_PROVIDER_ERROR'): Promise<void>
 }
 
 interface Dependencies {
@@ -61,7 +64,7 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
   if (allTopics.length === 0) {
     await dependencies.lifecycle?.analysisFinished()
     await dependencies.lifecycle?.reportsStarted(1)
-    const noChangeReport = await createNoChangeReport(context, dependencies)
+    const noChangeReport = await getOrCreateNoChangeReport(context, dependencies)
     await dependencies.lifecycle?.reportItemFinished()
     await dependencies.lifecycle?.reportsFinished()
     return { status: 'COMPLETED', topicReports: [], noChangeReport, counts: { total: 0, completed: 0, awaitingRetry: 0, failed: 0, reports: 1 }, failures: [] }
@@ -75,7 +78,21 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
   }
 
   const outcomes = await executePool(topics.map((topic) => topic.id), dependencies.concurrency, async (topicId) => {
-    try { return await dependencies.executeTopic(topicId) }
+    try {
+      const reusable = await dependencies.repository.getReusableTopicAnalysis?.(topicId)
+      if (reusable) {
+        const content = await dependencies.objectStore.getContent(reusable.analysisObjectKey)
+        return {
+          id: reusable.id,
+          version: reusable.version,
+          analysisObjectKey: reusable.analysisObjectKey,
+          markdownObjectKey: reusable.markdownObjectKey,
+          analysis: AnalysisResultSchema.parse(JSON.parse(content.toString('utf8'))),
+          ...(reusable.requestMessageId ? { requestMessageId: reusable.requestMessageId } : {}),
+        }
+      }
+      return await dependencies.executeTopic(topicId)
+    }
     finally { await dependencies.lifecycle?.analysisItemFinished() }
   })
   await dependencies.lifecycle?.analysisFinished()
@@ -87,7 +104,7 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
   if (failures.length === 0 && passAnalyses.length === 0) {
     await Promise.all(noContentAnalyses.map((item) => dependencies.repository.markTopicCompleted(item.analysis.topicId)))
     await dependencies.lifecycle?.reportsStarted(1)
-    const noChangeReport = await createNoChangeReport(context, dependencies)
+    const noChangeReport = await getOrCreateNoChangeReport(context, dependencies)
     await dependencies.lifecycle?.reportItemFinished()
     await dependencies.lifecycle?.reportsFinished()
     return { status: 'COMPLETED', topicReports: [], noChangeReport, counts: { total: topics.length, completed: topics.length, awaitingRetry: 0, failed: 0, reports: 1 }, failures: [] }
@@ -101,8 +118,14 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
     try {
       topicReports.push(await publishTopicAnalysis(context, item, sequence, dependencies))
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Rapor üretimi başarısız.'
-      await dependencies.repository.markTopicBlocked(item.analysis.topicId, message)
+      console.error('Topic report publication failed', {
+        runId, topicId: item.analysis.topicId,
+        category: isReportValidationError(error) ? 'INVALID_RESPONSE' : 'UNKNOWN_PROVIDER_ERROR',
+        error,
+        ...(error instanceof ZodError ? { paths: error.issues.slice(0, 8).map((issue) => issue.path.join('.')) } : {}),
+      })
+      const message = topicFailureMessage(error)
+      await dependencies.repository.markTopicBlocked(item.analysis.topicId, message, isReportValidationError(error) ? 'INVALID_RESPONSE' : 'UNKNOWN_PROVIDER_ERROR')
       failures.push({ topicId: item.analysis.topicId, error })
     } finally {
       await dependencies.lifecycle?.reportItemFinished()
@@ -132,9 +155,20 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
     },
     failures: failures.map((failure) => ({
       topicId: failure.topicId,
-      message: failure.error instanceof Error ? failure.error.message.replace(/\s+/g, ' ').slice(0, 300) : String(failure.error),
+      message: topicFailureMessage(failure.error),
     })),
   }
+}
+
+function topicFailureMessage(error: unknown): string {
+  if (error instanceof AiProviderError) return error.message
+  if (error instanceof ZodError) return 'Rapor verisi beklenen biçimde değil. Belge analizi yeniden incelenmeli.'
+  if (error instanceof Error && error.message.startsWith('BLOCKED_AUDIT:')) return 'Rapor HTML doğrulamasından geçemedi. Rapor yeniden oluşturulmalı.'
+  return 'Analiz veya rapor oluşturma işlemi tamamlanamadı. Kayıtları inceleyip yeniden deneyin.'
+}
+
+function isReportValidationError(error: unknown): boolean {
+  return error instanceof ZodError || (error instanceof Error && error.message.startsWith('BLOCKED_AUDIT:'))
 }
 
 export async function publishTopicAnalysis(
@@ -202,6 +236,10 @@ async function createNoChangeReport(context: RunReportContext, dependencies: Dep
     scanRunId: context.runId, topicId: null, analysisRevisionId: null, title: spec.documentTitle, basename,
     card: 'K6', version, specObjectKey, htmlObjectKey,
   })
+}
+
+async function getOrCreateNoChangeReport(context: RunReportContext, dependencies: Dependencies): Promise<StoredTopicReport> {
+  return await dependencies.repository.getExistingNoChangeReport?.(context.runId) ?? createNoChangeReport(context, dependencies)
 }
 
 type PoolResult<T> = { ok: true; value: T } | { ok: false; error: unknown }

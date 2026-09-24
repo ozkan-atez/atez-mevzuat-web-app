@@ -41,15 +41,16 @@ interface Props {
   edits: ReportFieldEditRecord[]
   onRevert: (editId: string) => void
   isBusy: boolean
+  emptyMessage?: string
 }
 
-export function ChangeList({ edits, onRevert, isBusy }: Props) {
+export function ChangeList({ edits, onRevert, isBusy, emptyMessage = 'Henüz değişiklik yok. Bülten üzerinde bir alana tıklayarak ya da alttaki asistana yazarak düzenleyebilirsiniz.' }: Props) {
   const [openId, setOpenId] = useState<string | null>(null)
 
   if (edits.length === 0) {
     return (
       <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-        Henüz değişiklik yok. Bülten üzerinde bir alana tıklayarak ya da alttaki asistana yazarak düzenleyebilirsiniz.
+        {emptyMessage}
       </p>
     )
   }

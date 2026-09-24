@@ -1,4 +1,5 @@
 import type { ChatHistoryItem, ChatMessage, ChatSession, ChatStreamEvent } from './types'
+import { chatFileMediaType, validateChatFile } from './chatFile'
 
 export class ChatApiError extends Error {
   readonly status: number
@@ -41,13 +42,30 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
   if (!response.ok) throw await ChatApiError.from(response, 'Sohbet silinemedi.')
 }
 
-export async function streamChatMessage(sessionId: string, content: string, signal: AbortSignal): Promise<Response> {
+export async function streamChatMessage(sessionId: string, content: string, signal: AbortSignal, file?: File): Promise<Response> {
+  if (file) {
+    const error = validateChatFile(file)
+    if (error) throw new Error(error)
+  }
+  const attachment = file ? {
+    name: file.name,
+    mediaType: chatFileMediaType(file)!,
+    data: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+  } : undefined
   return fetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, ...(attachment ? { attachment } : {}) }),
     signal,
   })
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+  }
+  return btoa(binary)
 }
 
 /**

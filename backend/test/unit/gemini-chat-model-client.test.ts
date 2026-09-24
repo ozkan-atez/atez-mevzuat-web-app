@@ -30,6 +30,16 @@ function texts(chunks: ChatModelChunk[]): string[] {
 }
 
 describe('GeminiChatModelClient', () => {
+  it('sends a PDF as a Gemini inline part and a text file as readable text', async () => {
+    const { transport, requests } = transportWith([{ text: 'Okundu' }])
+    const client = new GeminiChatModelClient(transport, { timeoutMs: 1_000 })
+    await collect(client.streamReply({ ...request, turns: [
+      { role: 'user', content: 'Bu PDF nedir?', attachment: { name: 'rapor.pdf', mediaType: 'application/pdf', data: Buffer.from('%PDF-1.7').toString('base64') } },
+      { role: 'user', content: 'Bunu da oku', attachment: { name: 'not.txt', mediaType: 'text/plain', data: Buffer.from('Gümrük notu').toString('base64') } },
+    ] }))
+    expect(requests[0]?.contents[0]?.parts[2]).toMatchObject({ inlineData: { mimeType: 'application/pdf' } })
+    expect(requests[0]?.contents[1]?.parts[1]?.text).toContain('Gümrük notu')
+  })
   it('maps conversation roles and yields only non-empty text chunks', async () => {
     const { transport, requests } = transportWith([{ text: 'Merhaba' }, {}, { text: ' dünya' }])
     const client = new GeminiChatModelClient(transport, { timeoutMs: 1_000 })
@@ -47,6 +57,15 @@ describe('GeminiChatModelClient', () => {
       ],
       config: { systemInstruction: 'Türkçe yanıtla' },
     })
+  })
+
+  it('reads visible raw text when the SDK convenience getter is empty', async () => {
+    const { transport } = transportWith([{ text: '', candidates: [{ content: { parts: [
+      { text: 'internal', thought: true }, { text: 'Rapor bağlantısı' },
+    ] } }] }])
+    const client = new GeminiChatModelClient(transport, { timeoutMs: 1_000 })
+
+    expect(texts(await collect(client.streamReply(request)))).toEqual(['Rapor bağlantısı'])
   })
 
   it('surfaces tool calls and sends the tool result back on the next turn', async () => {

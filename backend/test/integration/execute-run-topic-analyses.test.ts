@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { executeRunTopicAnalyses } from '../../src/modules/topic-analysis/application/execute-run-topic-analyses'
 import type { AnalysisResult } from '../../src/modules/topic-analysis/domain/analysis-schemas'
 import type { CreateTopicReportRevisionInput, RunReportContext, StoredTopicReport, TopicObjectStore } from '../../src/modules/topic-analysis/application/ports'
@@ -43,6 +43,26 @@ class MemoryRunRepository {
 }
 
 describe('executeRunTopicAnalyses', () => {
+  it('reuses a saved analysis and K6 report when resuming report generation', async () => {
+    const store = new MemoryObjectStore()
+    store.values.set('saved-analysis.json', Buffer.from(JSON.stringify(analysis(topicIds[0]!, 'PASS_NO_RELEVANT_CONTENT'))))
+    const existingReport: StoredTopicReport = {
+      id: 'report-1', revisionId: 'revision-1', topicId: null, version: 1,
+      basename: '00-degisiklik-yok.html', card: 'K6', specObjectKey: 'saved-spec.json', htmlObjectKey: 'saved-report.html',
+    }
+    const repository = Object.assign(new MemoryRunRepository([topicIds[0]!]), {
+      ensureTopics: async () => [{ id: topicIds[0]!, documentId: 'doc-1', status: 'ANALYZED' }],
+      getReusableTopicAnalysis: async () => ({ id: 'analysis-1', version: 1, analysisObjectKey: 'saved-analysis.json', markdownObjectKey: 'saved-analysis.md', requestMessageId: null }),
+      getExistingNoChangeReport: async () => existingReport,
+    })
+    const executeTopic = vi.fn()
+    const result = await executeRunTopicAnalyses(runId, { repository, objectStore: store, concurrency: 1, executeTopic })
+    expect(result.status).toBe('COMPLETED')
+    expect(result.noChangeReport).toEqual(existingReport)
+    expect(executeTopic).not.toHaveBeenCalled()
+    expect(repository.reports).toHaveLength(0)
+  })
+
   it('processes every IN topic once with bounded concurrency', async () => {
     const repository = new MemoryRunRepository(topicIds)
     let active = 0

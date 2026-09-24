@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildReportSpec } from '../../src/modules/topic-analysis/application/build-report-spec'
 import type { AnalysisResult } from '../../src/modules/topic-analysis/domain/analysis-schemas'
+import { AnalysisResultSchema } from '../../src/modules/topic-analysis/domain/analysis-schemas'
 
 const topicId = '11111111-1111-4111-8111-111111111111'
 
@@ -41,6 +42,16 @@ describe('buildReportSpec', () => {
     const spec = buildReportSpec(analysis({ tables: [] }), { sequence: 1 })
     expect(spec.card).not.toBe('K2')
     expect(spec.blocks).not.toContain('B8')
+  })
+
+  it('preserves blank cells from an official rate table without inventing values', () => {
+    const value = AnalysisResultSchema.parse(analysis({ tables: [{
+      title: 'Döviz kurları', columns: ['Döviz', 'Alış', 'Satış'],
+      rows: [['USD', '41,0000', '42,0000'], ['EUR', '', '']], evidenceIds: ['e1'],
+    }] }))
+    const spec = buildReportSpec(value, { sequence: 1 })
+    expect(spec.card).toBe('K2')
+    if (spec.card === 'K2') expect(spec.table.rows[1]).toEqual(['EUR', '', ''])
   })
 
   it('uses GGAAYY report identity and Turkish display date', () => {

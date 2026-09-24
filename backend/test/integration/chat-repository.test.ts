@@ -21,7 +21,7 @@ async function seedTopicThread(message: string) {
   const topic = (await topicRepository.ensureTopics(run.id))[0]!
   await topicRepository.appendRevisionRequest({ topicId: topic.id, requestKey: crypto.randomUUID(), message, revisionKind: 'DIRECT_EDIT' })
   const thread = await prisma.analysisThread.findUniqueOrThrow({ where: { topicId: topic.id } })
-  return { threadId: thread.id, topicId: topic.id }
+  return { threadId: thread.id, topicId: topic.id, runId: run.id }
 }
 
 describe('PrismaChatRepository', () => {
@@ -31,7 +31,7 @@ describe('PrismaChatRepository', () => {
   })
   afterAll(() => prisma.$disconnect())
 
-  it('creates a session, appends ordered messages, and titles it from the first question', async () => {
+  it('keeps the first question as content and saves a generated title once', async () => {
     const session = await repository.createSession()
     await repository.appendMessage({ sessionId: session.id, role: 'USER', content: 'İthalat rejimi nedir?', status: 'COMPLETED' })
     await repository.appendMessage({ sessionId: session.id, role: 'ASSISTANT', content: 'İthalat rejimi…', status: 'COMPLETED' })
@@ -40,9 +40,26 @@ describe('PrismaChatRepository', () => {
       { role: 'USER', content: 'İthalat rejimi nedir?', status: 'COMPLETED' },
       { role: 'ASSISTANT', content: 'İthalat rejimi…', status: 'COMPLETED' },
     ])
+    expect((await repository.listHistory())[0]).toMatchObject({ id: session.id, title: 'Yeni sohbet', titlePending: true })
+    const activityBeforeTitle = (await prisma.chatSession.findUniqueOrThrow({ where: { id: session.id } })).updatedAt
+    await repository.setTitleIfMatches(session.id, null, 'İthalat Rejimi Esasları')
+    await repository.setTitleIfMatches(session.id, null, 'Başka Başlık')
+    expect(await repository.getSessionTitle(session.id)).toBe('İthalat Rejimi Esasları')
+    expect((await prisma.chatSession.findUniqueOrThrow({ where: { id: session.id } })).updatedAt).toEqual(activityBeforeTitle)
     expect((await repository.listHistory())[0]).toMatchObject({
-      id: session.id, type: 'GENERAL', title: 'İthalat rejimi nedir?', messageCount: 2, target: `/chat/${session.id}`,
+      id: session.id, type: 'GENERAL', title: 'İthalat Rejimi Esasları', titlePending: false, messageCount: 2, target: `/chat/${session.id}`,
     })
+  })
+
+  it('marks old first-message titles for background replacement', async () => {
+    const session = await repository.createSession()
+    await repository.appendMessage({ sessionId: session.id, role: 'USER', content: 'İthalat rejimi nedir?', status: 'COMPLETED' })
+    await repository.appendMessage({ sessionId: session.id, role: 'ASSISTANT', content: 'İthalat rejimi…', status: 'COMPLETED' })
+    await repository.setTitleIfMatches(session.id, null, 'İthalat rejimi nedir?')
+
+    expect((await repository.listHistory())[0]).toMatchObject({ title: 'İthalat rejimi nedir?', titlePending: true })
+    await repository.setTitleIfMatches(session.id, 'İthalat rejimi nedir?', 'İthalat Rejimi Esasları')
+    expect((await repository.listHistory())[0]).toMatchObject({ title: 'İthalat Rejimi Esasları', titlePending: false })
   })
 
   it('rejects a message for a session that does not exist', async () => {
@@ -50,16 +67,17 @@ describe('PrismaChatRepository', () => {
       .rejects.toThrow(/Sohbet bulunamadı/)
   })
 
-  it('lists report revision threads alongside general sessions, pointing at their report', async () => {
+  it('lists report revision threads with their report and owning run', async () => {
     const session = await repository.createSession()
     await repository.appendMessage({ sessionId: session.id, role: 'USER', content: 'GTİP nedir?', status: 'COMPLETED' })
-    const { topicId } = await seedTopicThread('PET reçine revizyonu')
+    const { topicId, runId } = await seedTopicThread('PET reçine revizyonu')
 
     const history = await repository.listHistory()
 
     expect(history.map((item) => item.type).sort()).toEqual(['GENERAL', 'REPORT_REVISION'])
     expect(history.find((item) => item.type === 'REPORT_REVISION')).toMatchObject({
       title: 'PET Reçine Tebliği', target: `/reports/${topicId}`, preview: 'PET reçine revizyonu',
+      run: { id: runId, targetDate: '2026-09-11T00:00:00.000Z', status: 'QUEUED' },
     })
   })
 

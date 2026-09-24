@@ -42,6 +42,17 @@ describe('GeminiAiModelClient', () => {
     expect(String(error)).not.toContain('raw provider body')
   })
 
+  it('identifies depleted prepaid credit without retrying or exposing provider details', async () => {
+    const client = new GeminiAiModelClient({
+      generateContent: vi.fn().mockRejectedValue({ status: 402, message: 'payment required; api_key=super-secret' }),
+    }, { timeoutMs: 100 })
+
+    const error = await client.generateStructured(request).catch((caught) => caught)
+    expect(error).toMatchObject({ category: 'QUOTA_EXCEEDED', retryable: false, providerStatus: 402 })
+    expect(String(error)).toContain('ön ödemeli kredisi tükendi')
+    expect(String(error)).not.toContain('super-secret')
+  })
+
   it('maps server failure and timeout to retryable diagnostics', async () => {
     const unavailable = new GeminiAiModelClient({
       generateContent: vi.fn().mockRejectedValue({ status: 503 }),

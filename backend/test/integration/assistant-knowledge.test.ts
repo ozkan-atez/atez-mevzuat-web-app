@@ -61,8 +61,33 @@ describe('PrismaAssistantKnowledge', () => {
     await prisma.scanRun.deleteMany()
     await prisma.storedObject.deleteMany()
     await prisma.customerGroup.deleteMany()
+    await prisma.managedSource.deleteMany()
   })
   afterAll(() => prisma.$disconnect())
+
+  it('finds only active chat sources and returns their stored text', async () => {
+    const source = await prisma.managedSource.create({ data: {
+      url: 'https://example.org/customs', title: 'Gümrük rehberi', description: 'İthalat işlemleri',
+      contentText: 'PET reçine ithalatına ilişkin açıklama.', contentType: 'text/html', fetchedAt: new Date(),
+    } })
+    await prisma.managedSource.create({ data: {
+      url: 'https://example.org/hidden', title: 'Gizli rehber', contentText: 'PET reçine', useInChat: false,
+    } })
+    const found = await runChatTool('eklenen_kaynaklari_ara', { sorgu: 'PET reçine' }, knowledge) as { kaynaklar: Array<{ id: string }> }
+    expect(found.kaynaklar.map((item) => item.id)).toEqual([source.id])
+    expect(await runChatTool('eklenen_kaynagi_getir', { kaynakId: source.id }, knowledge)).toMatchObject({ url: source.url, text: 'PET reçine ithalatına ilişkin açıklama.' })
+  })
+
+  it('passes only matching enabled sources to a run topic', async () => {
+    const { topicId } = await seedPublishedReport()
+    await prisma.managedSource.createMany({ data: [
+      { url: 'https://example.org/one', title: 'İthalat rehberi', keywords: 'ithalat', contentText: 'İthalat açıklaması', useInRuns: true },
+      { url: 'https://example.org/two', title: 'İhracat rehberi', keywords: 'ihracat', contentText: 'İhracat açıklaması', useInRuns: true },
+      { url: 'https://example.org/three', title: 'Kapalı rehber', keywords: 'ithalat', contentText: 'Kapalı açıklama', useInRuns: false },
+    ] })
+    const input = await topicRepository.getTopicEvidenceInput(topicId)
+    expect(input?.managedSources?.map((source) => source.title)).toEqual(['İthalat rehberi'])
+  })
 
   it('finds a published bulletin by words that appear only inside it', async () => {
     const { topicId } = await seedPublishedReport()
@@ -85,6 +110,62 @@ describe('PrismaAssistantKnowledge', () => {
     expect(report?.content).toContain('Kaynak: T.C. Resmî Gazete')
   })
 
+  it('lists every run on a date, including a no-change report, and exposes versioned downloads', async () => {
+    const { runId, topicId } = await seedPublishedReport()
+    const other = await prisma.scanRun.create({ data: { requestKey: crypto.randomUUID(), targetDate: new Date('2026-09-11T00:00:00.000Z'), status: 'COMPLETED' } })
+    const noChange = await prisma.topicReport.create({
+      data: { scanRunId: other.id, title: 'Değişiklik Yok', basename: '00-degisiklik-yok.html', card: 'K6', latestVersion: 1,
+        revisions: { create: { version: 1, status: 'VALIDATED', card: 'K6', specObjectKey: 'no-change.json', htmlObjectKey: 'no-change.html' } } },
+    })
+    objects.set('no-change.json', Buffer.from(JSON.stringify({
+      schemaVersion: 1, templateFamily: 'bulten-v2', reportId: '110926-00', topicId: null, card: 'K6',
+      documentTitle: 'Günlük bülten', issueNumber: '33370', displayDate: '11 Eylül 2026', emptyDayText: 'Kapsam içi değişiklik yok.',
+      source: { label: 'T.C. Resmî Gazete', url: 'https://www.resmigazete.gov.tr/' }, blocks: ['B1'],
+    })))
+
+    await prisma.topicReport.update({ where: { id: noChange.id }, data: {
+      reviewStatus: 'PENDING_APPROVAL', pendingBaseVersion: 1,
+      pendingSpecJson: { schemaVersion: 1, templateFamily: 'bulten-v2', reportId: '110926-00', topicId: null, card: 'K6',
+        documentTitle: 'Günlük bülten', issueNumber: '33370', displayDate: '11 Eylül 2026', emptyDayText: 'Onay bekleyen düzeltme.',
+        source: { label: 'T.C. Resmî Gazete', url: 'https://www.resmigazete.gov.tr/' }, blocks: ['B1'] },
+    } })
+
+    const daily = await knowledge.dailyReports({ date: '2026-09-11' })
+    expect(daily.map((item) => item.runId)).toEqual([other.id, runId])
+    expect(daily[0]?.reports[0]).toMatchObject({ reportId: noChange.id, topicId: null, reportUrl: `/runs/${other.id}/reports/${noChange.id}` })
+    const published = await knowledge.getReport({ reportId: noChange.id })
+    expect(published?.content).toContain('Kapsam içi değişiklik yok.')
+    expect(published?.content).not.toContain('Onay bekleyen düzeltme.')
+    expect(published?.pendingDraft?.content).toContain('Onay bekleyen düzeltme.')
+    expect(await knowledge.reportFiles({ reportId: noChange.id, version: 1 })).toMatchObject({
+      pdfUrl: `/api/v1/scan-runs/${other.id}/reports/${noChange.id}/pdf?version=1`,
+      htmlUrl: `/api/v1/scan-runs/${other.id}/reports/${noChange.id}/html?version=1&download=1`,
+    })
+    expect((await knowledge.reportFiles({ topicId, version: 1 }))?.pdfUrl).toBe(`/api/v1/topics/${topicId}/reports/1/pdf`)
+    expect((await runChatTool('gunluk_raporlari_getir', { tarih: '2026-09-11' }, knowledge) as { taramalar: unknown[] }).taramalar).toHaveLength(2)
+  })
+
+  it('keeps pending edits separate from published report and exposes the revision trail', async () => {
+    const { topicId, documentId } = await seedPublishedReport()
+    const original = spec(topicId)
+    const report = await prisma.topicReport.findUniqueOrThrow({ where: { topicId } })
+    const draft = await prisma.reportDraft.create({ data: {
+      topicId, baseVersion: 1, specJson: { ...original, summary: 'Bekleyen yeni özet' },
+      edits: { create: [{ sequence: 1, path: 'summary', previousValue: 'Eski özet', nextValue: 'Bekleyen yeni özet', source: 'USER' }] },
+    } })
+    const view = await knowledge.getReport({ reportId: report.id })
+    expect(view?.content).toContain('PET reçine ithalatında gözetim')
+    expect(view?.content).not.toContain('Bekleyen yeni özet')
+    expect(view?.pendingDraft).toMatchObject({ baseVersion: 1, changes: 1 })
+    expect((await knowledge.draftChanges({ reportId: report.id }))?.changes).toMatchObject([{ path: 'summary', reverted: false }])
+    const edit = await prisma.reportFieldEdit.findFirstOrThrow({ where: { draftId: draft.id } })
+    await prisma.reportFieldEdit.create({ data: { draftId: draft.id, sequence: 2, path: 'summary', previousValue: 'Bekleyen yeni özet', nextValue: 'Eski özet', source: 'USER', revertsEditId: edit.id } })
+    expect((await knowledge.draftChanges({ reportId: report.id }))?.changes[0]).toMatchObject({ reverted: true })
+    expect((await knowledge.revisionHistory({ topicId }))?.reportRevisions).toMatchObject([{ version: 1, status: 'VALIDATED' }])
+    expect((await knowledge.documentConnections({ documentId }))?.reports).toMatchObject([{ reportId: report.id, version: 1 }])
+    await prisma.reportDraft.delete({ where: { id: draft.id } })
+  })
+
   it('reads the analysis and the archived document text', async () => {
     const { topicId, documentId } = await seedPublishedReport()
 
@@ -93,13 +174,19 @@ describe('PrismaAssistantKnowledge', () => {
   })
 
   it('lists documents with their filter decision and scan runs with their counts', async () => {
-    await seedPublishedReport()
+    const { runId } = await seedPublishedReport()
 
     const documents = await knowledge.searchDocuments({ from: '2026-09-11', to: '2026-09-11' })
     expect(documents[0]).toMatchObject({ filterDecision: 'IN', hasTopic: true, publicationDate: '2026-09-11' })
 
     const runs = await knowledge.listScanRuns({ date: '2026-09-11' })
     expect(runs[0]).toMatchObject({ status: 'COMPLETED', documents: 1, relevantDocuments: 1, reports: 1 })
+    await prisma.stageExecution.create({ data: { scanRunId: runId, stage: 'DOWNLOADING_DOCUMENTS', status: 'AWAITING_RETRY', errorSummary: 'Kaynak erişilemedi' } })
+    await prisma.fetchAttempt.create({ data: { scanRunId: runId, sourceUrl: 'https://www.resmigazete.gov.tr/doc.htm', attemptNo: 1, status: 'FAILED', errorMessage: 'Zaman aşımı' } })
+    expect(await knowledge.scanStages({ runId })).toMatchObject({
+      stages: [{ stage: 'DOWNLOADING_DOCUMENTS', error: 'Kaynak erişilemedi' }],
+      failedFetches: [{ error: 'Zaman aşımı' }],
+    })
   })
 
   it('answers a tool call the way the model would make it', async () => {

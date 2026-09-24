@@ -4,7 +4,38 @@ interface Props {
   html: string
   zoom: number
   editable: boolean
-  onEditField: (path: string, value: string) => void
+  draftStorageKey: string
+  onEditField: (path: string, value: string) => Promise<void>
+}
+
+export function clearLocalReportEdits(key: string) {
+  try { window.localStorage.removeItem(key) } catch { /* Storage may be unavailable. */ }
+}
+
+export function readLocalReportEdits(key: string): Record<string, string> {
+  try {
+    const value = window.localStorage.getItem(key)
+    if (!value) return {}
+    const parsed: unknown = JSON.parse(value)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(Object.entries(parsed).filter(([path, text]) => path.length > 0 && typeof text === 'string')) as Record<string, string>
+  } catch { return {} }
+}
+
+function rememberLocalReportEdit(key: string, path: string, value: string) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ ...readLocalReportEdits(key), [path]: value }))
+  } catch { /* The server save still runs when the editor loses focus. */ }
+}
+
+function forgetLocalReportEdit(key: string, path: string, value: string) {
+  const edits = readLocalReportEdits(key)
+  if (edits[path] !== value) return
+  delete edits[path]
+  try {
+    if (Object.keys(edits).length) window.localStorage.setItem(key, JSON.stringify(edits))
+    else window.localStorage.removeItem(key)
+  } catch { /* Ignore an unavailable store after the server accepted the edit. */ }
 }
 
 /**
@@ -16,7 +47,7 @@ interface Props {
  * inline scripts and event attributes do not run. That keeps the template as the
  * single source of truth, so the preview is byte-identical to what is published.
  */
-export function EditableReportPreview({ html, zoom, editable, onEditField }: Props) {
+export function EditableReportPreview({ html, zoom, editable, draftStorageKey, onEditField }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const onEditRef = useRef(onEditField)
   onEditRef.current = onEditField
@@ -24,6 +55,15 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
   useEffect(() => {
     const frame = frameRef.current
     if (!frame) return
+    const submitted = new Map<string, string>()
+
+    const persist = (path: string, value: string) => {
+      if (submitted.get(path) === value) return
+      submitted.set(path, value)
+      void onEditRef.current(path, value).then(() => forgetLocalReportEdit(draftStorageKey, path, value)).catch(() => {
+        submitted.delete(path)
+      })
+    }
 
     const attach = () => {
       const doc = frame.contentDocument
@@ -41,15 +81,30 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
       style.textContent = `
         [data-field] { outline: 1px dashed transparent; outline-offset: 2px; border-radius: 3px; cursor: text; transition: background-color .12s, outline-color .12s; }
         [data-field]:hover { outline-color: #94a3b8; background: rgba(148,163,184,.10); }
-        [data-field]:focus { outline: 2px solid #2d5bff; background: rgba(45,91,255,.06); }
+        [data-field]:focus { outline: 2px dashed #94a3b8; background: rgba(148,163,184,.10); }
       `
       doc.head.appendChild(style)
 
       for (const node of doc.querySelectorAll<HTMLElement>('[data-field]')) {
         node.setAttribute('contenteditable', 'plaintext-only')
         node.spellcheck = false
+        const path = node.dataset.field
+        if (!path) continue
+        const local = readLocalReportEdits(draftStorageKey)[path]
+        if (local === undefined) continue
+        if (local === (node.textContent ?? '').trim()) forgetLocalReportEdit(draftStorageKey, path, local)
+        else {
+          node.textContent = local
+          persist(path, local)
+        }
       }
       return doc
+    }
+
+    const handleInput = (event: Event) => {
+      const target = (event.target as HTMLElement | null)?.closest?.('[data-field]') as HTMLElement | null
+      const path = target?.dataset.field
+      if (path) rememberLocalReportEdit(draftStorageKey, path, (target.textContent ?? '').trim())
     }
 
     const handleBlur = (event: FocusEvent) => {
@@ -59,7 +114,7 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
       const next = (target.textContent ?? '').trim()
       if (!path || next === target.dataset.initial) return
       target.dataset.initial = next
-      onEditRef.current(path, next)
+      persist(path, next)
     }
 
     const handleFocus = (event: FocusEvent) => {
@@ -72,6 +127,7 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
       if (!doc) return
       doc.addEventListener('focusin', handleFocus as EventListener)
       doc.addEventListener('focusout', handleBlur as EventListener)
+      doc.addEventListener('input', handleInput as EventListener)
     }
 
     bind()
@@ -79,10 +135,18 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
     return () => {
       frame.removeEventListener('load', bind)
       const doc = frame.contentDocument
+      if (doc && editable) {
+        for (const node of doc.querySelectorAll<HTMLElement>('[data-field]')) {
+          const path = node.dataset.field
+          const value = (node.textContent ?? '').trim()
+          if (path && value !== node.dataset.initial && readLocalReportEdits(draftStorageKey)[path] === value) persist(path, value)
+        }
+      }
       doc?.removeEventListener('focusin', handleFocus as EventListener)
       doc?.removeEventListener('focusout', handleBlur as EventListener)
+      doc?.removeEventListener('input', handleInput as EventListener)
     }
-  }, [editable, html])
+  }, [editable, html, draftStorageKey])
 
   return (
     <div className="overflow-auto bg-slate-100 p-4">

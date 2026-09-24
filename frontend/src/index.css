@@ -57,24 +57,31 @@ body {
   transform-origin: bottom center;
 }
 
+.assistant-composer {
+  view-transition-name: assistant-composer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assistant-panel-enter {
     animation: none;
   }
 }
 
-/* The dashboard hands a question to the chat workspace mid-thought, so the two
-   pages cross-fade instead of cutting. Browsers without view transitions simply
-   navigate, and reduced-motion turns it off. */
+/* The dashboard hands its open composer to the chat workspace while the pages
+   cross-fade. Browsers without view transitions simply navigate. */
 ::view-transition-old(root),
-::view-transition-new(root) {
+::view-transition-new(root),
+::view-transition-old(assistant-composer),
+::view-transition-new(assistant-composer) {
   animation-duration: 220ms;
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-new(root),
+  ::view-transition-old(assistant-composer),
+  ::view-transition-new(assistant-composer) {
     animation: none;
   }
 }

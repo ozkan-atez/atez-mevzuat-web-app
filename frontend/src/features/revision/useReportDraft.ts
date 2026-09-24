@@ -82,7 +82,8 @@ export function useReportDraft(topicId: string | undefined): ReportDraftState {
       edits: [{ path, value }],
       ...(view ? { expectedVersion: view.baseVersion } : {}),
     }))
-    if (next && mounted.current) setView(next)
+    if (!next) throw new Error('Revizyon taslağı kaydedilemedi')
+    if (mounted.current) setView(next)
   }, [run, topicId, view])
 
   const revert = useCallback(async (editId: string) => {

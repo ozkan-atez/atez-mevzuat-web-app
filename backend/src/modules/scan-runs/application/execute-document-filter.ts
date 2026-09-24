@@ -39,6 +39,13 @@ export class AiFilterAwaitingRetryError extends Error {
   }
 }
 
+export class AiFilterFailedError extends Error {
+  override readonly name = 'AiFilterFailedError'
+  constructor(readonly runId: string) {
+    super(`AI filtering failed for scan run ${runId}`)
+  }
+}
+
 export async function executeDocumentFilter(runId: string, dependencies: Dependencies): Promise<void> {
   const { repository, model } = dependencies
   const documents = await repository.listFilterDocuments(runId)
@@ -81,12 +88,17 @@ export async function executeDocumentFilter(runId: string, dependencies: Depende
     await repository.completeFilter(runId, job.id)
   } catch (error) {
     if (!(error instanceof AiProviderError)) throw error
-    await repository.markFilterAwaitingRetry(runId, job.id, {
+    const failure = {
       category: error.category,
       providerStatus: error.providerStatus,
       message: error.message,
-    })
-    throw new AiFilterAwaitingRetryError(runId)
+    }
+    if (error.retryable) {
+      await repository.markFilterAwaitingRetry(runId, job.id, failure)
+      throw new AiFilterAwaitingRetryError(runId)
+    }
+    await repository.markFilterFailed(runId, job.id, failure)
+    throw new AiFilterFailedError(runId)
   }
 }
 

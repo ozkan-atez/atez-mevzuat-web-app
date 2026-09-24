@@ -1,4 +1,4 @@
-import { startQueue, manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName } from './platform/queue'
+import { startQueue, manualScanQueueName, scheduledScanQueueName, sourceScheduledScanQueueName, topicAnalysisQueueName } from './platform/queue'
 import { prisma } from './platform/database'
 import { loadEnv } from './config/env'
 import { PrismaScanRepository } from './modules/scan-runs/infrastructure/prisma-scan-repository'
@@ -22,6 +22,11 @@ import { executeTopicRevision } from './modules/topic-analysis/application/execu
 import { executePromptPatch } from './modules/topic-analysis/application/execute-prompt-patch'
 import { PrismaReportDraftRepository } from './modules/topic-analysis/infrastructure/prisma-report-draft-repository'
 import { retryTopicAnalysis } from './modules/topic-analysis/application/retry-topic-analysis'
+import { refreshActiveSources } from './modules/managed-sources/refresh-active-sources'
+import { executeSourceRun } from './modules/managed-sources/source-scan-run'
+import { tariffCredentialsFromEnv } from './modules/managed-sources/tariff-auth'
+import { runSelectedSources } from './modules/managed-sources/run-selected-sources'
+import { checkReportDuplicates } from './modules/managed-sources/check-report-duplicates'
 
 async function startWorker() {
   const queue = await startQueue()
@@ -68,6 +73,23 @@ async function startWorker() {
   }
   await dispatch()
   setInterval(() => void dispatch().catch((error) => console.error('Outbox dispatch error:', error)), 1_000)
+  void refreshActiveSources(prisma).catch((error) => console.error('Kaynak yenileme hatası:', error))
+  setInterval(() => void refreshActiveSources(prisma).catch((error) => console.error('Kaynak yenileme hatası:', error)), 6 * 60 * 60_000)
+
+  // Continue historical standalone source jobs without racing the unified run worker.
+  await prisma.sourceScanRun.updateMany({ where: { scanRunId: null, status: 'RUNNING', startedAt: { lt: new Date(Date.now() - 4 * 60 * 60_000) } }, data: { status: 'QUEUED' } })
+  let sourceRunBusy = false
+  const processSourceRuns = async () => {
+    if (sourceRunBusy) return
+    sourceRunBusy = true
+    try {
+      const queued = await prisma.sourceScanRun.findMany({ where: { scanRunId: null, status: 'QUEUED' }, select: { id: true }, orderBy: { createdAt: 'asc' }, take: 5 })
+      for (const run of queued) await executeSourceRun(prisma, run.id, tariffCredentialsFromEnv())
+    } finally { sourceRunBusy = false }
+  }
+  void processSourceRuns().catch((error) => console.error('Kaynak taraması hatası:', error))
+  setInterval(() => void processSourceRuns().catch((error) => console.error('Kaynak taraması hatası:', error)), 5_000)
+  await queue.unschedule(sourceScheduledScanQueueName)
 
   const { registered } = await registerScanSchedules({
     schedule: (name, cron, data, options) => queue.schedule(name, cron, data, options),
@@ -91,7 +113,8 @@ async function startWorker() {
       const targetDate = resolveScheduledTargetDate({
         slotHour: slot.hour, localHour: now.hour, localDate: now.toFormat('yyyy-MM-dd'),
       })
-      const run = await repository.createScheduledRun({ targetDate, slotKey })
+      const sourceKeys = await repository.listRunnableSourceKeys()
+      const run = await repository.createScheduledRun({ targetDate, slotKey, sourceKeys })
       console.log(run.created
         ? `⏰ ${slot.label} taraması oluşturuldu (${targetDate}): ${run.id}`
         : `⏰ ${slot.label} taraması zaten var (${targetDate}): ${run.id}`)
@@ -112,6 +135,8 @@ async function startWorker() {
         aiModel,
         previousSourceSearch,
         topicRepository,
+        sourceRunner: (id) => runSelectedSources(prisma, id),
+        duplicateChecker: (id) => checkReportDuplicates(prisma, id, aiModel, env.gemini.model),
         gemini: {
           model: env.gemini.model,
           maxAttempts: env.gemini.maxAttempts,

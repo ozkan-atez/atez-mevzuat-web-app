@@ -72,7 +72,7 @@ export class ResmiGazeteSearch implements PreviousSourceSearch {
     const bytes = Buffer.from(await response.arrayBuffer())
     const html = decodeHtml(bytes, response.headers.get('content-type'))
     const $ = load(html)
-    const matches = $('a[href]').toArray().flatMap((element) => {
+    const matches = [...new Set($('a[href]').toArray().flatMap((element) => {
       const href = $(element).attr('href')?.trim()
       if (!href) return []
       const text = $(element).text().replace(/\s+/g, ' ').trim()
@@ -81,10 +81,11 @@ export class ResmiGazeteSearch implements PreviousSourceSearch {
         : true
       const anchorTitle = normalizedTitle(text)
       const selectedTitle = normalizedTitle(candidate.title)
-      const titleMatch = anchorTitle.includes(selectedTitle) || selectedTitle.includes(anchorTitle)
+      const titleMatch = anchorTitle.length > 0 && selectedTitle.length > 0
+        && (anchorTitle.includes(selectedTitle) || selectedTitle.includes(anchorTitle))
       if (!identifierMatch || !titleMatch) return []
       return [this.policy.assertAllowedUrl(new URL(href, archiveUrl).toString(), archiveUrl.toString()).toString()]
-    })
+    }))]
     if (matches.length !== 1) throw new Error(matches.length === 0 ? 'Previous source document link was not found' : 'Previous source document link is ambiguous')
     return matches[0]!
   }

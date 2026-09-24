@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { ScheduleSlot, ScheduleView } from '../scans/types'
+import { ProcessMarker, ProcessTimeline } from '../../components/progress/ProcessTimeline'
 
 const STAGE_LABELS: Record<string, string> = {
   DISCOVERING: 'Kaynaklar keşfediliyor',
@@ -17,8 +18,6 @@ const STAGE_LABELS: Record<string, string> = {
 
 const SCHEDULE_TIME_ZONE = 'Europe/Istanbul'
 const HALF_HOUR_MS = 30 * 60 * 1000
-/** Half of a marker (w-7 = 28px): the track spans marker centre to marker centre. */
-const MARKER_INSET = '14px'
 
 const dateFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: SCHEDULE_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -74,24 +73,15 @@ export function ScanScheduleTimeline({ schedule }: { schedule: ScheduleView | nu
 
   return (
     <div className="pt-6 border-t border-slate-800/80 mt-2 relative z-10" data-purpose="live-cron-process-bar">
-      <div className="relative px-2 pt-2">
-        <div className="relative flex items-center justify-between mb-4">
-          <div className="absolute top-1/2 -translate-y-1/2 h-[3px] z-0" style={{ left: MARKER_INSET, right: MARKER_INSET }}>
-            <div className="w-full h-full bg-slate-800 rounded-full" />
-            <div
-              className="absolute left-0 top-0 h-full bg-indigo-500 rounded-full shadow-sm shadow-indigo-500/50 transition-[width] duration-700"
-              data-purpose="process-bar-fill"
-              style={{ width: `${scheduleProgress(slots, schedule?.targetDate ?? null, now) * 100}%` }}
-            />
-          </div>
-          {slots.map((slot) => <SlotMarker key={slot.key} slot={slot} />)}
-          {slots.length === 0 && <div className="h-7" />}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {slots.map((slot) => <SlotCard key={slot.key} slot={slot} />)}
-        </div>
-      </div>
+      <ProcessTimeline
+        columns={4}
+        progress={scheduleProgress(slots, schedule?.targetDate ?? null, now)}
+        items={slots.map((slot) => ({
+          id: slot.key,
+          marker: <ProcessMarker status={slot.state === 'DUE' ? 'ATTENTION' : slot.state} />,
+          content: <SlotCard slot={slot} />,
+        }))}
+      />
     </div>
   )
 }
@@ -154,35 +144,6 @@ function clockProgress(slots: ScheduleSlot[], targetDate: string | null, now: Da
 function minutesOfDay(time: string): number {
   const [hours, minutes] = time.split(':')
   return Number(hours) * 60 + Number(minutes)
-}
-
-function SlotMarker({ slot }: { slot: ScheduleSlot }) {
-  if (slot.state === 'COMPLETED') {
-    return (
-      <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 border-2 border-indigo-400 shadow-md shadow-indigo-900/50 text-white">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-          <path d="M4.5 12.75l6 6 9-13.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-    )
-  }
-  if (slot.state === 'RUNNING') {
-    return (
-      <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-slate-900 border-2 border-indigo-400 ring-4 ring-indigo-500/20 shadow-lg text-indigo-400">
-        <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping" />
-      </div>
-    )
-  }
-  if (slot.state === 'ATTENTION' || slot.state === 'DUE') {
-    return (
-      <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 border-2 border-amber-400 text-amber-300 text-xs font-bold">!</div>
-    )
-  }
-  return (
-    <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-slate-800 border-2 border-slate-700 text-slate-500">
-      <span className="w-2 h-2 rounded-full bg-slate-600" />
-    </div>
-  )
 }
 
 function SlotCard({ slot }: { slot: ScheduleSlot }) {

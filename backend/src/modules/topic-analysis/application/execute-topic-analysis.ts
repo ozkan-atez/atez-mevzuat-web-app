@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { ZodError } from 'zod'
 import type { AiModelClient } from '../../ai/application/ai-model-client'
 import { AiProviderError } from '../../ai/domain/ai-errors'
 import type { AiCallFailure } from '../../scan-runs/application/ports'
@@ -86,21 +87,35 @@ export async function executeTopicAnalysis(topicId: string, dependencies: Execut
       })
       return { ...revision, analysisObjectKey, markdownObjectKey, analysis }
     } catch (error) {
+      if (error instanceof ZodError) {
+        const paths = error.issues.slice(0, 8).map((issue) => issue.path.join('.'))
+        console.error('Topic analysis response validation failed', { topicId, paths, issueCount: error.issues.length })
+        const failure: AiCallFailure = {
+          category: 'INVALID_RESPONSE', providerStatus: null,
+          message: 'Yapay zekâ analiz yanıtı doğrulanamadı. Analiz yeniden denenebilir.',
+        }
+        await dependencies.repository.failTopicAiExecution(execution.id, { ...failure, message: `${failure.message} Alanlar: ${paths.join(', ')}` })
+        if (attemptNo < dependencies.maxAttempts) continue
+        await dependencies.repository.markTopicAwaitingRetry(topicId, failure)
+        throw new AiProviderError('INVALID_RESPONSE', true, failure.message)
+      }
       if (error instanceof AiProviderError) {
         const failure = toFailure(error)
         await dependencies.repository.failTopicAiExecution(execution.id, failure)
         if (error.retryable && attemptNo < dependencies.maxAttempts) continue
-        await dependencies.repository.markTopicAwaitingRetry(topicId, failure)
+        if (error.retryable) await dependencies.repository.markTopicAwaitingRetry(topicId, failure)
+        else await dependencies.repository.markTopicBlocked(topicId, failure.message, failure.category)
         throw error
       }
 
-      const message = error instanceof Error ? error.message : 'Gemini geçersiz bir analiz yanıtı döndürdü.'
+      console.error('Topic analysis failed unexpectedly', { topicId, error })
+      const message = 'Analiz işlenirken beklenmedik bir hata oluştu.'
       await dependencies.repository.failTopicAiExecution(execution.id, {
-        category: 'INVALID_RESPONSE',
+        category: 'UNKNOWN_PROVIDER_ERROR',
         providerStatus: null,
         message,
       })
-      await dependencies.repository.markTopicBlocked(topicId, message)
+      await dependencies.repository.markTopicBlocked(topicId, message, 'UNKNOWN_PROVIDER_ERROR')
       throw error
     }
   }

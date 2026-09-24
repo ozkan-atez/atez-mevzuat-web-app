@@ -211,6 +211,7 @@ model ScanRun {
   scheduleSlot       String?
   trigger            ScanTrigger         @default(MANUAL)
   targetDate         DateTime            @db.Date
+  sourceKeys         String[]            @default(["resmi-gazete"])
   timezone           String              @default("Europe/Istanbul")
   status             ScanRunStatus       @default(QUEUED)
   currentStage       ScanStage?
@@ -224,6 +225,9 @@ model ScanRun {
   indexObjectKey     String?
   indexSha256        String?
   manifestObjectKey  String?
+  reportDuplicateStatus String              @default("PENDING")
+  reportDuplicateGroups Json?
+  reportDuplicateError  String?
   startedAt          DateTime?
   completedAt        DateTime?
   createdAt          DateTime            @default(now())
@@ -236,6 +240,7 @@ model ScanRun {
   previousSourceJobs PreviousSourceJob[]
   topicProcesses     TopicProcess[]
   topicReports       TopicReport[]
+  sourceRuns         SourceScanRun[]
 
   @@index([targetDate, createdAt])
   @@index([status, createdAt])
@@ -371,6 +376,18 @@ model StoredObject {
   assets                  DocumentAsset[]
   previousSourceDocuments PreviousSourceDocument[]
   previousSourceAssets    PreviousSourceAsset[]
+}
+
+/// Documents fetched on demand by chat are not part of a scan or an approved report.
+model AssistantOfficialDocument {
+  id          String   @id @default(uuid())
+  sourceUrl   String   @unique
+  title       String
+  mediaType   String
+  objectKey   String
+  text        String?  @db.Text
+  note        String?
+  fetchedAt   DateTime @default(now())
 }
 
 model DocumentAsset {
@@ -623,12 +640,20 @@ model TopicReport {
   basename      String
   card          ReportCard
   latestVersion Int              @default(0)
+  reviewStatus  ReportReviewStatus @default(READY)
+  pendingSpecJson Json?
+  pendingBaseVersion Int?
   revisions     ReportRevision[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
   @@unique([topicId])
   @@index([scanRunId, createdAt])
+}
+
+enum ReportReviewStatus {
+  READY
+  PENDING_APPROVAL
 }
 
 model ReportRevision {
@@ -712,6 +737,7 @@ model User {
 model Source {
   id            String    @id @default(uuid())
   key           String    @unique
+  name          String?
   baseUrl       String
   authorityType String
   isActive      Boolean   @default(true)
@@ -721,6 +747,106 @@ model Source {
   updatedAt     DateTime  @updatedAt
 
   documents Document[]
+  endpoints SourceEndpoint[]
+  sourceRuns SourceScanRun[]
+}
+
+/// A discovered URL is evidence only after it is explicitly activated.
+model SourceEndpoint {
+  id              String   @id @default(uuid())
+  sourceId        String
+  url             String
+  title           String
+  reason          String?
+  keywords        String?
+  status          String   @default("PROPOSED")
+  adapter         String?
+  managedSourceId String?
+  discoveredAt    DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, status])
+  @@unique([sourceId, url])
+}
+
+model SourceScanRun {
+  id          String    @id @default(uuid())
+  sourceId    String
+  scanRunId   String?
+  requestKey  String    @unique
+  targetDate  DateTime  @db.Date
+  trigger     String    @default("MANUAL")
+  scheduleSlot String?
+  status      String    @default("QUEUED")
+  errorSummary String?
+  reportHtml  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  source    Source @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  scanRun   ScanRun? @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  documents SourceScanDocument[]
+
+  @@index([targetDate, createdAt])
+  @@index([scanRunId])
+  @@index([status, createdAt])
+}
+
+model SourceScanDocument {
+  id          String   @id @default(uuid())
+  runId       String
+  url         String
+  title       String
+  publishedOn DateTime @db.Date
+  contentText String?
+  contentHash String?
+  feedUrl     String
+  createdAt   DateTime @default(now())
+
+  run SourceScanRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, url])
+}
+
+/// User-curated external references. These are not official Gazette documents.
+model ManagedSource {
+  id           String   @id @default(uuid())
+  url          String   @unique
+  title        String
+  description  String?
+  keywords     String?
+  contentText  String?
+  contentType  String?
+  fetchError   String?
+  fetchedAt    DateTime?
+  useInChat    Boolean  @default(true)
+  useInRuns    Boolean  @default(true)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  snapshots    ManagedSourceSnapshot[]
+
+  @@index([isActive, useInChat])
+  @@index([isActive, useInRuns])
+}
+
+model ManagedSourceSnapshot {
+  id              String   @id @default(uuid())
+  managedSourceId String
+  url             String
+  contentHash     String
+  contentText     String
+  contentType     String
+  fetchedAt       DateTime @default(now())
+
+  managedSource ManagedSource @relation(fields: [managedSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([managedSourceId, contentHash])
+  @@index([managedSourceId, fetchedAt])
 }
 
 model Document {
@@ -796,9 +922,21 @@ model GeneralChatMessage {
   content     String
   status      GeneralChatMessageStatus @default(COMPLETED)
   errorDetail String?
+  attachment  GeneralChatAttachment?
   createdAt   DateTime                 @default(now())
 
   @@index([sessionId, createdAt])
+}
+
+model GeneralChatAttachment {
+  id        String             @id @default(uuid())
+  messageId String             @unique
+  message   GeneralChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  name      String
+  mediaType String
+  byteSize  Int
+  objectKey String
+  createdAt DateTime           @default(now())
 }
 
 enum EmailDispatchStatus {
@@ -890,4 +1028,18 @@ model ReportFieldEdit {
 
   @@unique([draftId, sequence])
   @@index([draftId, createdAt])
+}
+
+/// HTML designs kept as drafts until a template is explicitly connected to
+/// the report generation workflow. Editing one never rewrites issued reports.
+model ReportTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  html        String   @db.Text
+  revision    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
 }

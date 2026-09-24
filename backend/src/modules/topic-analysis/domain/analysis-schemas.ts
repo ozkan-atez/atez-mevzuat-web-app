@@ -47,7 +47,9 @@ export const ComparisonSchema = z.object({
 export const AnalysisTableSchema = z.object({
   title: nonEmptyText,
   columns: z.array(nonEmptyText).min(2).max(12),
-  rows: z.array(z.array(nonEmptyText).min(2).max(12)).min(1).max(500),
+  // Official rate tables use genuinely blank cells (for example, a currency
+  // with no quoted value). Preserve the blank instead of inventing a value.
+  rows: z.array(z.array(z.string().trim()).min(2).max(12)).min(1).max(500),
   note: nonEmptyText.optional(),
   evidenceIds: z.array(nonEmptyText).min(1),
 }).strict().superRefine((table, context) => {

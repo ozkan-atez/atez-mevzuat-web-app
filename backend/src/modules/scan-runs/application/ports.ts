@@ -55,6 +55,11 @@ export interface FetchAttemptInput {
 
 export interface ScanRunDetailDto {
   id: string
+  sourceKeys: string[]
+  sourceResults: Array<{ id: string; sourceKey: string; sourceName: string; status: string; documentCount: number; errorSummary: string | null; hasReport: boolean; documents: Array<{ id: string; title: string; url: string; publishedOn: string | null }> }>
+  reportDuplicateStatus?: string
+  reportDuplicateGroups?: Array<{ reportIds: string[]; reason: string }>
+  reportDuplicateError?: string | null
   status: ScanRunStatus
   currentStage: ScanStage | null
   targetDate: string
@@ -145,6 +150,7 @@ export interface ScanRunDetailDto {
 
 export interface ScanRunSummaryDto {
   id: string
+  sourceKeys: string[]
   trigger: 'MANUAL' | 'CRON'
   status: ScanRunStatus
   currentStage: ScanStage | null
@@ -486,6 +492,7 @@ export interface ScanRepository {
   getFilterProgress(jobId: string): Promise<FilterProgress>
   markFilterRunning(runId: string, jobId: string, totalItems: number): Promise<void>
   markFilterAwaitingRetry(runId: string, jobId: string, error: AiCallFailure): Promise<void>
+  markFilterFailed(runId: string, jobId: string, error: AiCallFailure): Promise<void>
   completeFilter(runId: string, jobId: string): Promise<void>
   nextAiCallAttempt(aiJobId: string, phase: 'TITLE' | 'CONTENT', batchKey: string): Promise<number>
   addDownloadedBytes(runId: string, byteSize: bigint): Promise<void>
@@ -509,7 +516,9 @@ export interface ScanRepository {
   savePreviousSourceDocument(jobId: string, candidate: PreviousSourceCandidateRecord, sourceUrl: string, object: StoredBlob): Promise<void>
   savePreviousSourceAsset(jobId: string, asset: PreviousSourceAssetInput): Promise<void>
   markPreviousSourceAwaitingRetry(jobId: string, error: AiCallFailure): Promise<void>
+  markPreviousSourceFailed(jobId: string, error: AiCallFailure): Promise<void>
   getPreviousSourceProgress(runId: string): Promise<{ total: number; completed: number; awaitingRetry: number }>
   markPreviousSourceStageAwaitingRetry(runId: string, message: string): Promise<void>
+  markPreviousSourceStageFailed(runId: string, message: string): Promise<void>
   requestPreviousSourceRetry(runId: string, requestKey: string): Promise<{ runId: string; commandId: string; status: 'QUEUED' }>
 }

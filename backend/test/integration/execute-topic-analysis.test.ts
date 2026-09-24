@@ -69,8 +69,10 @@ class MemoryRepository implements TopicAnalysisRepository {
 
 class FixedAi implements AiModelClient {
   calls = 0
+  lastRequest: StructuredAiRequest | null = null
   constructor(private readonly response: unknown | Error) {}
-  async generateStructured(_request: StructuredAiRequest) {
+  async generateStructured(request: StructuredAiRequest) {
+    this.lastRequest = request
     this.calls += 1
     if (this.response instanceof Error) throw this.response
     return { json: this.response, providerRequestId: 'gemini-response-1', usage: { inputTokens: 120, outputTokens: 80 } }
@@ -93,6 +95,27 @@ describe('executeTopicAnalysis', () => {
     expect(repository.executions[0]).toMatchObject({ status: 'COMPLETED' })
   })
 
+  it('includes a matching curated source as supporting evidence with provenance', async () => {
+    const repository = new MemoryRepository()
+    repository.topic.managedSources = [{ id: 'source-1', title: 'İthalat rehberi', sourceUrl: 'https://example.org/guide', description: 'Arka plan', contentText: 'İthalat işlemlerine ilişkin açıklama.', fetchedAt: '2026-09-21T20:00:00.000Z' }]
+    const objectStore = new MemoryObjectStore()
+    const ai = new FixedAi(validAnalysis())
+    await executeTopicAnalysis(topicId, dependencies(ai, repository, objectStore))
+    expect(ai.lastRequest?.parts).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('İthalat işlemlerine ilişkin açıklama.') })]))
+    const manifest = JSON.parse(objectStore.text(`runs/2026/09/11/run-1/topics/${topicId}/evidence/manifest.json`)) as { managedSources: Array<{ sourceUrl: string; textSha256: string }> }
+    expect(manifest.managedSources[0]).toMatchObject({ sourceUrl: 'https://example.org/guide', textSha256: expect.stringMatching(/^[a-f0-9]{64}$/) })
+  })
+
+  it('keeps the official document when there is no context room for a curated source', async () => {
+    const repository = new MemoryRepository()
+    repository.topic.managedSources = [{ id: 'source-1', title: 'İthalat rehberi', sourceUrl: 'https://example.org/guide', description: null, contentText: 'Ek açıklama', fetchedAt: '2026-09-21T20:00:00.000Z' }]
+    const store = new MemoryObjectStore()
+    const ai = new FixedAi(validAnalysis())
+    await executeTopicAnalysis(topicId, { ...dependencies(ai, repository, store), maxContextBytes: 51 })
+    expect(ai.lastRequest?.parts).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('current-document') })]))
+    expect(JSON.parse(store.text(`runs/2026/09/11/run-1/topics/${topicId}/evidence/manifest.json`))).toMatchObject({ managedSources: [] })
+  })
+
   it('marks a retriable provider failure as awaiting retry with its category', async () => {
     const repository = new MemoryRepository()
     const ai = new FixedAi(new AiProviderError('RATE_LIMITED', true, 'Gemini geçici olarak yoğun.', 429))
@@ -103,11 +126,20 @@ describe('executeTopicAnalysis', () => {
     expect(repository.revisions).toEqual([])
   })
 
-  it('blocks malformed output without persisting a revision', async () => {
+  it('classifies malformed model output as retryable without persisting a revision', async () => {
     const repository = new MemoryRepository()
-    await expect(executeTopicAnalysis(topicId, dependencies(new FixedAi({ ...validAnalysis(), topics: [] }), repository))).rejects.toThrow()
-    expect(repository.status).toBe('BLOCKED')
+    const ai = new FixedAi({ ...validAnalysis(), topics: [] })
+    await expect(executeTopicAnalysis(topicId, dependencies(ai, repository))).rejects.toMatchObject({ category: 'INVALID_RESPONSE', retryable: true })
+    expect(ai.calls).toBe(2)
+    expect(repository.status).toBe('AWAITING_RETRY')
+    expect(repository.error).toMatchObject({ category: 'INVALID_RESPONSE', message: expect.not.stringContaining('"origin"') })
     expect(repository.revisions).toEqual([])
+  })
+
+  it('blocks an authentication failure with its actual category', async () => {
+    const repository = new MemoryRepository()
+    await expect(executeTopicAnalysis(topicId, dependencies(new FixedAi(new AiProviderError('AUTHENTICATION', false, 'Erişim reddedildi.')), repository))).rejects.toMatchObject({ category: 'AUTHENTICATION' })
+    expect(repository.status).toBe('BLOCKED')
   })
 
   it('reuses a persisted analysis revision after a retry delivery crash', async () => {

@@ -28,7 +28,7 @@ const K1ReportSpecSchema = common.extend({ card: z.literal('K1') }).strict()
 const table = z.object({
   title: text,
   columns: z.array(text).min(2).max(12),
-  rows: z.array(z.array(text).min(2).max(12)).min(2).max(500),
+  rows: z.array(z.array(z.string().trim()).min(2).max(12)).min(2).max(500),
   note: text.nullable(),
 }).strict().superRefine((value, context) => {
   value.rows.forEach((row, index) => {

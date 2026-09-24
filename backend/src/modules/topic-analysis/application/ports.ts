@@ -31,6 +31,7 @@ export interface TopicEvidenceInput {
     object: TopicStoredObject
     assets: TopicEvidenceAsset[]
   }
+  managedSources?: Array<{ id: string; title: string; sourceUrl: string; description: string | null; contentText: string; fetchedAt: string }>
 }
 
 export interface TopicObjectStore {
@@ -101,7 +102,7 @@ export interface TopicAnalysisRepository {
   failTopicAiExecution(id: string, error: AiCallFailure): Promise<void>
   createAnalysisRevision(input: CreateTopicAnalysisRevisionInput): Promise<{ id: string; version: number }>
   markTopicAwaitingRetry(topicId: string, error: AiCallFailure): Promise<void>
-  markTopicBlocked(topicId: string, message: string): Promise<void>
+  markTopicBlocked(topicId: string, message: string, category?: AiCallFailure['category']): Promise<void>
 }
 
 export interface RunReportContext {

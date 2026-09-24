@@ -5,6 +5,7 @@ export const idempotencyKeySchema = z.string().uuid()
 
 export const createScanRunSchema = z.object({
   trigger: z.literal('MANUAL'),
+  sourceKeys: z.array(z.enum(['resmi-gazete', 'ticaret-bakanligi', 'igmd', 'mevzuat-net', 'tariff'])).min(1).max(5).refine((keys) => new Set(keys).size === keys.length).optional(),
   targetDate: z.string().refine((value) => {
     const parsed = DateTime.fromFormat(value, 'yyyy-MM-dd', { zone: 'Europe/Istanbul' })
     return parsed.isValid && parsed.toFormat('yyyy-MM-dd') === value

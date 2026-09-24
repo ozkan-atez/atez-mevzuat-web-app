@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertCircle, ArrowLeft, Download, ExternalLink, LoaderCircle, Mail, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Download, ExternalLink, LoaderCircle, Mail, RefreshCw } from 'lucide-react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { getTopic } from '../analysis/api'
 import { downloadReportPdf, getDeliveryContext } from '../delivery/api'
@@ -8,7 +8,8 @@ import type { DeliverySource } from '../delivery/types'
 import type { TopicDetail } from '../analysis/types'
 import { useReportDraft } from '../revision/useReportDraft'
 import { useRegisterActiveReport } from '../revision/ActiveReportContext'
-import { EditableReportPreview } from '../revision/EditableReportPreview'
+import { ReportPreviewPanel } from '../revision/ReportPreviewPanel'
+import { clearLocalReportEdits, readLocalReportEdits } from '../revision/EditableReportPreview'
 import { ChangeList } from '../revision/ChangeList'
 import { PublishDraftBar } from '../revision/PublishDraftBar'
 
@@ -34,6 +35,7 @@ export function ReportDetail() {
   const [isDispatchOpen, setIsDispatchOpen] = useState(false)
 
   const draft = useReportDraft(id)
+  const draftStorageKey = `report-edits:topic:${id}`
 
   const loadTopic = useCallback(async () => {
     if (!id) return
@@ -110,6 +112,7 @@ export function ReportDetail() {
 
   const edits = draft.view.draft?.edits ?? []
   const pendingCount = edits.filter((edit) => !edit.revertedByEditId && !edit.revertsEditId).length
+  const awaitingApproval = draft.view.draft !== null || Object.keys(readLocalReportEdits(draftStorageKey)).length > 0
 
   return (
     <div className="space-y-4 pb-10">
@@ -124,6 +127,9 @@ export function ReportDetail() {
             </p>
           </div>
         </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${awaitingApproval ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
+          {awaitingApproval ? 'Gönderilemez · Revizyon onayı bekleniyor' : 'Gönderime hazır'}
+        </span>
       </header>
 
       <section aria-label="Kullanılan kaynaklar" className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
@@ -146,47 +152,37 @@ export function ReportDetail() {
         conflictVersion={draft.conflictVersion}
         nextVersion={draft.view.baseVersion + 1}
         staleBehindVersion={draft.view.isStale ? draft.view.publishedVersion : null}
-        onPublish={() => void draft.publish()}
-        onDiscard={() => void draft.discard()}
+        onPublish={() => { void draft.publish().then((version) => { if (version) clearLocalReportEdits(draftStorageKey) }) }}
+        onDiscard={() => { clearLocalReportEdits(draftStorageKey); void draft.discard() }}
         onReload={() => { void draft.reload(); void loadTopic() }}
       />
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
-            <h2 className="text-sm font-bold text-slate-900">Bülten Önizleme</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 rounded-xl border border-slate-200 p-1">
-                <button type="button" onClick={() => stepZoom(-1)} aria-label="Uzaklaştır" disabled={zoom === ZOOM_STEPS[0]} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-40"><ZoomOut className="h-4 w-4" /></button>
-                <span aria-live="polite" className="min-w-12 text-center text-xs font-semibold text-slate-600">%{zoom}</span>
-                <button type="button" onClick={() => stepZoom(1)} aria-label="Yakınlaştır" disabled={zoom === ZOOM_STEPS.at(-1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-40"><ZoomIn className="h-4 w-4" /></button>
-              </div>
+        <ReportPreviewPanel
+          html={draft.view.html}
+          zoom={zoom}
+          editable={!draft.isBusy && draft.conflictVersion === null && !draft.view.isStale}
+          draftStorageKey={draftStorageKey}
+          onEditField={draft.editField}
+          onZoomOut={() => stepZoom(-1)}
+          onZoomIn={() => stepZoom(1)}
+          zoomOutDisabled={zoom === ZOOM_STEPS[0]}
+          zoomInDisabled={zoom === ZOOM_STEPS.at(-1)}
+          actions={<>
               <button type="button" onClick={() => void downloadPdf()} disabled={isDownloading} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {isDownloading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}PDF İndir
               </button>
-              <button type="button" onClick={() => setIsDispatchOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+              <button type="button" onClick={() => setIsDispatchOpen(true)} disabled={awaitingApproval} className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-45">
                 <Mail className="h-4 w-4" />E-Posta ile Dağıt
               </button>
-            </div>
-          </div>
-
-          {downloadError && <p className="border-b border-red-100 bg-red-50 px-5 py-2 text-xs font-medium text-red-700">{downloadError}</p>}
-          {draft.error && <p className="border-b border-amber-100 bg-amber-50 px-5 py-2 text-xs font-medium text-amber-800">{draft.error}</p>}
-          {pendingCount > 0 && (
+            </>}
+          error={downloadError ?? draft.error}
+          notice={awaitingApproval && (
             <p className="border-b border-blue-100 bg-blue-50/60 px-5 py-2 text-xs font-medium text-blue-800">
-              Taslak görüntüleniyor. PDF ve e-posta hâlâ yayımlanmış r{String(draft.view.publishedVersion).padStart(2, '0')} sürümünü kullanır.
+              Revizyon onaylanana veya iptal edilene kadar e-posta gönderimi kapalıdır. PDF yayımlanmış r{String(draft.view.publishedVersion).padStart(2, '0')} sürümünü kullanır.
             </p>
           )}
-
-          <div data-testid="report-preview">
-            <EditableReportPreview
-              html={draft.view.html}
-              zoom={zoom}
-              editable={!draft.isBusy && draft.conflictVersion === null && !draft.view.isStale}
-              onEditField={(path, value) => void draft.editField(path, value)}
-            />
-          </div>
-        </section>
+        />
 
         <aside className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">

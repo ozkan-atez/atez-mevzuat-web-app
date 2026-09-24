@@ -31,6 +31,13 @@ export class PreviousSourceAwaitingRetryError extends Error {
   }
 }
 
+export class PreviousSourceFailedError extends Error {
+  override readonly name = 'PreviousSourceFailedError'
+  constructor(readonly runId: string) {
+    super(`Previous source discovery failed for scan run ${runId}`)
+  }
+}
+
 export async function executePreviousSourceDiscovery(runId: string, dependencies: Dependencies): Promise<void> {
   await dependencies.repository.ensurePreviousSourceJobs(runId, {
     model: dependencies.model,
@@ -48,6 +55,7 @@ export async function executePreviousSourceDiscovery(runId: string, dependencies
     reservedBytes = next
   }
   let failures = 0
+  let terminalFailures = 0
   let cursor = 0
   const worker = async () => {
     while (cursor < work.length) {
@@ -57,11 +65,19 @@ export async function executePreviousSourceDiscovery(runId: string, dependencies
       } catch (error) {
         failures += 1
         const failure = toFailure(error)
-        await dependencies.repository.markPreviousSourceAwaitingRetry(item.id, failure)
+        // Provider validation/auth failures are terminal. Network, download,
+        // storage and other infrastructure errors can recover on a later run.
+        if (!(error instanceof AiProviderError) || error.retryable) {
+          await dependencies.repository.markPreviousSourceAwaitingRetry(item.id, failure)
+        } else {
+          terminalFailures += 1
+          await dependencies.repository.markPreviousSourceFailed(item.id, failure)
+        }
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(Math.max(1, dependencies.concurrency), work.length) }, () => worker()))
+  if (terminalFailures > 0) throw new PreviousSourceFailedError(runId)
   if (failures > 0) throw new PreviousSourceAwaitingRetryError(runId)
 }
 

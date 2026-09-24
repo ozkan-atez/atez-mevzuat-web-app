@@ -72,14 +72,22 @@ beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true) })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('ChatScreen', () => {
-  it('renders unified history and routes a report thread to its report', async () => {
+  it('groups report threads by run while keeping general chats separate', async () => {
     stubFetch({ history: [
       historyItem({}),
-      historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/reports/topic-1' }),
+      historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/reports/topic-1', run: { id: 'run-1', targetDate: '2026-09-11T00:00:00.000Z' } }),
+      historyItem({ id: 'thread-2', type: 'REPORT_REVISION', title: 'Tarife revizyonu', target: '/reports/topic-2', run: { id: 'run-1', targetDate: '2026-09-11T00:00:00.000Z' } }),
+      historyItem({ id: 'thread-3', type: 'REPORT_REVISION', title: 'İhracat revizyonu', target: '/reports/topic-3', run: { id: 'run-2', targetDate: '2026-09-12T00:00:00.000Z' } }),
     ] })
     renderChat('/chat/general-1')
 
     expect(await screen.findByRole('navigation', { name: 'Sohbet geçmişi' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'GTİP sorusu' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'PET revizyonu' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /11 Eyl 2026 · run-1 taramasının rapor sohbetleri/i }))
+    expect(screen.getByRole('link', { name: 'PET revizyonu' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Tarife revizyonu' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'İhracat revizyonu' })).not.toBeInTheDocument()
     await userEvent.click(await screen.findByRole('link', { name: /PET revizyonu/ }))
 
     expect(screen.getByTestId('location')).toHaveTextContent('/reports/topic-1')
@@ -91,6 +99,15 @@ describe('ChatScreen', () => {
 
     expect(await screen.findByText('Eski soru')).toBeVisible()
     expect(screen.getByText('Eski cevap')).toBeVisible()
+  })
+
+  it('offers retry for a previously saved empty assistant reply', async () => {
+    stubFetch({ messages: [message('u1', 'USER', 'Rapor bağlantısı?'), message('a1', 'ASSISTANT', '')] })
+    renderChat('/chat/general-1')
+
+    expect(await screen.findByText('Bu soruya yanıt oluşturulamadı.')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Yeniden dene' }))
+    await waitFor(() => expect(sent).toEqual(['Rapor bağlantısı?']))
   })
 
   it('sends with Enter and inserts a newline with Shift+Enter', async () => {
@@ -105,6 +122,17 @@ describe('ChatScreen', () => {
     await waitFor(() => expect(sent).toEqual(['Birinci satır\nİkinci satır']))
   })
 
+  it('sends an attached text file through the docked composer', async () => {
+    stubFetch()
+    const fetchMock = vi.mocked(globalThis.fetch)
+    renderChat('/chat/general-1')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Dosya ekle' }))
+    await user.upload(screen.getByLabelText('Sohbete dosya seç'), new File(['Tarife notu'], 'tarife.txt', { type: 'text/plain' }))
+    await user.type(screen.getByRole('textbox', { name: 'Mesaj' }), 'Bu dosyada ne yazıyor?{Enter}')
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/messages') && init?.method === 'POST' && JSON.parse(String(init.body)).attachment?.name === 'tarife.txt')).toBe(true))
+  })
+
   it('creates one conversation, canonicalises the URL, and sends the handed-over message once', async () => {
     stubFetch()
     renderChat('/chat', { initialMessage: 'GTİP nedir?' }, { strict: true })
@@ -112,6 +140,14 @@ describe('ChatScreen', () => {
     await waitFor(() => expect(createdSessions).toBe(1))
     await waitFor(() => expect(sent).toEqual(['GTİP nedir?']))
     expect(screen.getByTestId('location')).toHaveTextContent('/chat/session-1')
+  })
+
+  it('preserves the selected file while creating a conversation', async () => {
+    stubFetch()
+    const fetchMock = vi.mocked(globalThis.fetch)
+    renderChat('/chat', { initialMessage: 'Eki incele', initialFile: new File(['İthalat'], 'ek.txt', { type: 'text/plain' }) }, { strict: true })
+    await waitFor(() => expect(createdSessions).toBe(1))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/messages') && init?.method === 'POST' && JSON.parse(String(init.body)).attachment?.name === 'ek.txt')).toBe(true))
   })
 
   it('starts a conversation when the first message is typed on the empty state', async () => {

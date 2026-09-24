@@ -82,7 +82,11 @@ export class PrismaDeliveryRepository {
     attachmentName: string | null
   }): Promise<{ id: string }> {
     try {
-      return await this.prisma.emailDispatch.create({ data: input, select: { id: true } })
+      return await this.prisma.$transaction(async (tx) => {
+        const pending = await tx.reportDraft.count({ where: { topicId: input.topicId, status: 'OPEN' } })
+        if (pending > 0) throw new DispatchConflictError('Revizyon onaylanmadan veya iptal edilmeden e-posta gönderilemez.')
+        return tx.emailDispatch.create({ data: input, select: { id: true } })
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new DispatchConflictError('Bu gönderim talebi zaten işlenmiş.')

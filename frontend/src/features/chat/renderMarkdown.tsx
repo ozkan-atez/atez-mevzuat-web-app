@@ -67,10 +67,15 @@ export function renderMarkdown(text: string): ReactNode {
   return <div className="space-y-2.5">{blocks}</div>
 }
 
-const INLINE = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\n]+\*)/g
+const INLINE = /(\[[^\]\n]+\]\([^\s)]+\)|\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\n]+\*)/g
 
 function renderInline(text: string): ReactNode[] {
   return text.split(INLINE).filter((part) => part.length > 0).map((part, index) => {
+    const link = /^\[([^\]]+)\]\(([^\s)]+)\)$/.exec(part)
+    if (link && isSafeHref(link[2]!)) {
+      const external = /^https?:\/\//i.test(link[2]!)
+      return <a key={index} href={link[2]} className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-800" {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{link[1]}</a>
+    }
     if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'))) {
       return <strong key={index} className="font-semibold">{part.slice(2, -2)}</strong>
     }
@@ -82,4 +87,10 @@ function renderInline(text: string): ReactNode[] {
     }
     return <span key={index}>{part}</span>
   })
+}
+
+function isSafeHref(href: string): boolean {
+  if (href.startsWith('/') && !href.startsWith('//') && !href.includes('\\')) return true
+  try { return ['http:', 'https:'].includes(new URL(href).protocol) }
+  catch { return false }
 }

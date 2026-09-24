@@ -22,6 +22,20 @@ describe('scan run HTTP contract', () => {
     await app.close()
   })
 
+  it('keeps selected sources under a single scan run', async () => {
+    const app = await buildApp({ scanRepository: repository })
+    const response = await app.inject({
+      method: 'POST', url: '/api/v1/scan-runs',
+      headers: { 'idempotency-key': crypto.randomUUID() },
+      payload: { trigger: 'MANUAL', targetDate: '2026-09-21', sourceKeys: ['resmi-gazete', 'ticaret-bakanligi', 'igmd'] },
+    })
+    expect(response.statusCode).toBe(202)
+    const runId = response.json<{ runId: string }>().runId
+    expect(await prisma.scanRun.findUniqueOrThrow({ where: { id: runId }, select: { sourceKeys: true } })).toEqual({ sourceKeys: ['resmi-gazete', 'ticaret-bakanligi', 'igmd'] })
+    expect(await prisma.scanOutbox.count({ where: { scanRunId: runId } })).toBe(1)
+    await app.close()
+  })
+
   it('rejects an invalid calendar date', async () => {
     const app = await buildApp({ scanRepository: repository })
     const response = await app.inject({

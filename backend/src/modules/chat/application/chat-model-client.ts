@@ -22,7 +22,7 @@ export interface ToolCall {
  * the same lookup.
  */
 export type ChatTurn =
-  | { role: 'user'; content: string }
+  | { role: 'user'; content: string; attachment?: { name: string; mediaType: string; data: string } }
   | { role: 'model'; content: string }
   | { role: 'tool-calls'; calls: ToolCall[] }
   | { role: 'tool-results'; results: Array<{ name: string; response: unknown }> }

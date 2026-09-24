@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient, type RevisionKind } from '@prisma/client'
 import type { AiCallFailure } from '../../scan-runs/application/ports'
+import { sourcePriority } from '../../managed-sources/source-priority'
 import type {
   CreateTopicAnalysisRevisionInput,
   CreateTopicReportRevisionInput,
@@ -71,6 +72,41 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     })
   }
 
+  async getReusableTopicAnalysis(topicId: string) {
+    const topic = await this.prisma.topicProcess.findUnique({
+      where: { id: topicId },
+      select: {
+        status: true,
+        analyses: {
+          orderBy: { version: 'desc' }, take: 1,
+          select: { id: true, version: true, analysisObjectKey: true, markdownObjectKey: true, requestMessageId: true },
+        },
+      },
+    })
+    if (!topic || !['ANALYZED', 'RENDERING', 'VALIDATING', 'BLOCKED'].includes(topic.status)) return null
+    return topic.analyses[0] ?? null
+  }
+
+  async getExistingNoChangeReport(runId: string) {
+    const report = await this.prisma.topicReport.findFirst({
+      where: { scanRunId: runId, topicId: null, card: 'K6' },
+      select: {
+        id: true, basename: true,
+        revisions: {
+          where: { status: 'VALIDATED' }, orderBy: { version: 'desc' }, take: 1,
+          select: { id: true, version: true, card: true, specObjectKey: true, htmlObjectKey: true },
+        },
+      },
+    })
+    const revision = report?.revisions[0]
+    if (!report || !revision) return null
+    return {
+      id: report.id, revisionId: revision.id, topicId: null, version: revision.version,
+      basename: report.basename, card: revision.card,
+      specObjectKey: revision.specObjectKey, htmlObjectKey: revision.htmlObjectKey,
+    }
+  }
+
   async getTopicEvidenceInput(topicId: string): Promise<TopicEvidenceInput | null> {
     const topic = await this.prisma.topicProcess.findUnique({
       where: { id: topicId },
@@ -99,6 +135,21 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
 
     const previousJob = topic.document.previousSourceJob
     const previous = previousJob?.outcome === 'VERIFIED' ? previousJob.source : null
+    const curated = await this.prisma.managedSource.findMany({
+      where: { isActive: true, useInRuns: true, contentText: { not: null } },
+      select: { id: true, title: true, url: true, description: true, keywords: true, contentText: true, fetchedAt: true },
+      orderBy: { updatedAt: 'desc' }, take: 200,
+    })
+    const ranks = await sourcePriority(this.prisma, curated)
+    curated.sort((a, b) => (ranks.get(a.id) ?? 4) - (ranks.get(b.id) ?? 4))
+    const title = topic.document.title.toLocaleLowerCase('tr-TR')
+    const managedSources = curated.filter((source) => {
+      const words = source.keywords?.split(',').map((word) => word.trim().toLocaleLowerCase('tr-TR')).filter(Boolean) ?? []
+      return words.length === 0 || words.some((word) => title.includes(word))
+    }).slice(0, 5).flatMap((source) => source.contentText ? [{
+      id: source.id, title: source.title, sourceUrl: source.url, description: source.description,
+      contentText: source.contentText.slice(0, 4_000), fetchedAt: source.fetchedAt?.toISOString() ?? '',
+    }] : [])
     return {
       topicId: topic.id,
       runId: topic.scanRunId,
@@ -115,6 +166,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         object: mapStoredObject(previous.storedObject),
         assets: previous.assets.flatMap(mapAsset),
       } : null,
+      managedSources,
     }
   }
 
@@ -193,10 +245,10 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     })
   }
 
-  async markTopicBlocked(topicId: string, message: string): Promise<void> {
+  async markTopicBlocked(topicId: string, message: string, category: AiCallFailure['category'] = 'INVALID_RESPONSE'): Promise<void> {
     await this.prisma.topicProcess.update({
       where: { id: topicId },
-      data: { status: 'BLOCKED', lastErrorCategory: 'INVALID_RESPONSE', lastErrorMessage: message },
+      data: { status: 'BLOCKED', lastErrorCategory: category, lastErrorMessage: message },
     })
   }
 
@@ -260,7 +312,10 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         where: { id: report.id },
         data: { title: input.title, basename: input.basename, card: input.card, latestVersion: input.version },
       })
-      if (input.topicId) await tx.topicProcess.update({ where: { id: input.topicId }, data: { status: 'COMPLETED' } })
+      if (input.topicId) await tx.topicProcess.update({
+        where: { id: input.topicId },
+        data: { status: 'COMPLETED', lastErrorCategory: null, lastErrorMessage: null },
+      })
       return {
         id: report.id,
         revisionId: revision.id,
@@ -283,7 +338,10 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
   }
 
   async markTopicCompleted(topicId: string): Promise<void> {
-    await this.prisma.topicProcess.update({ where: { id: topicId }, data: { status: 'COMPLETED' } })
+    await this.prisma.topicProcess.update({
+      where: { id: topicId },
+      data: { status: 'COMPLETED', lastErrorCategory: null, lastErrorMessage: null },
+    })
   }
 
   async createAnalysisRevision(input: CreateTopicAnalysisRevisionInput) {
@@ -476,12 +534,12 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     }
   }
 
-  async getRunReportHtmlKey(runId: string, reportId: string): Promise<string | null> {
+  async getRunReportHtmlKey(runId: string, reportId: string, version?: number): Promise<string | null> {
     const report = await this.prisma.topicReport.findFirst({
       where: { id: reportId, scanRunId: runId },
       select: {
         revisions: {
-          where: { status: 'VALIDATED' },
+          where: { status: 'VALIDATED', ...(version ? { version } : {}) },
           orderBy: { version: 'desc' },
           take: 1,
           select: { htmlObjectKey: true },
@@ -489,6 +547,75 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
       },
     })
     return report?.revisions[0]?.htmlObjectKey ?? null
+  }
+
+  async getNoChangeReport(runId: string, reportId: string) {
+    const report = await this.prisma.topicReport.findFirst({
+      where: { id: reportId, scanRunId: runId, topicId: null, card: 'K6' },
+      select: {
+        id: true, title: true, basename: true, latestVersion: true, updatedAt: true,
+        reviewStatus: true, pendingSpecJson: true, pendingBaseVersion: true,
+        scanRun: { select: { targetDate: true } },
+        revisions: {
+          where: { status: 'VALIDATED' }, orderBy: { version: 'desc' }, take: 1,
+          select: { version: true, specObjectKey: true, htmlObjectKey: true },
+        },
+      },
+    })
+    const latest = report?.revisions[0]
+    if (!report || !latest) return null
+    return {
+      id: report.id, title: report.title, basename: report.basename,
+      version: latest.version, specObjectKey: latest.specObjectKey,
+      htmlObjectKey: latest.htmlObjectKey,
+      reviewStatus: report.reviewStatus, pendingSpecJson: report.pendingSpecJson,
+      pendingBaseVersion: report.pendingBaseVersion,
+      updatedAt: report.updatedAt,
+      targetDate: report.scanRun.targetDate.toISOString().slice(0, 10),
+    }
+  }
+
+  async saveNoChangeReviewDraft(runId: string, reportId: string, expectedVersion: number, spec: unknown): Promise<boolean> {
+    const claimed = await this.prisma.topicReport.updateMany({
+      where: { id: reportId, scanRunId: runId, topicId: null, card: 'K6', latestVersion: expectedVersion },
+      data: { reviewStatus: 'PENDING_APPROVAL', pendingBaseVersion: expectedVersion, pendingSpecJson: spec as Prisma.InputJsonValue },
+    })
+    return claimed.count === 1
+  }
+
+  async discardNoChangeReviewDraft(runId: string, reportId: string): Promise<boolean> {
+    const discarded = await this.prisma.topicReport.updateMany({
+      where: { id: reportId, scanRunId: runId, topicId: null, card: 'K6', reviewStatus: 'PENDING_APPROVAL' },
+      data: { reviewStatus: 'READY', pendingSpecJson: Prisma.DbNull, pendingBaseVersion: null },
+    })
+    return discarded.count === 1
+  }
+
+  async publishNoChangeReviewDraft(input: {
+    runId: string; reportId: string; expectedVersion: number; expectedUpdatedAt: Date; title: string; basename: string;
+    specObjectKey: string; htmlObjectKey: string
+  }): Promise<boolean> {
+    return this.serializable(async (tx) => {
+      const claimed = await tx.topicReport.updateMany({
+        where: {
+          id: input.reportId, scanRunId: input.runId, topicId: null, card: 'K6',
+          latestVersion: input.expectedVersion, reviewStatus: 'PENDING_APPROVAL', pendingBaseVersion: input.expectedVersion,
+          updatedAt: input.expectedUpdatedAt,
+        },
+        data: {
+          latestVersion: input.expectedVersion + 1, title: input.title, basename: input.basename,
+          reviewStatus: 'READY', pendingSpecJson: Prisma.DbNull, pendingBaseVersion: null,
+        },
+      })
+      if (claimed.count !== 1) return false
+      await tx.reportRevision.create({
+        data: {
+          reportId: input.reportId, analysisRevisionId: null, version: input.expectedVersion + 1,
+          status: 'VALIDATED', card: 'K6', specObjectKey: input.specObjectKey, htmlObjectKey: input.htmlObjectKey,
+        },
+      })
+      return true
+    })
   }
 
   async getTopicRevisionWorkItem(topicId: string, messageId: string) {

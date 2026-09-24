@@ -75,6 +75,7 @@ export function mapGeminiError(error: unknown): AiProviderError {
   if (error instanceof AiProviderError) return error
   const status = readStatus(error)
   if (status === 401) return new AiProviderError('AUTHENTICATION', false, 'Gemini API anahtarı geçersiz veya eksik.', status)
+  if (status === 402) return new AiProviderError('QUOTA_EXCEEDED', false, 'Gemini ön ödemeli kredisi tükendi. Google AI Studio faturalandırma bakiyesini kontrol edin.', status)
   if (status === 403) return new AiProviderError('PERMISSION', false, 'Gemini erişim izni reddedildi.', status)
   if (status === 429) {
     const quota = readProviderMessage(error).toLowerCase().includes('quota')

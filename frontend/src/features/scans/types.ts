@@ -16,6 +16,11 @@ export type StageExecutionStatus = 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'C
 
 export interface ScanRunDetail {
   id: string
+  sourceKeys?: string[]
+  sourceResults?: Array<{ id: string; sourceKey: string; sourceName: string; status: string; documentCount: number; errorSummary: string | null; hasReport: boolean; documents: Array<{ id: string; title: string; url: string; publishedOn: string | null }> }>
+  reportDuplicateStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  reportDuplicateGroups?: Array<{ reportIds: string[]; reason: string }>
+  reportDuplicateError?: string | null
   status: ScanRunStatus
   currentStage: ScanStage | null
   targetDate: string
@@ -94,6 +99,7 @@ export interface ScanRunDetail {
 
 export interface ScanRunSummary {
   id: string
+  sourceKeys?: string[]
   trigger: 'MANUAL' | 'CRON'
   status: ScanRunStatus
   currentStage: ScanStage | null

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
@@ -108,6 +109,10 @@ export class S3ObjectStore implements ObjectStore {
     const response = await this.client.send(new GetObjectCommand({ Bucket: this.config.bucket, Key: key }))
     if (!response.Body) throw new Error(`Stored object has no body: ${key}`)
     return Buffer.from(await response.Body.transformToByteArray())
+  }
+
+  async deleteRunFile(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }))
   }
 }
 

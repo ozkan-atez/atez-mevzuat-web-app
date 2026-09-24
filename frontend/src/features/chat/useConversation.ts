@@ -11,12 +11,13 @@ export interface Conversation {
   /** What the assistant is looking up right now, if anything. */
   activity: string | null
   error: string | null
-  send: (content: string) => Promise<void>
+  send: (content: string, file?: File) => Promise<void>
   clearError: () => void
 }
 
-function optimistic(id: string, content: string): ChatMessage {
-  return { id, role: 'USER', content, status: 'COMPLETED', errorDetail: null, createdAt: new Date().toISOString() }
+function optimistic(id: string, content: string, file?: File): ChatMessage {
+  return { id, role: 'USER', content, status: 'COMPLETED', errorDetail: null, createdAt: new Date().toISOString(),
+    ...(file ? { attachment: { id: `pending-${id}`, name: file.name, mediaType: file.type, byteSize: file.size } } : {}) }
 }
 
 function streamingPlaceholder(): ChatMessage {
@@ -78,7 +79,7 @@ export function useConversation(sessionId: string | undefined): Conversation {
   // into a transcript nobody is looking at.
   useEffect(() => () => sendController.current?.abort(), [])
 
-  const send = useCallback(async (raw: string) => {
+  const send = useCallback(async (raw: string, file?: File) => {
     const content = raw.trim()
     if (!sessionId || sending.current || content.length === 0 || content.length > MAX_MESSAGE_LENGTH) return
     sending.current = true
@@ -89,12 +90,12 @@ export function useConversation(sessionId: string | undefined): Conversation {
     loadController.current?.abort()
     setIsLoading(false)
     const optimisticId = `optimistic-${crypto.randomUUID()}`
-    setMessages((current) => [...current, optimistic(optimisticId, content), streamingPlaceholder()])
+    setMessages((current) => [...current, optimistic(optimisticId, content, file), streamingPlaceholder()])
     const controller = new AbortController()
     sendController.current = controller
 
     try {
-      const response = await streamChatMessage(sessionId, content, controller.signal)
+      const response = await streamChatMessage(sessionId, content, controller.signal, file)
       for await (const event of parseChatEventStream(response)) {
         setMessages((current) => reduceChatEvent(current, event, optimisticId))
         if (event.type === 'tool') setActivity(event.label)

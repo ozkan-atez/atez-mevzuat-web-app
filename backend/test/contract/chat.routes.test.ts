@@ -1,12 +1,14 @@
 import type { FastifyInstance } from 'fastify'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../../src/app'
 import type { ChatModelClient } from '../../src/modules/chat/application/chat-model-client'
 import type { AssistantKnowledge } from '../../src/modules/chat/application/assistant-knowledge'
+import type { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
 import type { AppendChatMessageInput, ChatHistoryItem, ChatMessageView, ChatRepository, ChatSessionView } from '../../src/modules/chat/application/ports'
 
 class MemoryChatRepository implements ChatRepository {
   sessions = new Map<string, ChatMessageView[]>()
+  titles = new Map<string, string>()
   failNext: Error | null = null
 
   async createSession(): Promise<ChatSessionView> {
@@ -16,6 +18,8 @@ class MemoryChatRepository implements ChatRepository {
   }
   async sessionExists(id: string): Promise<boolean> { return this.sessions.has(id) }
   async getMessages(sessionId: string): Promise<ChatMessageView[]> { return this.sessions.get(sessionId) ?? [] }
+  async getSessionTitle(sessionId: string): Promise<string | null> { return this.titles.get(sessionId) ?? null }
+  async setTitleIfMatches(sessionId: string, expectedTitle: string | null, title: string): Promise<void> { if ((this.titles.get(sessionId) ?? null) === expectedTitle) this.titles.set(sessionId, title) }
   async appendMessage(input: AppendChatMessageInput): Promise<ChatMessageView> {
     const messages = this.sessions.get(input.sessionId) ?? []
     const view: ChatMessageView = {
@@ -27,7 +31,7 @@ class MemoryChatRepository implements ChatRepository {
   }
   async listHistory(): Promise<ChatHistoryItem[]> {
     return [...this.sessions.keys()].map((id) => ({
-      id, type: 'GENERAL', title: 'Sohbet', preview: null, messageCount: this.sessions.get(id)!.length,
+      id, type: 'GENERAL', title: this.titles.get(id) ?? 'Yeni sohbet', preview: null, messageCount: this.sessions.get(id)!.length,
       updatedAt: '2026-09-15T10:00:00.000Z', target: `/chat/${id}`,
     }))
   }
@@ -79,6 +83,33 @@ describe('chat routes', () => {
     expect(response.body).toContain('GTİP tarife kodudur.')
   })
 
+  it('queues a dated manual scan through the shared scan repository', async () => {
+    const createManualRun = vi.fn(async ({ targetDate }: { targetDate: string; requestKey: string }) => ({ id: 'run-28', status: 'QUEUED' as const, targetDate }))
+    const toolModel: ChatModelClient = {
+      async *streamReply(input) {
+        if (input.turns.some((turn) => turn.role === 'tool-results')) {
+          yield { type: 'text', text: 'Tarama kuyruğa alındı: [İncele](/runs/run-28)' }
+        } else {
+          yield { type: 'tool-call', call: { name: 'tarihli_tarama_baslat', args: { tarih: '2026-07-28' } } }
+        }
+      },
+    }
+    const scanApp = await buildApp({
+      chatRepository: new MemoryChatRepository(), chatModel: toolModel, chatModelName: 'gemini-test', chatKnowledge: knowledge,
+      scanRepository: { createManualRun } as unknown as PrismaScanRepository,
+    })
+    try {
+      const sessionId = (await scanApp.inject({ method: 'POST', url: '/api/v1/chat/sessions' })).json<{ id: string }>().id
+      const response = await scanApp.inject({ method: 'POST', url: `/api/v1/chat/sessions/${sessionId}/messages`, payload: { content: '28 Temmuz 2026 için rapor oluşturma işlemini başlat' } })
+      expect(createManualRun).toHaveBeenCalledOnce()
+      expect(response.body).toContain('tarihli_tarama_baslat')
+      expect(response.body).toContain('/runs/run-28')
+      expect(response.body).toContain('event: complete')
+    } finally {
+      await scanApp.close()
+    }
+  })
+
   it('returns the stored transcript for a session', async () => {
     const sessionId = (await app.inject({ method: 'POST', url: '/api/v1/chat/sessions' })).json<{ id: string }>().id
     await app.inject({ method: 'POST', url: `/api/v1/chat/sessions/${sessionId}/messages`, payload: { content: 'Merhaba' } })
@@ -94,6 +125,15 @@ describe('chat routes', () => {
     const response = await app.inject({ method: 'POST', url: `/api/v1/chat/sessions/${sessionId}/messages`, payload: { content } })
 
     expect(response.statusCode).toBe(400)
+  })
+
+  it('rejects unsupported attachments before opening a response stream', async () => {
+    const sessionId = (await app.inject({ method: 'POST', url: '/api/v1/chat/sessions' })).json<{ id: string }>().id
+    const response = await app.inject({ method: 'POST', url: `/api/v1/chat/sessions/${sessionId}/messages`, payload: {
+      content: 'Oku', attachment: { name: 'script.sh', mediaType: 'application/x-sh', data: 'YQ==' },
+    } })
+    expect(response.statusCode).toBe(400)
+    expect(response.json<{ message: string }>().message).toContain('desteklenmiyor')
   })
 
   it('returns 404 for an unknown session on read, send, and delete', async () => {

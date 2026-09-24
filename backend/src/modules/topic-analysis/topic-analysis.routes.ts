@@ -50,6 +50,7 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
     if (!objectKey) return reply.code(404).send({ message: 'Rapor bulunamadı' })
     if (!options.objectStore) return reply.code(503).send({ message: 'Rapor deposu kullanılamıyor' })
     const html = await options.objectStore.getContent(objectKey)
+    if ((request.query as { download?: string }).download === '1') reply.header('Content-Disposition', `attachment; filename="mevzuat-raporu-r${parsed.data}.html"`)
     return reply.type('text/html; charset=utf-8').send(html)
   })
 

@@ -3,6 +3,7 @@ import { PgBoss } from 'pg-boss'
 export const manualScanQueueName = 'resmi-gazete-manual-scan'
 export const topicAnalysisQueueName = 'resmi-gazete-topic-analysis'
 export const scheduledScanQueueName = 'resmi-gazete-scheduled-scan'
+export const sourceScheduledScanQueueName = 'source-scheduled-scan'
 
 /**
  * Liveness is decided by heartbeats, not by a deadline.
@@ -34,7 +35,7 @@ export async function startQueue() {
   const queue = getQueue()
   await queue.start()
 
-  for (const name of [manualScanQueueName, topicAnalysisQueueName, scheduledScanQueueName]) {
+  for (const name of [manualScanQueueName, topicAnalysisQueueName, scheduledScanQueueName, sourceScheduledScanQueueName]) {
     await queue.createQueue(name, longRunningQueue)
     // createQueue leaves an existing queue alone, so settings would never reach a
     // deployment that already has these queues.

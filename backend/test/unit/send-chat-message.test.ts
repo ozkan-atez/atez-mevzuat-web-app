@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { sendChatMessage } from '../../src/modules/chat/application/send-chat-message'
 import type { ChatModelChunk, ChatModelClient, ChatModelRequest, ChatStreamEvent } from '../../src/modules/chat/application/chat-model-client'
 import type { AssistantKnowledge } from '../../src/modules/chat/application/assistant-knowledge'
@@ -11,6 +11,8 @@ class MemoryChatRepository implements ChatRepository {
   async createSession(): Promise<ChatSessionView> { throw new Error('unused') }
   async sessionExists(): Promise<boolean> { return true }
   async getMessages(): Promise<ChatMessageView[]> { return this.messages }
+  async getSessionTitle(): Promise<string | null> { return null }
+  async setTitleIfMatches(): Promise<void> {}
   async listHistory(): Promise<ChatHistoryItem[]> { return [] }
   async deleteSession(): Promise<boolean> { return true }
   async appendMessage(input: AppendChatMessageInput): Promise<ChatMessageView> {
@@ -47,6 +49,11 @@ class StubModel implements ChatModelClient {
 
 const knowledge = {
   searchReports: async () => [{ topicId: 't1', title: 'İthalat Tebliği', card: 'K1', version: 1, gazetteDate: '11 Eylül 2026', issueNumber: '33370', summary: 'Özet', sourceUrl: 'https://resmigazete.gov.tr/x', reportUrl: '/reports/t1?revision=1', publishedAt: '2026-09-11T00:00:00.000Z' }],
+  getRunContents: async () => ({
+    runId: 'run-1', targetDate: '2026-09-21', status: 'COMPLETED', totalDocuments: 18,
+    reports: [{ reportId: 'report-1', title: 'Değişiklik Yok', version: 1, reportUrl: '/runs/run-1/reports/report-1', sourceUrl: null }],
+    relevantDocuments: [], gazetteIndexes: ['https://www.resmigazete.gov.tr/'],
+  }),
 } as unknown as AssistantKnowledge
 
 async function collect(events: AsyncGenerator<ChatStreamEvent>): Promise<ChatStreamEvent[]> {
@@ -60,6 +67,69 @@ function message(content: string, role: 'USER' | 'ASSISTANT' = 'USER'): ChatMess
 }
 
 describe('sendChatMessage', () => {
+  it('creates one template draft for an explicit request and returns its editor link', async () => {
+    const repository = new MemoryChatRepository()
+    const call = { type: 'tool-call' as const, call: { name: 'rapor_sablonu_taslagi_olustur', args: { istek: 'Karşılaştırma tablosu ve yönetici özeti ekle', hazirDuzen: 'detailed' } } }
+    const model = new StubModel([], [[call, call], [{ type: 'text', text: '[Taslağı aç](/templates?id=template-1)' }]])
+    const createTemplate = vi.fn(async () => ({ id: 'template-1', name: 'Yönetici şablonu' }))
+    await collect(sendChatMessage({ sessionId: 's1', content: 'Yeni bir rapor şablonu oluştur, karşılaştırma tablosu ekle' }, { repository, model, modelName: 'gemini-test', knowledge, createTemplate }))
+    expect(model.requests[0]!.tools?.some((tool) => tool.name === 'rapor_sablonu_taslagi_olustur')).toBe(true)
+    expect(createTemplate).toHaveBeenCalledOnce()
+    expect(model.requests[1]!.turns.at(-1)).toMatchObject({ role: 'tool-results', results: [
+      { response: { url: '/templates?id=template-1', status: 'TASLAK' } },
+      { response: { url: '/templates?id=template-1', status: 'TASLAK' } },
+    ] })
+  })
+  it('starts a dated run once and returns its link when the user explicitly requests it', async () => {
+    const repository = new MemoryChatRepository()
+    const call = { type: 'tool-call' as const, call: { name: 'tarihli_tarama_baslat', args: { tarih: '2026-07-28' } } }
+    const model = new StubModel([], [[call, call], [{ type: 'text', text: '28 Temmuz taraması kuyruğa alındı: [İncele](/runs/run-28).' }]])
+    const startRun = vi.fn(async ({ targetDate }: { targetDate: string; requestKey: string }) => ({ id: 'run-28', status: 'QUEUED', targetDate }))
+
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: "28 Temmuz'a ait rapor oluşturma işlemi başlat" }, { repository, model, modelName: 'gemini-test', knowledge, startRun }))
+
+    expect(startRun).toHaveBeenCalledOnce()
+    expect(startRun).toHaveBeenCalledWith({ targetDate: '2026-07-28', requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/) })
+    expect(model.requests[1]!.turns.at(-1)).toMatchObject({ role: 'tool-results', results: [
+      { name: 'tarihli_tarama_baslat', response: { runId: 'run-28', runUrl: '/runs/run-28', status: 'QUEUED' } },
+      { name: 'tarihli_tarama_baslat', response: { runId: 'run-28' } },
+    ] })
+    expect(events.at(-1)).toMatchObject({ type: 'complete' })
+  })
+
+  it('does not expose or execute the write tool for a report lookup', async () => {
+    const repository = new MemoryChatRepository()
+    const model = new StubModel([], [
+      [{ type: 'tool-call', call: { name: 'tarihli_tarama_baslat', args: { tarih: '2026-07-28' } } }],
+      [{ type: 'text', text: 'Tarama başlatmadım.' }],
+    ])
+    const startRun = vi.fn(async () => ({ id: 'unexpected', status: 'QUEUED', targetDate: '2026-07-28' }))
+
+    await collect(sendChatMessage({ sessionId: 's1', content: '28 Temmuz raporunu göster' }, { repository, model, modelName: 'gemini-test', knowledge, startRun }))
+
+    expect(model.requests[0]!.tools?.some((tool) => tool.name === 'tarihli_tarama_baslat')).toBe(false)
+    expect(startRun).not.toHaveBeenCalled()
+    expect(model.requests[1]!.turns.at(-1)).toMatchObject({ role: 'tool-results', results: [{ response: { hata: expect.stringContaining('açıkça bulunmuyor') } }] })
+  })
+
+  it('keeps the started run link when the model fails after the tool succeeds', async () => {
+    const repository = new MemoryChatRepository()
+    let round = 0
+    const model: ChatModelClient = {
+      async *streamReply() {
+        round += 1
+        if (round === 1) yield { type: 'tool-call', call: { name: 'tarihli_tarama_baslat', args: { tarih: '2026-07-28' } } }
+        else throw new Error('provider unavailable')
+      },
+    }
+    const startRun = vi.fn(async ({ targetDate }: { targetDate: string; requestKey: string }) => ({ id: 'run-28', status: 'QUEUED', targetDate }))
+
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: '28 Temmuz 2026 taramasını başlat' }, { repository, model, modelName: 'gemini-test', knowledge, startRun }))
+
+    expect(startRun).toHaveBeenCalledOnce()
+    expect(events.at(-1)).toMatchObject({ type: 'complete', message: { status: 'COMPLETED', content: expect.stringContaining('/runs/run-28') } })
+  })
+
   it('persists the user message before streaming and completes one assistant message', async () => {
     const repository = new MemoryChatRepository()
     const model = new StubModel()
@@ -169,5 +239,34 @@ describe('sendChatMessage', () => {
     expect(events.at(-1)).toEqual({ type: 'error', message: 'Yapay zekâ yanıtı tamamlanamadı. Lütfen yeniden deneyin.' })
     expect(JSON.stringify(events)).not.toContain('AIza')
     expect(repository.saved.at(-1)).toMatchObject({ role: 'ASSISTANT', status: 'FAILED', content: '' })
+  })
+
+  it('never marks an empty model response as completed', async () => {
+    const repository = new MemoryChatRepository()
+    const model = new StubModel([], [[], []])
+
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: 'Raporu göster' }, { repository, model, modelName: 'gemini-test', knowledge }))
+
+    expect(model.requests).toHaveLength(2)
+    expect(repository.saved.at(-1)).toMatchObject({ role: 'ASSISTANT', status: 'FAILED', errorDetail: 'EMPTY_MODEL_RESPONSE' })
+    expect(events.at(-1)).toMatchObject({ type: 'error' })
+  })
+
+  it('uses verified run results when the model finishes without text', async () => {
+    const repository = new MemoryChatRepository()
+    const model = new StubModel([], [
+      [{ type: 'tool-call', call: { name: 'tarama_icerigi_getir', args: { runId: 'run-1' } } }],
+      [],
+      [],
+    ])
+
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: 'Bu rundaki raporu göster' }, { repository, model, modelName: 'gemini-test', knowledge }))
+
+    expect(repository.saved.at(-1)).toMatchObject({
+      role: 'ASSISTANT', status: 'COMPLETED',
+      content: expect.stringContaining('[Değişiklik Yok](/runs/run-1/reports/report-1)'),
+    })
+    expect(events.at(-1)).toMatchObject({ type: 'complete' })
+    expect(repository.saved.at(-1)?.content).toContain('filtresinden geçen Resmî Gazete belgesi bulunmadı')
   })
 })

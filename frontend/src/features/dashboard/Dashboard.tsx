@@ -1,26 +1,20 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Users } from 'lucide-react';
-import { TriggerWorkflowModal } from './TriggerWorkflowModal';
 import { RecentScanRuns } from './RecentScanRuns';
 import { ScanScheduleStatus, ScanScheduleTimeline } from './ScanScheduleTimeline';
 import { useScanSchedule } from './useScanSchedule';
 import atezLogo from '../../assets/atez-logo.png';
 
 export function Dashboard() {
-  const navigate = useNavigate();
-  const [isTriggerOpen, setIsTriggerOpen] = useState(false);
   const schedule = useScanSchedule();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Hero Section */}
-      <section className="hero-gradient rounded-3xl p-6 sm:p-10 lg:p-12 text-white shadow-2xl border border-[#1a2e4d] relative overflow-hidden" data-purpose="hero-banner">
+      <section className="hero-gradient rounded-3xl border border-[#1a2e4d] p-6 text-white shadow-xl sm:p-8 relative overflow-hidden" data-purpose="hero-banner">
         {/* Ambient light effect */}
         <div className="absolute -right-20 -top-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
         
-        {/* Top Row: Brand, Live Schedule Status & Header Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 relative z-10">
+        {/* Brand and live schedule status */}
+        <div className="flex flex-wrap items-center gap-4 mb-5 relative z-10">
           {/* Brand + live schedule status */}
           <div className="flex flex-wrap items-center gap-4 sm:gap-5">
             <img
@@ -32,34 +26,14 @@ export function Dashboard() {
             <ScanScheduleStatus schedule={schedule} />
           </div>
           
-          {/* Hero Actions */}
-          <div className="flex items-center gap-3 relative z-10">
-            <Link
-              to="/groups"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-slate-200 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition duration-150 active:scale-95 shadow-sm"
-            >
-              <Users className="w-4 h-4 text-slate-300" />
-              <span>Dağıtım Grupları</span>
-            </Link>
-            <button
-              onClick={() => setIsTriggerOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 border border-blue-400/30 transition duration-150 active:scale-95 shadow-lg shadow-blue-900/40 cursor-pointer"
-              type="button"
-            >
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"></path>
-              </svg>
-              <span>Yeni Tarama Başlat</span>
-            </button>
-          </div>
         </div>
         
         {/* Main Title and Description */}
-        <div className="max-w-4xl space-y-4 mb-10 relative z-10">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
+        <div className="max-w-4xl space-y-3 mb-7 relative z-10">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
             Resmi Gazete Gümrük & Dış Ticaret Takip Otomasyonu
           </h1>
-          <p className="text-base sm:text-lg text-slate-300 leading-relaxed font-normal">
+          <p className="text-sm text-slate-300 leading-relaxed font-normal">
             Günlük T.C. Resmi Gazete yayınlarını tarar, gümrük, tarife, ithalat/ihracat ve dış ticaret mevzuat değişikliklerini yapay zeka ajanları ile analiz ederek yönetici bülteni oluşturur ve Microsoft Graph üzerinden e-posta iletir.
           </p>
         </div>
@@ -68,11 +42,11 @@ export function Dashboard() {
       </section>
 
       {/* KPI Metrics Section */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6" data-purpose="kpi-overview">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-purpose="kpi-overview">
         {/* KPI 1: Toplam Tarama */}
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-xl hover:shadow-blue-500/10 hover:border-blue-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-xl hover:shadow-blue-500/10 hover:border-blue-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
           <div className="absolute -top-10 -right-10 w-28 h-28 bg-gradient-to-br from-blue-500/15 to-indigo-500/0 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform duration-500"></div>
-          <div className="flex items-center justify-between mb-4 relative z-10">
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="text-[11px] font-mono font-bold tracking-wider text-slate-500 uppercase">TOPLAM TARAMA</span>
@@ -86,7 +60,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-baseline justify-between mb-3 relative z-10">
-            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">7</div>
+            <div className="text-3xl font-extrabold tracking-tight text-slate-900 font-sans">7</div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
               <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" strokeLinecap="round" strokeLinejoin="round"></path>
@@ -110,9 +84,9 @@ export function Dashboard() {
         </div>
 
         {/* KPI 2: Onay Bekleyenler */}
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-xl hover:shadow-amber-500/10 hover:border-amber-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-xl hover:shadow-amber-500/10 hover:border-amber-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
           <div className="absolute -top-10 -right-10 w-28 h-28 bg-gradient-to-br from-amber-500/15 to-orange-500/0 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform duration-500"></div>
-          <div className="flex items-center justify-between mb-4 relative z-10">
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
               <span className="text-[11px] font-mono font-bold tracking-wider text-slate-500 uppercase">ONAY BEKLEYENLER</span>
@@ -124,7 +98,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-baseline justify-between mb-3 relative z-10">
-            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">2</div>
+            <div className="text-3xl font-extrabold tracking-tight text-slate-900 font-sans">2</div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
               +1 yeni tebliğ
@@ -146,9 +120,9 @@ export function Dashboard() {
         </div>
 
         {/* KPI 3: Hazırlanan Bülten */}
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-xl hover:shadow-emerald-500/10 hover:border-emerald-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-xl hover:shadow-emerald-500/10 hover:border-emerald-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
           <div className="absolute -top-10 -right-10 w-28 h-28 bg-gradient-to-br from-emerald-500/15 to-teal-500/0 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform duration-500"></div>
-          <div className="flex items-center justify-between mb-4 relative z-10">
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               <span className="text-[11px] font-mono font-bold tracking-wider text-slate-500 uppercase">HAZIRLANAN BÜLTEN</span>
@@ -160,7 +134,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-baseline justify-between mb-3 relative z-10">
-            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">9</div>
+            <div className="text-3xl font-extrabold tracking-tight text-slate-900 font-sans">9</div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
               <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" strokeLinecap="round" strokeLinejoin="round"></path>
@@ -184,9 +158,9 @@ export function Dashboard() {
         </div>
 
         {/* KPI 4: İletilen Bildirim */}
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-400/40 transition-all duration-300 relative overflow-hidden group hover:-translate-y-1">
           <div className="absolute -top-10 -right-10 w-28 h-28 bg-gradient-to-br from-indigo-500/15 to-purple-500/0 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform duration-500"></div>
-          <div className="flex items-center justify-between mb-4 relative z-10">
+          <div className="flex items-center justify-between mb-3 relative z-10">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
               <span className="text-[11px] font-mono font-bold tracking-wider text-slate-500 uppercase">İLETİLEN BİLDİRİM</span>
@@ -198,7 +172,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-baseline justify-between mb-3 relative z-10">
-            <div className="text-4xl font-extrabold tracking-tight text-slate-900 font-sans">9</div>
+            <div className="text-3xl font-extrabold tracking-tight text-slate-900 font-sans">9</div>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
               %100 İletildi
@@ -222,12 +196,6 @@ export function Dashboard() {
 
       <RecentScanRuns />
 
-      {isTriggerOpen && (
-        <TriggerWorkflowModal
-          onClose={() => setIsTriggerOpen(false)}
-          onTriggered={(runId) => navigate(`/runs/${runId}`)}
-        />
-      )}
     </div>
   )
 }

@@ -18,6 +18,8 @@ describe('AppLayout assistant integration', () => {
     )
 
     const layout = screen.getByText('Sayfa içeriği').closest('main')?.parentElement
+    const main = screen.getByText('Sayfa içeriği').closest('main')
+    expect(main).toHaveClass('max-w-7xl', 'mx-auto')
     expect(layout).toHaveClass('pb-20')
     expect(layout).not.toHaveClass('pb-36')
 
@@ -30,6 +32,32 @@ describe('AppLayout assistant integration', () => {
 
     expect(layout).toHaveClass('pb-20')
     expect(screen.getByRole('button', { name: 'Yapay zekâ asistanını aç' })).toBeVisible()
+  })
+
+  it('opens the scan dialog and navigates to chat history and distribution groups from the sidebar', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route index element={<div>Ana pano</div>} />
+            <Route path="chat" element={<div>Sohbet sayfası</div>} />
+            <Route path="groups" element={<div>Dağıtım sayfası</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Menüyü genişlet' }))
+    expect(screen.getByRole('button', { name: 'Menüyü daralt' })).toHaveAttribute('aria-expanded', 'true')
+    await user.click(screen.getByRole('button', { name: 'Yeni tarama başlat' }))
+    expect(screen.getByText('Kaynak taraması başlat')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Kapat' }))
+
+    await user.click(screen.getByRole('link', { name: 'Sohbet geçmişi' }))
+    expect(screen.getByText('Sohbet sayfası')).toBeVisible()
+    await user.click(screen.getByRole('link', { name: 'Dağıtım grupları' }))
+    expect(screen.getByText('Dağıtım sayfası')).toBeVisible()
   })
 })
 
