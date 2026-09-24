@@ -7,6 +7,723 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ScanTrigger {
+  MANUAL
+  CRON
+}
+
+enum ScanRunStatus {
+  QUEUED
+  RUNNING
+  AWAITING_RETRY
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum ScanStage {
+  DISCOVERING
+  AI_FILTERING
+  DOWNLOADING_DOCUMENTS
+  DISCOVERING_ASSETS
+  DOWNLOADING_ASSETS
+  VALIDATING
+  DISCOVERING_PREVIOUS_SOURCES
+  ANALYZING_TOPICS
+  GENERATING_REPORTS
+  WRITING_MANIFEST
+}
+
+enum EditionType {
+  MAIN
+  SUPPLEMENT
+}
+
+enum ValidationStatus {
+  PENDING
+  VALID
+  INVALID
+}
+
+enum AssetRole {
+  ATTACHMENT
+  IMAGE
+  STYLESHEET_ASSET
+  OTHER_SUPPORTED
+}
+
+enum StageExecutionStatus {
+  PENDING
+  RUNNING
+  AWAITING_RETRY
+  COMPLETED
+  FAILED
+}
+
+enum FilterDecision {
+  IN
+  OUT
+  MAYBE
+}
+
+enum FinalFilterDecision {
+  IN
+  OUT
+}
+
+enum AiJobKind {
+  DOCUMENT_FILTER
+}
+
+enum AiJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  AWAITING_RETRY
+  FAILED
+}
+
+enum AiCallPhase {
+  TITLE
+  CONTENT
+}
+
+enum AiCallStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AiErrorCategory {
+  AUTHENTICATION
+  PERMISSION
+  QUOTA_EXCEEDED
+  RATE_LIMITED
+  PROVIDER_UNAVAILABLE
+  TIMEOUT
+  INVALID_RESPONSE
+  CONTENT_REJECTED
+  UNKNOWN_PROVIDER_ERROR
+}
+
+enum ScanCommandType {
+  START_SCAN
+  RETRY_AI_FILTER
+  RETRY_PREVIOUS_SOURCES
+}
+
+enum PreviousSourceJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  AWAITING_RETRY
+  FAILED
+}
+
+enum PreviousSourceOutcome {
+  NOT_REQUIRED
+  VERIFIED
+  NOT_FOUND
+  AMBIGUOUS
+}
+
+enum PreviousSourceRelationship {
+  AMENDS
+  REPEALS
+  EXTENDS
+  IMPLEMENTS
+  NONE
+}
+
+enum FetchAttemptStatus {
+  SUCCESS
+  FAILED
+}
+
+enum TopicProcessStatus {
+  QUEUED
+  ANALYZING
+  ANALYZED
+  RENDERING
+  VALIDATING
+  COMPLETED
+  AWAITING_RETRY
+  BLOCKED
+  FAILED
+}
+
+enum AnalysisRevisionStatus {
+  PASS
+  PASS_NO_RELEVANT_CONTENT
+}
+
+enum ReportRevisionStatus {
+  GENERATED
+  VALIDATED
+  FAILED
+}
+
+enum ReportCard {
+  K1
+  K2
+  K3
+  K4
+  K5
+  K6
+}
+
+enum ChatRole {
+  SYSTEM
+  USER
+  ASSISTANT
+}
+
+enum ChatMessageKind {
+  AUTOMATED_ANALYSIS
+  REVISION_REQUEST
+  REVISION_RESULT
+  ERROR
+}
+
+enum RevisionKind {
+  ANALYSIS
+  PUBLICATION
+  DIRECT_EDIT
+}
+
+enum TopicOutboxCommand {
+  RETRY_ANALYSIS
+  REVISE_ANALYSIS
+  REVISE_PUBLICATION
+  REVISE_FIELDS
+}
+
+enum TopicAiExecutionKind {
+  INITIAL_ANALYSIS
+  ANALYSIS_REVISION
+  PUBLICATION_REVISION
+}
+
+model ScanRun {
+  id                 String              @id @default(uuid())
+  requestKey         String              @unique
+  scheduleSlot       String?
+  trigger            ScanTrigger         @default(MANUAL)
+  targetDate         DateTime            @db.Date
+  sourceKeys         String[]            @default(["resmi-gazete"])
+  timezone           String              @default("Europe/Istanbul")
+  status             ScanRunStatus       @default(QUEUED)
+  currentStage       ScanStage?
+  totalItems         Int                 @default(0)
+  completedItems     Int                 @default(0)
+  failedItems        Int                 @default(0)
+  downloadedBytes    BigInt              @default(0)
+  errorSummary       String?
+  queueJobId         String?
+  indexSourceUrl     String?
+  indexObjectKey     String?
+  indexSha256        String?
+  manifestObjectKey  String?
+  reportDuplicateStatus String              @default("PENDING")
+  reportDuplicateGroups Json?
+  reportDuplicateError  String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  editions           GazetteEdition[]
+  stages             StageExecution[]
+  attempts           FetchAttempt[]
+  outbox             ScanOutbox[]
+  aiJobs             AiJob[]
+  previousSourceJobs PreviousSourceJob[]
+  topicProcesses     TopicProcess[]
+  topicReports       TopicReport[]
+  sourceRuns         SourceScanRun[]
+
+  @@index([targetDate, createdAt])
+  @@index([status, createdAt])
+}
+
+model ScanOutbox {
+  id           String          @id @default(uuid())
+  scanRunId    String
+  scanRun      ScanRun         @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  commandType  ScanCommandType @default(START_SCAN)
+  requestKey   String          @unique
+  attempts     Int             @default(0)
+  availableAt  DateTime        @default(now())
+  dispatchedAt DateTime?
+  lastError    String?
+  createdAt    DateTime        @default(now())
+
+  @@index([dispatchedAt, availableAt])
+  @@index([scanRunId, createdAt])
+}
+
+model GazetteEdition {
+  id              String              @id @default(uuid())
+  scanRunId       String
+  scanRun         ScanRun             @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  publicationDate DateTime            @db.Date
+  type            EditionType
+  supplementNo    Int?
+  indexUrl        String
+  discoveryOrder  Int
+  documents       CollectedDocument[]
+
+  @@unique([scanRunId, indexUrl])
+}
+
+model CollectedDocument {
+  id                String                   @id @default(uuid())
+  editionId         String
+  edition           GazetteEdition           @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  title             String
+  documentType      String?
+  sourceUrl         String
+  publicationOrder  Int
+  storedObjectId    String?
+  storedObject      StoredObject?            @relation(fields: [storedObjectId], references: [id])
+  validationStatus  ValidationStatus         @default(PENDING)
+  assets            DocumentAsset[]
+  filterDecisions   DocumentFilterDecision[]
+  previousSourceJob PreviousSourceJob?
+  topicProcess      TopicProcess?
+
+  @@unique([editionId, sourceUrl])
+}
+
+model AiJob {
+  id                   String                   @id @default(uuid())
+  scanRunId            String
+  scanRun              ScanRun                  @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  kind                 AiJobKind
+  status               AiJobStatus              @default(QUEUED)
+  model                String
+  titlePromptVersion   String
+  contentPromptVersion String
+  configurationHash    String                   @db.Char(64)
+  lastErrorCategory    AiErrorCategory?
+  lastErrorMessage     String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  calls                AiCall[]
+  decisions            DocumentFilterDecision[]
+
+  @@unique([scanRunId, kind])
+  @@index([status, createdAt])
+}
+
+model AiCall {
+  id                String           @id @default(uuid())
+  aiJobId           String
+  aiJob             AiJob            @relation(fields: [aiJobId], references: [id], onDelete: Cascade)
+  phase             AiCallPhase
+  batchKey          String
+  attemptNo         Int
+  status            AiCallStatus     @default(RUNNING)
+  providerRequestId String?
+  inputHash         String           @db.Char(64)
+  latencyMs         Int?
+  inputTokens       Int?
+  outputTokens      Int?
+  errorCategory     AiErrorCategory?
+  providerStatus    Int?
+  errorMessage      String?
+  startedAt         DateTime         @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+
+  @@unique([aiJobId, phase, batchKey, attemptNo])
+  @@index([aiJobId, createdAt])
+}
+
+model DocumentFilterDecision {
+  id                String               @id @default(uuid())
+  aiJobId           String
+  aiJob             AiJob                @relation(fields: [aiJobId], references: [id], onDelete: Cascade)
+  documentId        String
+  document          CollectedDocument    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  titleDecision     FilterDecision
+  titleReason       String
+  titleConfidence   Float
+  contentDecision   FinalFilterDecision?
+  contentReason     String?
+  contentConfidence Float?
+  finalDecision     FinalFilterDecision?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@unique([aiJobId, documentId])
+  @@index([documentId])
+  @@index([aiJobId, finalDecision])
+}
+
+model StoredObject {
+  id                      String                   @id @default(uuid())
+  sha256                  String                   @unique @db.Char(64)
+  bucket                  String
+  objectKey               String                   @unique
+  mediaType               String
+  byteSize                BigInt
+  versionId               String?
+  createdAt               DateTime                 @default(now())
+  documents               CollectedDocument[]
+  assets                  DocumentAsset[]
+  previousSourceDocuments PreviousSourceDocument[]
+  previousSourceAssets    PreviousSourceAsset[]
+}
+
+/// Documents fetched on demand by chat are not part of a scan or an approved report.
+model AssistantOfficialDocument {
+  id          String   @id @default(uuid())
+  sourceUrl   String   @unique
+  title       String
+  mediaType   String
+  objectKey   String
+  text        String?  @db.Text
+  note        String?
+  fetchedAt   DateTime @default(now())
+}
+
+model DocumentAsset {
+  id               String            @id @default(uuid())
+  documentId       String
+  document         CollectedDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  storedObjectId   String?
+  storedObject     StoredObject?     @relation(fields: [storedObjectId], references: [id])
+  sourceUrl        String
+  referenceText    String?
+  role             AssetRole
+  validationStatus ValidationStatus  @default(PENDING)
+
+  @@unique([documentId, sourceUrl])
+}
+
+model PreviousSourceJob {
+  id                         String                      @id @default(uuid())
+  scanRunId                  String
+  scanRun                    ScanRun                     @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  documentId                 String                      @unique
+  document                   CollectedDocument           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status                     PreviousSourceJobStatus     @default(QUEUED)
+  outcome                    PreviousSourceOutcome?
+  model                      String
+  promptVersion              String
+  configurationHash          String                      @db.Char(64)
+  needsPreviousSource        Boolean?
+  relationship               PreviousSourceRelationship?
+  targetRegulationTitle      String?
+  targetRegulationIdentifier String?
+  targetRegulationType       String?
+  targetInstitution          String?
+  targetArticleReferences    Json?
+  queryCandidates            Json?
+  reason                     String?
+  lastErrorCategory          AiErrorCategory?
+  lastErrorMessage           String?
+  startedAt                  DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  calls                      PreviousSourceCall[]
+  candidates                 PreviousSourceCandidate[]
+  source                     PreviousSourceDocument?
+
+  @@index([scanRunId, status])
+}
+
+model PreviousSourceCall {
+  id                String            @id @default(uuid())
+  jobId             String
+  job               PreviousSourceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  attemptNo         Int
+  status            AiCallStatus      @default(RUNNING)
+  providerRequestId String?
+  inputHash         String            @db.Char(64)
+  latencyMs         Int?
+  inputTokens       Int?
+  outputTokens      Int?
+  errorCategory     AiErrorCategory?
+  providerStatus    Int?
+  errorMessage      String?
+  startedAt         DateTime          @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime          @default(now())
+
+  @@unique([jobId, attemptNo])
+  @@index([jobId, createdAt])
+}
+
+model PreviousSourceCandidate {
+  id                   String            @id @default(uuid())
+  jobId                String
+  job                  PreviousSourceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  query                String
+  title                String
+  publicationDate      DateTime          @db.Date
+  gazetteNo            String?
+  mukerrer             String?
+  url                  String
+  documentUrl          String?
+  regulationType       String?
+  exactIdentifierMatch Boolean           @default(false)
+  titleScore           Float             @default(0)
+  score                Float             @default(0)
+  reasons              Json
+  selected             Boolean           @default(false)
+  createdAt            DateTime          @default(now())
+
+  @@unique([jobId, url])
+  @@index([jobId, score])
+}
+
+model PreviousSourceDocument {
+  id               String                @id @default(uuid())
+  jobId            String                @unique
+  job              PreviousSourceJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  title            String
+  publicationDate  DateTime              @db.Date
+  gazetteNo        String?
+  mukerrer         String?
+  sourceUrl        String
+  storedObjectId   String
+  storedObject     StoredObject          @relation(fields: [storedObjectId], references: [id])
+  validationStatus ValidationStatus      @default(PENDING)
+  createdAt        DateTime              @default(now())
+  assets           PreviousSourceAsset[]
+}
+
+model PreviousSourceAsset {
+  id               String                 @id @default(uuid())
+  previousSourceId String
+  previousSource   PreviousSourceDocument @relation(fields: [previousSourceId], references: [id], onDelete: Cascade)
+  storedObjectId   String
+  storedObject     StoredObject           @relation(fields: [storedObjectId], references: [id])
+  sourceUrl        String
+  referenceText    String?
+  role             AssetRole
+  validationStatus ValidationStatus       @default(PENDING)
+  createdAt        DateTime               @default(now())
+
+  @@unique([previousSourceId, sourceUrl])
+}
+
+model StageExecution {
+  id             String               @id @default(uuid())
+  scanRunId      String
+  scanRun        ScanRun              @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  stage          ScanStage
+  status         StageExecutionStatus @default(PENDING)
+  totalItems     Int                  @default(0)
+  completedItems Int                  @default(0)
+  failedItems    Int                  @default(0)
+  errorSummary   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([scanRunId, stage])
+}
+
+model FetchAttempt {
+  id           String             @id @default(uuid())
+  scanRunId    String
+  scanRun      ScanRun            @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  sourceUrl    String
+  attemptNo    Int
+  status       FetchAttemptStatus
+  httpStatus   Int?
+  redirectUrl  String?
+  byteSize     BigInt?
+  errorClass   String?
+  errorMessage String?
+  startedAt    DateTime           @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime           @default(now())
+
+  @@index([scanRunId, createdAt])
+}
+
+model TopicProcess {
+  id                String             @id @default(uuid())
+  scanRunId         String
+  scanRun           ScanRun            @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  documentId        String             @unique
+  document          CollectedDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status            TopicProcessStatus @default(QUEUED)
+  lastErrorCategory AiErrorCategory?
+  lastErrorMessage  String?
+  evidenceBundle    EvidenceBundle?
+  thread            AnalysisThread?
+  analyses          AnalysisRevision[]
+  reports           TopicReport[]
+  executions        TopicAiExecution[]
+  outbox            TopicOutbox[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  dispatches        EmailDispatch[]
+  drafts            ReportDraft[]
+
+  @@index([scanRunId, status])
+}
+
+model EvidenceBundle {
+  id                String       @id @default(uuid())
+  topicId           String       @unique
+  topic             TopicProcess @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  manifestObjectKey String?
+  sourceSignature   String?      @db.Char(64)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model AnalysisThread {
+  id        String        @id @default(uuid())
+  topicId   String        @unique
+  topic     TopicProcess  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title     String?
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model ChatMessage {
+  id           String          @id @default(uuid())
+  threadId     String
+  thread       AnalysisThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role         ChatRole
+  kind         ChatMessageKind
+  revisionKind RevisionKind?
+  requestKey   String?         @unique
+  content      String
+  createdAt    DateTime        @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+model AnalysisRevision {
+  id                String                 @id @default(uuid())
+  topicId           String
+  topic             TopicProcess           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  version           Int
+  status            AnalysisRevisionStatus
+  analysisObjectKey String                 @unique
+  markdownObjectKey String                 @unique
+  model             String
+  promptVersion     String
+  schemaVersion     Int
+  inputTokens       Int?
+  outputTokens      Int?
+  requestMessageId  String?                @unique
+  reports           ReportRevision[]
+  executions        TopicAiExecution[]
+  createdAt         DateTime               @default(now())
+  stagedDrafts      ReportDraft[]
+
+  @@unique([topicId, version])
+  @@index([topicId, createdAt])
+}
+
+model TopicReport {
+  id            String           @id @default(uuid())
+  scanRunId     String
+  scanRun       ScanRun          @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  topicId       String?
+  topic         TopicProcess?    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title         String
+  basename      String
+  card          ReportCard
+  latestVersion Int              @default(0)
+  reviewStatus  ReportReviewStatus @default(READY)
+  pendingSpecJson Json?
+  pendingBaseVersion Int?
+  revisions     ReportRevision[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([topicId])
+  @@index([scanRunId, createdAt])
+}
+
+enum ReportReviewStatus {
+  READY
+  PENDING_APPROVAL
+}
+
+model ReportRevision {
+  id                 String               @id @default(uuid())
+  reportId           String
+  report             TopicReport          @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  analysisRevisionId String?
+  analysisRevision   AnalysisRevision?    @relation(fields: [analysisRevisionId], references: [id], onDelete: Restrict)
+  version            Int
+  status             ReportRevisionStatus
+  card               ReportCard
+  specObjectKey      String               @unique
+  htmlObjectKey      String               @unique
+  validationError    String?
+  requestMessageId   String?              @unique
+  draftId            String?              @unique
+  draft              ReportDraft?         @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  createdAt          DateTime             @default(now())
+
+  @@unique([reportId, version])
+  @@index([analysisRevisionId])
+}
+
+model TopicAiExecution {
+  id                 String               @id @default(uuid())
+  topicId            String
+  topic              TopicProcess         @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  analysisRevisionId String?
+  requestMessageId   String?
+  analysisRevision   AnalysisRevision?    @relation(fields: [analysisRevisionId], references: [id], onDelete: SetNull)
+  kind               TopicAiExecutionKind
+  attemptNo          Int
+  status             AiCallStatus         @default(RUNNING)
+  model              String
+  promptVersion      String
+  schemaVersion      Int
+  providerRequestId  String?
+  inputHash          String               @db.Char(64)
+  latencyMs          Int?
+  inputTokens        Int?
+  outputTokens       Int?
+  errorCategory      AiErrorCategory?
+  providerStatus     Int?
+  errorMessage       String?
+  startedAt          DateTime             @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime             @default(now())
+
+  @@unique([topicId, kind, attemptNo])
+  @@index([requestMessageId, createdAt])
+  @@index([topicId, createdAt])
+}
+
+model TopicOutbox {
+  id           String             @id @default(uuid())
+  topicId      String
+  topic        TopicProcess       @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  command      TopicOutboxCommand
+  requestKey   String             @unique
+  messageId    String?
+  attempts     Int                @default(0)
+  availableAt  DateTime           @default(now())
+  dispatchedAt DateTime?
+  lastError    String?
+  createdAt    DateTime           @default(now())
+
+  @@index([dispatchedAt, availableAt])
+  @@index([topicId, createdAt])
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -17,135 +734,312 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
-model Workflow {
-  id          String        @id @default(uuid())
-  key         String        @unique
-  name        String
-  description String?
-  cron        String?
-  isActive    Boolean       @default(true)
-  runs        WorkflowRun[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+model Source {
+  id            String    @id @default(uuid())
+  key           String    @unique
+  name          String?
+  baseUrl       String
+  authorityType String
+  isActive      Boolean   @default(true)
+  lastScanned   DateTime?
+  cursor        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  documents Document[]
+  endpoints SourceEndpoint[]
+  sourceRuns SourceScanRun[]
 }
 
-model WorkflowRun {
-  id         String          @id @default(uuid())
-  workflowId String
-  workflow   Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  status     String          @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED
-  parameters String?         // JSON: { targetDate, mode, ... }
-  summary    String?
-  error      String?
-  logs       AgentTaskLog[]
-  items      GazetteItem[]
-  reports    Report[]
-  dispatches EmailDispatch[]
-  startedAt  DateTime        @default(now())
-  finishedAt DateTime?
-
-  @@index([workflowId, startedAt])
-}
-
-model AgentTaskLog {
-  id         String      @id @default(uuid())
-  runId      String
-  run        WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  agentName  String
-  stepName   String
-  status     String      @default("STARTED") // STARTED, RUNNING, COMPLETED, FAILED
-  inputData  String?
-  outputData String?
-  durationMs Int?
-  error      String?
-  createdAt  DateTime    @default(now())
-
-  @@index([runId, createdAt])
-}
-
-model GazetteItem {
-  id                 String      @id @default(uuid())
-  runId              String
-  run                WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  date               String      // YYYY-MM-DD
-  title              String
-  category           String      // Tebliğ, Karar, Yönetmelik
-  url                String
-  pdfUrl             String?
-  fullText           String?
-  isRelevant         Boolean     @default(false)
-  relevanceScore     Int         @default(0)
-  relevanceReason    String?
-  precedingTitle     String?
-  precedingDate      String?
-  precedingGazetteNo String?
-  precedingUrl       String?
-  createdAt          DateTime    @default(now())
-
-  @@index([runId, isRelevant])
-}
-
-model Report {
-  id              String           @id @default(uuid())
-  runId           String?
-  run             WorkflowRun?     @relation(fields: [runId], references: [id], onDelete: Cascade)
+/// A discovered URL is evidence only after it is explicitly activated.
+model SourceEndpoint {
+  id              String   @id @default(uuid())
+  sourceId        String
+  url             String
   title           String
-  status          String           @default("DRAFT") // DRAFT, REVISED, APPROVED, SENT
-  version         Int              @default(1)
-  contentMarkdown String?
-  contentHtml     String?
-  keyPoints       String?          // JSON or Text
-  affectedSectors String?          // JSON or Text
-  actionItems     String?          // JSON or Text
-  revisions       ReportRevision[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  reason          String?
+  keywords        String?
+  status          String   @default("PROPOSED")
+  adapter         String?
+  managedSourceId String?
+  discoveredAt    DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  @@index([runId])
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, status])
+  @@unique([sourceId, url])
 }
 
-model ReportRevision {
+model SourceScanRun {
+  id          String    @id @default(uuid())
+  sourceId    String
+  scanRunId   String?
+  requestKey  String    @unique
+  targetDate  DateTime  @db.Date
+  trigger     String    @default("MANUAL")
+  scheduleSlot String?
+  status      String    @default("QUEUED")
+  errorSummary String?
+  reportHtml  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  source    Source @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  scanRun   ScanRun? @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  documents SourceScanDocument[]
+
+  @@index([targetDate, createdAt])
+  @@index([scanRunId])
+  @@index([status, createdAt])
+}
+
+model SourceScanDocument {
+  id          String   @id @default(uuid())
+  runId       String
+  url         String
+  title       String
+  publishedOn DateTime @db.Date
+  contentText String?
+  contentHash String?
+  feedUrl     String
+  createdAt   DateTime @default(now())
+
+  run SourceScanRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, url])
+}
+
+/// User-curated external references. These are not official Gazette documents.
+model ManagedSource {
+  id           String   @id @default(uuid())
+  url          String   @unique
+  title        String
+  description  String?
+  keywords     String?
+  contentText  String?
+  contentType  String?
+  fetchError   String?
+  fetchedAt    DateTime?
+  useInChat    Boolean  @default(true)
+  useInRuns    Boolean  @default(true)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  snapshots    ManagedSourceSnapshot[]
+
+  @@index([isActive, useInChat])
+  @@index([isActive, useInRuns])
+}
+
+model ManagedSourceSnapshot {
+  id              String   @id @default(uuid())
+  managedSourceId String
+  url             String
+  contentHash     String
+  contentText     String
+  contentType     String
+  fetchedAt       DateTime @default(now())
+
+  managedSource ManagedSource @relation(fields: [managedSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([managedSourceId, contentHash])
+  @@index([managedSourceId, fetchedAt])
+}
+
+model Document {
   id            String   @id @default(uuid())
-  reportId      String
-  report        Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  userPrompt    String
-  changeSummary String?
-  previousData  String?
-  revisedData   String?
+  sourceId      String
+  externalId    String?
+  canonicalUrl  String   @unique
+  title         String
+  publishedOn   DateTime @db.Date
+  institution   String?
+  regulationNum String?
   createdAt     DateTime @default(now())
 
-  @@index([reportId, createdAt])
+  source   Source            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  versions DocumentVersion[]
+
+  @@unique([sourceId, externalId])
+}
+
+model DocumentVersion {
+  id               String   @id @default(uuid())
+  documentId       String
+  contentHash      String
+  extractedText    String?
+  extractionStatus String   @default("PENDING")
+  mimeType         String   @default("application/pdf")
+  createdAt        DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, contentHash])
+}
+
+model Job {
+  id             String   @id @default(uuid())
+  kind           String
+  entityId       String
+  actorId        String?
+  idempotencyKey String   @unique
+  status         String   @default("QUEUED")
+  errorDetails   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum GeneralChatRole {
+  USER
+  ASSISTANT
+}
+
+enum GeneralChatMessageStatus {
+  COMPLETED
+  FAILED
+}
+
+/// A general assistant conversation. Kept apart from AnalysisThread, which is the
+/// audit record of a report's revisions and must not be deleted or retitled by
+/// ordinary chat.
+model ChatSession {
+  id        String               @id @default(uuid())
+  ownerId   String?
+  title     String?
+  messages  GeneralChatMessage[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+}
+
+model GeneralChatMessage {
+  id          String                   @id @default(uuid())
+  sessionId   String
+  session     ChatSession              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role        GeneralChatRole
+  content     String
+  status      GeneralChatMessageStatus @default(COMPLETED)
+  errorDetail String?
+  attachment  GeneralChatAttachment?
+  createdAt   DateTime                 @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+model GeneralChatAttachment {
+  id        String             @id @default(uuid())
+  messageId String             @unique
+  message   GeneralChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  name      String
+  mediaType String
+  byteSize  Int
+  objectKey String
+  createdAt DateTime           @default(now())
+}
+
+enum EmailDispatchStatus {
+  PENDING
+  SENT
+  FAILED
+  SIMULATED
 }
 
 model CustomerGroup {
   id          String   @id @default(uuid())
-  name        String
+  name        String   @unique
   description String?
-  emails      String   // Comma separated
+  emails      String[]
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([isActive, name])
 }
 
 model EmailDispatch {
-  id             String       @id @default(uuid())
-  runId          String?
-  run            WorkflowRun? @relation(fields: [runId], references: [id], onDelete: Cascade)
-  recipients     String
-  subject        String
-  status         String       @default("PENDING") // PENDING, SENT, SIMULATED, FAILED
-  isSimulation   Boolean      @default(false)
-  graphMessageId String?
-  sentAt         DateTime?
-  createdAt      DateTime     @default(now())
+  id                String              @id @default(uuid())
+  topicId           String
+  topic             TopicProcess        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  reportVersion     Int
+  requestKey        String              @unique
+  recipients        String[]
+  groupIds          String[]
+  subject           String
+  bodyHtml          String
+  attachmentName    String?
+  status            EmailDispatchStatus @default(PENDING)
+  providerMessageId String?
+  errorMessage      String?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
 
-  @@index([runId])
+  @@index([topicId, createdAt])
 }
 
-model ChatSession {
-  id        String   @id @default(uuid())
-  ownerId   String?
-  title     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum ReportDraftStatus {
+  OPEN
+  PUBLISHED
+  DISCARDED
+}
+
+enum ReportEditSource {
+  USER
+  AI
+}
+
+model ReportDraft {
+  id                 String            @id @default(uuid())
+  topicId            String
+  topic              TopicProcess      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  baseVersion        Int
+  /// Set when an analysis revision staged its result here; publishing binds to it.
+  analysisRevisionId String?
+  analysisRevision   AnalysisRevision? @relation(fields: [analysisRevisionId], references: [id], onDelete: SetNull)
+  specJson           Json
+  status             ReportDraftStatus @default(OPEN)
+  createdBy          String?
+  closedAt           DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  edits              ReportFieldEdit[]
+  revision           ReportRevision?
+
+  @@index([topicId, createdAt])
+}
+
+model ReportFieldEdit {
+  id            String           @id @default(uuid())
+  draftId       String
+  draft         ReportDraft      @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  sequence      Int
+  path          String
+  previousValue Json?
+  nextValue     Json?
+  source        ReportEditSource
+  prompt        String?
+  chatMessageId String?
+  requestKey    String?          @unique
+  revertsEditId String?          @unique
+  revertsEdit   ReportFieldEdit? @relation("EditRevert", fields: [revertsEditId], references: [id], onDelete: SetNull)
+  revertedBy    ReportFieldEdit? @relation("EditRevert")
+  createdAt     DateTime         @default(now())
+
+  @@unique([draftId, sequence])
+  @@index([draftId, createdAt])
+}
+
+/// HTML designs kept as drafts until a template is explicitly connected to
+/// the report generation workflow. Editing one never rewrites issued reports.
+model ReportTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  html        String   @db.Text
+  revision    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
 }

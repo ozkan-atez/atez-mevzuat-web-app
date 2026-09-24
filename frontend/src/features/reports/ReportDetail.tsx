@@ -1,415 +1,206 @@
-import { useEffect, useState, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
-import {
-  ArrowLeft,
-  Download,
-  AlertCircle,
-  RefreshCw,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Minimize2,
-  Mail,
-  Clock,
-  ExternalLink,
-} from "lucide-react";
-import { EmailDispatchModal } from "./EmailDispatchModal";
-import { GlobalNavMenu } from "../../components/layout/GlobalNavMenu";
+import { useCallback, useEffect, useState } from 'react'
+import { AlertCircle, ArrowLeft, Download, ExternalLink, LoaderCircle, Mail, RefreshCw } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { getTopic } from '../analysis/api'
+import { downloadReportPdf, getDeliveryContext } from '../delivery/api'
+import { EmailDispatchModal } from '../delivery/EmailDispatchModal'
+import type { DeliverySource } from '../delivery/types'
+import type { TopicDetail } from '../analysis/types'
+import { useReportDraft } from '../revision/useReportDraft'
+import { useRegisterActiveReport } from '../revision/ActiveReportContext'
+import { ReportPreviewPanel } from '../revision/ReportPreviewPanel'
+import { clearLocalReportEdits, readLocalReportEdits } from '../revision/EditableReportPreview'
+import { ChangeList } from '../revision/ChangeList'
+import { PublishDraftBar } from '../revision/PublishDraftBar'
 
-interface GazetteItem {
-  id: string;
-  title: string;
-  category: string;
-  url: string;
-  isRelevant: boolean;
-  relevanceScore: number;
-  relevanceReason?: string | null;
-  precedingTitle?: string | null;
-  precedingDate?: string | null;
-  precedingGazetteNo?: string | null;
-  precedingUrl?: string | null;
+const ZOOM_STEPS = [50, 65, 80, 90, 100, 115, 130, 150] as const
+const SOURCE_LABELS: Record<DeliverySource['kind'], string> = {
+  GAZETTE: 'Resmî Gazete',
+  PREVIOUS: 'Önceki kaynak',
+  OFFICIAL: 'Resmî kaynak',
+  SUPPORTING: 'Destekleyici kaynak',
 }
-
-interface ReportData {
-  id: string;
-  title: string;
-  contentMarkdown: string;
-  contentHtml: string;
-  version: number;
-  keyPoints: string | null;
-  affectedSectors: string | null;
-  actionItems: string | null;
-  createdAt: string;
-  run?: {
-    id: string;
-    status: string;
-    startedAt: string;
-    items?: GazetteItem[];
-    dispatches: Array<{
-      id: string;
-      recipients: string;
-      subject: string;
-      status: string;
-      isSimulation: boolean;
-      graphMessageId: string | null;
-      sentAt: string | null;
-    }>;
-  } | null;
-}
-
-const DUMMY_REPORT: ReportData = {
-  id: "1",
-  title: "PET Resin İthalatında Korunma Önlemi Uygulanmasına İlişkin Karar (Karar Sayısı: 11509)",
-  version: 1,
-  createdAt: new Date().toISOString(),
-  contentMarkdown: "# PET Resin İthalatında Korunma Önlemi Kararı\n\nPET Resin ithalatında ek mali yükümlülükler getirilmiştir.",
-  contentHtml: `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #0f172a; line-height: 1.6; }
-          .header-tag { display: inline-block; padding: 4px 10px; background: #e0e7ff; color: #3730a3; border-radius: 6px; font-size: 11px; font-weight: 700; margin-bottom: 14px; text-transform: uppercase; }
-          h1 { color: #0a1628; font-size: 24px; font-weight: 800; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-top: 0; }
-          .meta-box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px 18px; margin: 18px 0; font-size: 13px; }
-          .section-title { font-size: 16px; font-weight: 700; color: #1e293b; margin-top: 24px; border-left: 4px solid #2563eb; padding-left: 10px; }
-          ul { padding-left: 20px; font-size: 13.5px; }
-          li { margin-bottom: 8px; }
-          p { font-size: 13.5px; }
-        </style>
-      </head>
-      <body>
-        <span class="header-tag">T.C. TİCARET BAKANLIĞI • İTHALAT GENEL MÜDÜRLÜĞÜ</span>
-        <h1>PET Resin İthalatında Korunma Önlemi Uygulanmasına İlişkin Karar (Karar Sayısı: 11509)</h1>
-        
-        <div class="meta-box">
-          <p><strong>Yayım Tarihi:</strong> 11 Temmuz 2026 | <strong>Resmî Gazete Sayısı:</strong> 32841</p>
-          <p><strong>Öncelik Seviyesi:</strong> <span style="color: #dc2626; font-weight: 700;">YÜKSEK (10/10)</span> • Doğrudan Ek Mali Yükümlülük</p>
-        </div>
-
-        <div class="section-title">1. Kararın Özeti ve Kapsamı</div>
-        <p>3907.61.00.00.00 Gümrük Tarife İstatistik Pozisyonunda (GTİP) yer alan "Poli(etilen tereftalat) (PET) resin" ithalatında yerli üreticilerin korunması amacıyla yürütülen soruşturma neticesinde 3 yıl süreyle korunma önlemi olarak ek mali yükümlülük yürürlüğe konulmuştur.</p>
-
-        <div class="section-title">2. Uygulanacak Ek Mali Yükümlülük Tarifesi</div>
-        <ul>
-          <li><strong>1. Yıl:</strong> 75 ABD Doları / Ton</li>
-          <li><strong>2. Yıl:</strong> 70 ABD Doları / Ton</li>
-          <li><strong>3. Yıl:</strong> 65 ABD Doları / Ton</li>
-        </ul>
-
-        <div class="section-title">3. Şirketimiz ve Müşteriler İçin Aksiyon Planı</div>
-        <ul>
-          <li>Plastik ambalaj ve preform üretimi yapan müşterilerimizin ithalat maliyet bütçelerinin revize edilmesi.</li>
-          <li>Gelişmekte olan ülkeler için tanınan tarife kontenjanı muafiyet şartlarının menşe belgeleri üzerinden teyidi.</li>
-        </ul>
-      </body>
-    </html>
-  `,
-  keyPoints: "PET Resin ithalatı, 3 yıl süreyle ek mali yükümlülük, 75 USD/ton",
-  affectedSectors: "Plastik, Ambalaj, İçecek Sanayii",
-  actionItems: "İthalat beyannamelerinde ek mali yükümlülüğün hesaplanması ve antrepo stoklarının gözden geçirilmesi.",
-  run: {
-    id: "325b2514-0e2e-499d-b268-060b0373f33c",
-    status: "COMPLETED",
-    startedAt: new Date().toISOString(),
-    items: [
-      {
-        id: "item-1",
-        title: "PET Resin İthalatında Korunma Önlemi Uygulanmasına İlişkin Karar (Karar Sayısı: 11509)",
-        category: "Cumhurbaşkanı Kararı",
-        url: "https://www.resmigazete.gov.tr",
-        isRelevant: true,
-        relevanceScore: 10,
-        precedingTitle: "2023/18 Sayılı İthalat Kararı",
-        precedingDate: "12.06.2023",
-        precedingGazetteNo: "32219",
-        precedingUrl: "https://www.resmigazete.gov.tr",
-      },
-    ],
-    dispatches: [],
-  },
-};
 
 export function ReportDetail() {
-  const { id } = useParams<{ id: string }>();
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
+  const [topic, setTopic] = useState<TopicDetail | null>(null)
+  const [sources, setSources] = useState<DeliverySource[]>([])
+  const [isLoadingTopic, setIsLoadingTopic] = useState(true)
+  const [topicError, setTopicError] = useState<string | null>(null)
 
-  // UI State'leri: Zoom & Modal
-  const [zoom, setZoom] = useState(100);
-  const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
-  const [showMailModal, setShowMailModal] = useState(false);
+  const [zoom, setZoom] = useState(100)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [isDispatchOpen, setIsDispatchOpen] = useState(false)
 
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const draft = useReportDraft(id)
+  const draftStorageKey = `report-edits:topic:${id}`
 
-  const fetchReport = async () => {
+  const loadTopic = useCallback(async () => {
+    if (!id) return
+    setIsLoadingTopic(true)
+    setTopicError(null)
     try {
-      const res = await fetch("/api/reports/" + id);
-      if (res.ok) {
-        setReport(await res.json());
-      } else {
-        setReport({ ...DUMMY_REPORT, id: id || "1" });
-      }
-    } catch {
-      setReport({ ...DUMMY_REPORT, id: id || "1" });
+      const nextTopic = await getTopic(id)
+      const requestedRevision = Number(searchParams.get('revision'))
+      const revision = Number.isInteger(requestedRevision) && requestedRevision > 0 ? requestedRevision : nextTopic.reportVersion
+      if (!revision) throw new Error('Bu mevzuat için henüz doğrulanmış bir bülten bulunmuyor.')
+      setTopic(nextTopic)
+      // Sources come from the same analysis revision the bulletin was rendered from,
+      // so a failure here must not hide an otherwise valid report.
+      setSources(await getDeliveryContext(id, revision).then((context) => context.sources ?? []).catch(() => []))
+    } catch (caught) {
+      setTopicError(caught instanceof Error ? caught.message : 'Bülten yüklenemedi')
+      setTopic(null)
     } finally {
-      setIsLoading(false);
+      setIsLoadingTopic(false)
     }
-  };
+  }, [id, searchParams])
 
-  useEffect(() => {
-    fetchReport();
-  }, [id]);
+  useEffect(() => { void loadTopic() }, [loadTopic])
 
-  // Touchpad pinch-to-zoom ve fare tekerleği ile zoom
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  useRegisterActiveReport(topic && id
+    ? { topicId: id, title: topic.title, submitPrompt: draft.submitPrompt, isPrompting: draft.isPrompting }
+    : null)
 
-    const handleNativeWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        const factor = e.deltaMode === 1 ? 15 : 1;
-        const delta = -e.deltaY * factor * 0.8;
-        setZoom((prev) => Math.min(Math.max(Math.round(prev + delta), 40), 220));
-      }
-    };
-
-    canvas.addEventListener("wheel", handleNativeWheel, { passive: false });
-    return () => {
-      canvas.removeEventListener("wheel", handleNativeWheel);
-    };
-  }, []);
-
-  const handleDownloadPdf = async () => {
-    if (!report) return;
-    setIsDownloadingPdf(true);
-    try {
-      const response = await fetch(`/api/reports/${report.id}/pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html: report.contentHtml, title: report.title }),
-      });
-
-      if (!response.ok) {
-        throw new Error("PDF servisi yanıt vermedi");
-      }
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `ATEZ_Mevzuat_Raporu_${report.id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (err: any) {
-      alert("PDF indirilirken hata: " + err.message);
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-        <p className="text-slate-500 text-sm font-medium">Mevzuat bülteni yükleniyor...</p>
-      </div>
-    );
+  const stepZoom = (direction: -1 | 1) => {
+    setZoom((current) => {
+      const index = ZOOM_STEPS.indexOf(current as (typeof ZOOM_STEPS)[number])
+      const nextIndex = Math.min(ZOOM_STEPS.length - 1, Math.max(0, (index === -1 ? 4 : index) + direction))
+      return ZOOM_STEPS[nextIndex] ?? 100
+    })
   }
 
-  if (!report) {
-    return (
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center">
-        <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-3" />
-        <h3 className="font-bold text-slate-800 text-lg">Bülten kaydı bulunamadı</h3>
-        <Link to="/" className="mt-4 inline-flex text-sm text-blue-600 font-semibold hover:underline">
-          Ana Sayfaya Dön
-        </Link>
-      </div>
-    );
+  const publishedVersion = draft.view?.baseVersion ?? topic?.reportVersion ?? null
+
+  const downloadPdf = async () => {
+    if (!id || !publishedVersion || isDownloading) return
+    setIsDownloading(true)
+    setDownloadError(null)
+    try {
+      const { blob, fileName } = await downloadReportPdf(id, publishedVersion)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (caught) {
+      setDownloadError(caught instanceof Error ? caught.message : 'PDF indirilemedi')
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
-  const matchedItem = report.run?.items?.[0];
+  if (isLoadingTopic || draft.isLoading) {
+    return <div className="flex min-h-72 items-center justify-center gap-2 text-sm text-slate-500"><RefreshCw className="h-4 w-4 animate-spin" />Mevzuat bülteni yükleniyor…</div>
+  }
+
+  if (!topic || !draft.view || !publishedVersion) {
+    return (
+      <section className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
+        <AlertCircle className="mx-auto h-9 w-9 text-red-500" />
+        <h1 className="mt-3 text-lg font-bold text-slate-900">Bülten kaydı bulunamadı</h1>
+        <p className="mt-2 text-sm text-slate-500">{topicError ?? draft.error ?? 'Bu rapor artık mevcut olmayabilir.'}</p>
+        <Link to="/" className="mt-5 inline-flex text-sm font-semibold text-blue-700">Ana sayfaya dön</Link>
+      </section>
+    )
+  }
+
+  const edits = draft.view.draft?.edits ?? []
+  const pendingCount = edits.filter((edit) => !edit.revertedByEditId && !edit.revertsEditId).length
+  const awaitingApproval = draft.view.draft !== null || Object.keys(readLocalReportEdits(draftStorageKey)).length > 0
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto w-full pb-16">
-      {/* 1. Üst Bar: Navigasyon ve Başlık & Dışında Sağında Hızlı Menü */}
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-6 py-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <Link
-              to={report.run?.id ? `/runs/${report.run.id}` : "/"}
-              className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors shrink-0"
-              title="Tarama İnceleme Masasına Dön"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">
-                  {report.title}
-                </h1>
-                <span className="px-2.5 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold rounded-md shrink-0">
-                  v{report.version || 1}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
-                <Clock className="w-3 h-3 text-slate-400" />
-                <span>
-                  Oluşturulma:{" "}
-                  {new Date(report.createdAt).toLocaleString("tr-TR")}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {/* Aksiyon Butonları (Kartın İçinde) */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={isDownloadingPdf}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              {isDownloadingPdf ? (
-                <RefreshCw className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-              ) : (
-                <Download className="w-3.5 h-3.5 text-blue-400" />
-              )}
-              <span>{isDownloadingPdf ? "İndiriliyor..." : "PDF İndir"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowMailModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
-            >
-              <Mail className="w-3.5 h-3.5" />
-              <span>E-Posta ile Dağıt</span>
-            </button>
+    <div className="space-y-4 pb-10">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link to={`/runs/${topic.runId}`} aria-label="Taramaya dön" className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></Link>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold text-slate-900">{topic.title}</h1>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Bülten r{String(publishedVersion).padStart(2, '0')} · {topic.reportCard}
+              {pendingCount > 0 && <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-800">taslak</span>}
+            </p>
           </div>
         </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${awaitingApproval ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
+          {awaitingApproval ? 'Gönderilemez · Revizyon onayı bekleniyor' : 'Gönderime hazır'}
+        </span>
+      </header>
 
-        {/* Hızlı Menü (Kartın DIŞINDA ve SAĞINDA) */}
-        <div className="shrink-0">
-          <GlobalNavMenu variant="light" />
-        </div>
-      </div>
-
-      {/* 1.5. Kullanılan Kaynaklar Şeridi */}
-      {matchedItem && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white px-6 py-3 rounded-2xl border border-slate-200/80 shadow-2xs text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
-              Kullanılan Kaynaklar:
-            </span>
-            <a
-              href={matchedItem.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200"
-            >
-              <span>Güncel Resmî Gazete</span>
-              <ExternalLink className="w-3 h-3 text-slate-400" />
+      <section aria-label="Kullanılan kaynaklar" className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Kullanılan kaynaklar:</span>
+          {sources.length === 0 && <span className="text-xs text-slate-400">Kaynak listesi alınamadı.</span>}
+          {sources.map((source) => (
+            <a key={source.url} href={source.url} target="_blank" rel="noreferrer" title={source.label}
+              className="inline-flex max-w-full items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-blue-400 hover:text-blue-700">
+              <span className="truncate">{SOURCE_LABELS[source.kind]}</span>
+              <ExternalLink className="h-3 w-3 shrink-0 text-slate-400" />
             </a>
-
-            {matchedItem.precedingUrl && (
-              <a
-                href={matchedItem.precedingUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors"
-              >
-                <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Önceki Belge: {matchedItem.precedingTitle || "Önceki Mevzuat"}</span>
-                <ExternalLink className="w-3 h-3 text-indigo-500" />
-              </a>
-            )}
-          </div>
+          ))}
         </div>
-      )}
+      </section>
 
-      {/* 2. Ortalı Canlı Bülten Önizleme (Tam Genişlikte Odak) */}
-      <div className={`w-full flex flex-col bg-white rounded-2xl border border-slate-200/90 shadow-2xs ${isFullscreenPreview ? 'fixed inset-4 z-50 h-[calc(100vh-32px)]' : 'h-[950px]'} overflow-hidden transition-all duration-300`}>
-        {/* Preview Toolbar */}
-        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/60 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">A4 Kanonik Bülten Önizlemesi</h3>
-          </div>
+      <PublishDraftBar
+        pendingCount={pendingCount}
+        isBusy={draft.isBusy}
+        conflictVersion={draft.conflictVersion}
+        nextVersion={draft.view.baseVersion + 1}
+        staleBehindVersion={draft.view.isStale ? draft.view.publishedVersion : null}
+        onPublish={() => { void draft.publish().then((version) => { if (version) clearLocalReportEdits(draftStorageKey) }) }}
+        onDiscard={() => { clearLocalReportEdits(draftStorageKey); void draft.discard() }}
+        onReload={() => { void draft.reload(); void loadTopic() }}
+      />
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl p-0.5 shadow-2xs text-xs">
-              <button
-                type="button"
-                onClick={() => setZoom((z) => Math.max(z - 10, 50))}
-                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                title="Küçült (-)"
-              >
-                <ZoomOut className="w-3.5 h-3.5" />
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <ReportPreviewPanel
+          html={draft.view.html}
+          zoom={zoom}
+          editable={!draft.isBusy && draft.conflictVersion === null && !draft.view.isStale}
+          draftStorageKey={draftStorageKey}
+          onEditField={draft.editField}
+          onZoomOut={() => stepZoom(-1)}
+          onZoomIn={() => stepZoom(1)}
+          zoomOutDisabled={zoom === ZOOM_STEPS[0]}
+          zoomInDisabled={zoom === ZOOM_STEPS.at(-1)}
+          actions={<>
+              <button type="button" onClick={() => void downloadPdf()} disabled={isDownloading} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {isDownloading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}PDF İndir
               </button>
-              <button
-                type="button"
-                onClick={() => setZoom(100)}
-                className="px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:text-blue-600 transition-colors cursor-pointer"
-                title="Zoom Sıfırla (%100)"
-              >
-                %{zoom}
+              <button type="button" onClick={() => setIsDispatchOpen(true)} disabled={awaitingApproval} className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-45">
+                <Mail className="h-4 w-4" />E-Posta ile Dağıt
               </button>
-              <button
-                type="button"
-                onClick={() => setZoom((z) => Math.min(z + 10, 160))}
-                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                title="Büyüt (+)"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            </>}
+          error={downloadError ?? draft.error}
+          notice={awaitingApproval && (
+            <p className="border-b border-blue-100 bg-blue-50/60 px-5 py-2 text-xs font-medium text-blue-800">
+              Revizyon onaylanana veya iptal edilene kadar e-posta gönderimi kapalıdır. PDF yayımlanmış r{String(draft.view.publishedVersion).padStart(2, '0')} sürümünü kullanır.
+            </p>
+          )}
+        />
 
-            <button
-              type="button"
-              onClick={() => setIsFullscreenPreview(!isFullscreenPreview)}
-              className="p-2 text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-xl shadow-2xs transition-colors cursor-pointer"
-              title={isFullscreenPreview ? "Normal Görünüme Dön" : "Tam Ekrana Büyüt"}
-            >
-              {isFullscreenPreview ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            </button>
+        <aside className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900">Değişiklikler</h2>
+            {draft.isPrompting && <LoaderCircle className="h-3.5 w-3.5 animate-spin text-indigo-500" aria-label="Talep işleniyor" />}
           </div>
-        </div>
-
-        {/* Canvas Sahnesi */}
-        <div
-          ref={canvasRef}
-          className="flex-1 bg-slate-100/80 p-6 overflow-auto flex justify-center cursor-default select-none"
-        >
-          <div
-            className="w-full transition-transform duration-75 ease-out origin-top flex justify-center pointer-events-none"
-            style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
-          >
-            <iframe
-              ref={iframeRef}
-              srcDoc={report.contentHtml}
-              title="Bülten Önizleme"
-              className="w-full max-w-[850px] min-h-[1150px] bg-white rounded-xl shadow-lg border border-slate-200/80 pointer-events-none"
-              sandbox="allow-same-origin allow-modals"
-            />
-          </div>
-        </div>
+          <ChangeList edits={edits} isBusy={draft.isBusy} onRevert={(editId) => void draft.revert(editId)} />
+        </aside>
       </div>
 
-      <EmailDispatchModal
-        isOpen={showMailModal}
-        onClose={() => setShowMailModal(false)}
-        reportId={report?.id}
-        runId={report?.run?.id}
-        onDispatched={() => fetchReport()}
-      />
+      {isDispatchOpen && (
+        <EmailDispatchModal
+          topicId={topic.id}
+          reportVersion={publishedVersion}
+          reportTitle={topic.title}
+          onClose={() => setIsDispatchOpen(false)}
+        />
+      )}
     </div>
-  );
+  )
 }

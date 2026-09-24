@@ -1,0 +1,44 @@
+export type ChatRole = 'USER' | 'ASSISTANT'
+export type ChatMessageStatus = 'COMPLETED' | 'FAILED'
+
+export interface ChatMessage {
+  id: string
+  role: ChatRole
+  content: string
+  status: ChatMessageStatus
+  errorDetail: string | null
+  createdAt: string
+  attachment?: { id: string; name: string; mediaType: string; byteSize: number }
+}
+
+export interface ChatSession {
+  id: string
+  title: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatHistoryItem {
+  id: string
+  type: 'GENERAL' | 'REPORT_REVISION'
+  title: string
+  titlePending?: boolean
+  preview: string | null
+  messageCount: number
+  updatedAt: string
+  /** Where selecting this item goes: a chat route, or the report it belongs to. */
+  target: string
+  /** The scan that owns a report conversation. Absent for general chats. */
+  run?: { id: string; targetDate: string; status?: string }
+}
+
+export type ChatStreamEvent =
+  | { type: 'message'; message: ChatMessage }
+  | { type: 'delta'; content: string }
+  /** The assistant is reading the platform's own data; shown while it happens. */
+  | { type: 'tool'; name: string; label: string }
+  | { type: 'complete'; message: ChatMessage }
+  | { type: 'error'; message: string }
+
+export const MAX_MESSAGE_LENGTH = 8_000
+export const MAX_CHAT_FILE_BYTES = 5_000_000

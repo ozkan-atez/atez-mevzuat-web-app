@@ -1,0 +1,127 @@
+import { z } from 'zod'
+
+const optionalText = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().min(1).optional(),
+)
+
+const schema = z.object({
+  DATABASE_URL: z.string().min(1),
+  PORT: z.coerce.number().int().positive().default(3001),
+  CORS_ORIGIN: optionalText,
+  SCAN_TIMEZONE: z.string().default('Europe/Istanbul'),
+  SOURCE_HOSTS: z.string().default('resmigazete.gov.tr,www.resmigazete.gov.tr'),
+  SOURCE_DELAY_MS: z.coerce.number().int().min(750).default(750),
+  SOURCE_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  SOURCE_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(3).default(3),
+  MAX_FILE_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
+  MAX_RUN_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024 * 1024),
+  S3_ENDPOINT: z.string().url(),
+  S3_REGION: z.string().default('eu-central-1'),
+  S3_BUCKET: z.string().default('resmi-gazete'),
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('true'),
+  GEMINI_API_KEY: optionalText,
+  GEMINI_MODEL: z.string().min(1).default('gemini-3.7-flash'),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
+  GEMINI_MAX_CONTENT_BYTES: z.coerce.number().int().positive().default(8_000_000),
+  PREVIOUS_SOURCE_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
+  TOPIC_ANALYSIS_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
+  GOTENBERG_URL: z.string().url().default('http://gotenberg:3000'),
+  GOTENBERG_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  GRAPH_TENANT_ID: optionalText,
+  GRAPH_CLIENT_ID: optionalText,
+  GRAPH_CLIENT_SECRET: optionalText,
+  GRAPH_SENDER_ADDRESS: optionalText,
+  GRAPH_SENDER_NAME: z.string().default('ATEZ Mevzuat Radarı'),
+  MAIL_MAX_ATTACHMENT_BYTES: z.coerce.number().int().positive().default(3 * 1024 * 1024),
+})
+
+export interface AppEnv {
+  databaseUrl: string
+  port: number
+  corsOrigins: string[] | undefined
+  timezone: string
+  sourceHosts: string[]
+  sourceDelayMs: number
+  sourceTimeoutMs: number
+  sourceMaxAttempts: number
+  maxFileBytes: number
+  maxRunBytes: number
+  s3: {
+    endpoint: string
+    region: string
+    bucket: string
+    accessKeyId: string
+    secretAccessKey: string
+    forcePathStyle: boolean
+  }
+  gemini: {
+    apiKey: string | undefined
+    model: string
+    timeoutMs: number
+    maxAttempts: number
+    maxContentBytes: number
+    previousSourceConcurrency: number
+    topicConcurrency: number
+  }
+  gotenberg: {
+    url: string
+    timeoutMs: number
+  }
+  graph: {
+    tenantId: string | undefined
+    clientId: string | undefined
+    clientSecret: string | undefined
+    senderAddress: string | undefined
+    senderName: string
+    maxAttachmentBytes: number
+  }
+}
+
+export function loadEnv(input: NodeJS.ProcessEnv = process.env): AppEnv {
+  const value = schema.parse(input)
+  return {
+    databaseUrl: value.DATABASE_URL,
+    port: value.PORT,
+    corsOrigins: value.CORS_ORIGIN?.split(',').map((origin) => origin.trim()).filter(Boolean),
+    timezone: value.SCAN_TIMEZONE,
+    sourceHosts: value.SOURCE_HOSTS.split(',').map((host) => host.trim()).filter(Boolean),
+    sourceDelayMs: value.SOURCE_DELAY_MS,
+    sourceTimeoutMs: value.SOURCE_TIMEOUT_MS,
+    sourceMaxAttempts: value.SOURCE_MAX_ATTEMPTS,
+    maxFileBytes: value.MAX_FILE_BYTES,
+    maxRunBytes: value.MAX_RUN_BYTES,
+    s3: {
+      endpoint: value.S3_ENDPOINT,
+      region: value.S3_REGION,
+      bucket: value.S3_BUCKET,
+      accessKeyId: value.S3_ACCESS_KEY_ID,
+      secretAccessKey: value.S3_SECRET_ACCESS_KEY,
+      forcePathStyle: value.S3_FORCE_PATH_STYLE === 'true',
+    },
+    gemini: {
+      apiKey: value.GEMINI_API_KEY,
+      model: value.GEMINI_MODEL,
+      timeoutMs: value.GEMINI_TIMEOUT_MS,
+      maxAttempts: value.GEMINI_MAX_ATTEMPTS,
+      maxContentBytes: value.GEMINI_MAX_CONTENT_BYTES,
+      previousSourceConcurrency: value.PREVIOUS_SOURCE_CONCURRENCY,
+      topicConcurrency: value.TOPIC_ANALYSIS_CONCURRENCY,
+    },
+    gotenberg: {
+      url: value.GOTENBERG_URL,
+      timeoutMs: value.GOTENBERG_TIMEOUT_MS,
+    },
+    graph: {
+      tenantId: value.GRAPH_TENANT_ID,
+      clientId: value.GRAPH_CLIENT_ID,
+      clientSecret: value.GRAPH_CLIENT_SECRET,
+      senderAddress: value.GRAPH_SENDER_ADDRESS,
+      senderName: value.GRAPH_SENDER_NAME,
+      maxAttachmentBytes: value.MAIL_MAX_ATTACHMENT_BYTES,
+    },
+  }
+}

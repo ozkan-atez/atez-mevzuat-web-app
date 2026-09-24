@@ -1,12 +1,37 @@
 :80 {
-    # 1. Statik dosyaları (Vite çıktısı) sunar
-    root * /srv
-    encode gzip
-    
-    # 2. React Router için SPA yönlendirmesi (dosya yoksa index.html'e düşür)
-    try_files {path} /index.html
-    file_server
+    # Compression is opt-in per type: gzipping a text/event-stream would buffer the
+    # chat answer and it would arrive in one lump at the end instead of streaming.
+    encode gzip {
+        match {
+            header Content-Type text/html*
+            header Content-Type text/css*
+            header Content-Type text/plain*
+            header Content-Type application/json*
+            header Content-Type application/javascript*
+            header Content-Type image/svg+xml*
+        }
+    }
 
-    # 3. API İsteklerini Fastify Backend'ine Proxy Yapar
-    reverse_proxy /api/* backend:3001
+    handle /api/* {
+        reverse_proxy backend:3001
+    }
+
+    # Asset filenames carry a content hash, so they may be cached indefinitely.
+    # This block must come before the SPA fallback: without it `try_files` answers a
+    # missing asset with index.html as text/html, and a browser holding a stale
+    # index.html then tries to execute HTML as a script and the app never mounts.
+    handle /assets/* {
+        root * /srv
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }
+
+    handle {
+        root * /srv
+        # index.html names the current bundle, so it must be revalidated every time
+        # or a deploy stays invisible until the browser decides to look again.
+        header Cache-Control "no-cache"
+        try_files {path} /index.html
+        file_server
+    }
 }

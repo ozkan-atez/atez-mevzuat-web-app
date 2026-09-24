@@ -1,0 +1,163 @@
+import { describe, expect, it } from 'vitest'
+import type { AiModelClient, StructuredAiRequest } from '../../src/modules/ai/application/ai-model-client'
+import { AiProviderError } from '../../src/modules/ai/domain/ai-errors'
+import { executeTopicAnalysis } from '../../src/modules/topic-analysis/application/execute-topic-analysis'
+import { recoverAnalysisForRetry } from '../../src/modules/topic-analysis/application/retry-topic-analysis'
+import type {
+  CreateTopicAnalysisRevisionInput,
+  TopicAnalysisRepository,
+  TopicEvidenceInput,
+  TopicObjectStore,
+} from '../../src/modules/topic-analysis/application/ports'
+
+const topicId = '11111111-1111-4111-8111-111111111111'
+
+function validAnalysis() {
+  return {
+    schemaVersion: 1,
+    topicId,
+    status: 'PASS',
+    document: { title: 'İthalat Kararı', gazetteDate: '2026-09-11', gazetteNumber: '33000', sourceUrl: 'https://www.resmigazete.gov.tr/current' },
+    change: { type: 'AMENDMENT', detailedAnalysis: 'İthalat oranı değişmiştir.', summary: 'Yeni oran uygulanır.', currentRule: 'Oran yüzde ondur.', operationalImpact: 'Beyannameler güncellenir.' },
+    affectedParties: [], effectiveDates: [], comparisons: [], tables: [],
+    officialSources: [{ id: 'source-1', label: 'Resmî Gazete', url: 'https://www.resmigazete.gov.tr/current', evidenceIds: ['evidence-1'] }],
+    supportingSources: [],
+    evidence: [{ id: 'evidence-1', objectKey: 'objects/current.html', locator: 'paragraph:1' }],
+    unresolvedReferences: [],
+    emailTitle: 'İthalat oranı değişikliği', emailSummary: 'Yeni ithalat oranı uygulanacaktır.',
+  }
+}
+
+class MemoryObjectStore implements TopicObjectStore {
+  readonly values = new Map<string, Buffer>([['objects/current.html', Buffer.from('<html><body>Yeni oran yüzde ondur.</body></html>')]])
+  async getContent(key: string) {
+    const value = this.values.get(key)
+    if (!value) throw new Error(`Missing ${key}`)
+    return value
+  }
+  async putRunFile(key: string, body: Buffer, mediaType: string) {
+    this.values.set(key, body)
+    return { objectKey: key, sha256: 'f'.repeat(64), mediaType, byteSize: BigInt(body.byteLength) }
+  }
+  text(key: string) { return this.values.get(key)?.toString('utf8') ?? '' }
+}
+
+class MemoryRepository implements TopicAnalysisRepository {
+  status = 'QUEUED'
+  error: { category: string; message: string } | null = null
+  revisions: CreateTopicAnalysisRevisionInput[] = []
+  executions: Array<{ status: string; errorCategory?: string }> = []
+  readonly topic: TopicEvidenceInput = {
+    topicId, runId: 'run-1', targetDate: '2026-09-11',
+    document: {
+      title: 'İthalat Kararı', sourceUrl: 'https://www.resmigazete.gov.tr/current',
+      object: { objectKey: 'objects/current.html', sha256: 'a'.repeat(64), mediaType: 'text/html', byteSize: 50n }, assets: [],
+    },
+    previousSource: null,
+  }
+  async getTopicEvidenceInput() { return this.topic }
+  async markTopicAnalyzing() { this.status = 'ANALYZING' }
+  async saveEvidenceBundle() {}
+  async nextAnalysisVersion() { return this.revisions.length + 1 }
+  async startTopicAiExecution() { const execution = { status: 'RUNNING' }; this.executions.push(execution); return { id: String(this.executions.length) } }
+  async completeTopicAiExecution() { this.executions.at(-1)!.status = 'COMPLETED' }
+  async failTopicAiExecution(_id: string, error: { category: string }) { Object.assign(this.executions.at(-1)!, { status: 'FAILED', errorCategory: error.category }) }
+  async createAnalysisRevision(input: CreateTopicAnalysisRevisionInput) { this.revisions.push(input); this.status = 'ANALYZED'; return { id: 'revision-1', version: input.version } }
+  async markTopicAwaitingRetry(_topicId: string, error: { category: string; message: string }) { this.status = 'AWAITING_RETRY'; this.error = error }
+  async markTopicBlocked(_topicId: string, message: string) { this.status = 'BLOCKED'; this.error = { category: 'INVALID_RESPONSE', message } }
+}
+
+class FixedAi implements AiModelClient {
+  calls = 0
+  lastRequest: StructuredAiRequest | null = null
+  constructor(private readonly response: unknown | Error) {}
+  async generateStructured(request: StructuredAiRequest) {
+    this.lastRequest = request
+    this.calls += 1
+    if (this.response instanceof Error) throw this.response
+    return { json: this.response, providerRequestId: 'gemini-response-1', usage: { inputTokens: 120, outputTokens: 80 } }
+  }
+}
+
+function dependencies(ai: AiModelClient, repository = new MemoryRepository(), objectStore = new MemoryObjectStore()) {
+  return { repository, objectStore, aiModel: ai, model: 'gemini-3.7-flash', maxAttempts: 2, maxContextBytes: 1_000_000, now: () => 100 }
+}
+
+describe('executeTopicAnalysis', () => {
+  it('stores one validated JSON and generated Markdown for one topic', async () => {
+    const repository = new MemoryRepository()
+    const objectStore = new MemoryObjectStore()
+    const result = await executeTopicAnalysis(topicId, dependencies(new FixedAi(validAnalysis()), repository, objectStore))
+    expect(result.version).toBe(1)
+    expect(objectStore.text(result.analysisObjectKey)).toContain(`"topicId":"${topicId}"`)
+    expect(objectStore.text(result.markdownObjectKey)).toContain('## Belge kimliği')
+    expect(repository.revisions).toHaveLength(1)
+    expect(repository.executions[0]).toMatchObject({ status: 'COMPLETED' })
+  })
+
+  it('includes a matching curated source as supporting evidence with provenance', async () => {
+    const repository = new MemoryRepository()
+    repository.topic.managedSources = [{ id: 'source-1', title: 'İthalat rehberi', sourceUrl: 'https://example.org/guide', description: 'Arka plan', contentText: 'İthalat işlemlerine ilişkin açıklama.', fetchedAt: '2026-09-21T20:00:00.000Z' }]
+    const objectStore = new MemoryObjectStore()
+    const ai = new FixedAi(validAnalysis())
+    await executeTopicAnalysis(topicId, dependencies(ai, repository, objectStore))
+    expect(ai.lastRequest?.parts).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('İthalat işlemlerine ilişkin açıklama.') })]))
+    const manifest = JSON.parse(objectStore.text(`runs/2026/09/11/run-1/topics/${topicId}/evidence/manifest.json`)) as { managedSources: Array<{ sourceUrl: string; textSha256: string }> }
+    expect(manifest.managedSources[0]).toMatchObject({ sourceUrl: 'https://example.org/guide', textSha256: expect.stringMatching(/^[a-f0-9]{64}$/) })
+  })
+
+  it('keeps the official document when there is no context room for a curated source', async () => {
+    const repository = new MemoryRepository()
+    repository.topic.managedSources = [{ id: 'source-1', title: 'İthalat rehberi', sourceUrl: 'https://example.org/guide', description: null, contentText: 'Ek açıklama', fetchedAt: '2026-09-21T20:00:00.000Z' }]
+    const store = new MemoryObjectStore()
+    const ai = new FixedAi(validAnalysis())
+    await executeTopicAnalysis(topicId, { ...dependencies(ai, repository, store), maxContextBytes: 51 })
+    expect(ai.lastRequest?.parts).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('current-document') })]))
+    expect(JSON.parse(store.text(`runs/2026/09/11/run-1/topics/${topicId}/evidence/manifest.json`))).toMatchObject({ managedSources: [] })
+  })
+
+  it('marks a retriable provider failure as awaiting retry with its category', async () => {
+    const repository = new MemoryRepository()
+    const ai = new FixedAi(new AiProviderError('RATE_LIMITED', true, 'Gemini geçici olarak yoğun.', 429))
+    await expect(executeTopicAnalysis(topicId, dependencies(ai, repository))).rejects.toMatchObject({ category: 'RATE_LIMITED' })
+    expect(ai.calls).toBe(2)
+    expect(repository.status).toBe('AWAITING_RETRY')
+    expect(repository.error).toMatchObject({ category: 'RATE_LIMITED' })
+    expect(repository.revisions).toEqual([])
+  })
+
+  it('classifies malformed model output as retryable without persisting a revision', async () => {
+    const repository = new MemoryRepository()
+    const ai = new FixedAi({ ...validAnalysis(), topics: [] })
+    await expect(executeTopicAnalysis(topicId, dependencies(ai, repository))).rejects.toMatchObject({ category: 'INVALID_RESPONSE', retryable: true })
+    expect(ai.calls).toBe(2)
+    expect(repository.status).toBe('AWAITING_RETRY')
+    expect(repository.error).toMatchObject({ category: 'INVALID_RESPONSE', message: expect.not.stringContaining('"origin"') })
+    expect(repository.revisions).toEqual([])
+  })
+
+  it('blocks an authentication failure with its actual category', async () => {
+    const repository = new MemoryRepository()
+    await expect(executeTopicAnalysis(topicId, dependencies(new FixedAi(new AiProviderError('AUTHENTICATION', false, 'Erişim reddedildi.')), repository))).rejects.toMatchObject({ category: 'AUTHENTICATION' })
+    expect(repository.status).toBe('BLOCKED')
+  })
+
+  it('reuses a persisted analysis revision after a retry delivery crash', async () => {
+    const repository = new MemoryRepository()
+    const objectStore = new MemoryObjectStore()
+    const analysis = validAnalysis()
+    const analysisObjectKey = 'runs/run-1/topics/topic-1/analysis/r01/analysis.json'
+    objectStore.values.set(analysisObjectKey, Buffer.from(JSON.stringify(analysis)))
+    const ai = new FixedAi(new Error('Gemini must not be called'))
+
+    const recovered = await recoverAnalysisForRetry({
+      id: topicId,
+      status: 'ANALYZED',
+      latestAnalysis: { id: 'revision-1', version: 1, analysisObjectKey, markdownObjectKey: 'analysis.md' },
+    }, dependencies(ai, repository, objectStore))
+
+    expect(recovered.analysis).toEqual(analysis)
+    expect(ai.calls).toBe(0)
+    expect(repository.revisions).toHaveLength(0)
+  })
+})

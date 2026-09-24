@@ -10,7 +10,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "esnext",
-    "types": [],
+    "types": ["node"],
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],
@@ -35,8 +35,11 @@
 
     // Recommended Options
     "strict": true,
+    "jsx": "react-jsx",
     "verbatimModuleSyntax": false,
-    "exactOptionalPropertyTypes": false,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
     "skipLibCheck": true,
   }
 }
