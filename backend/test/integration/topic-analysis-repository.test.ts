@@ -120,6 +120,28 @@ describe('topic analysis repository', () => {
     expect(stage).toMatchObject({ totalItems: 1, completedItems: 1, status: 'COMPLETED' })
   })
 
+  it('finalizes recovered partial analysis runs without finalizing earlier-stage failures', async () => {
+    const run = await prisma.scanRun.create({data:{requestKey:crypto.randomUUID(),targetDate:new Date('2026-09-11T00:00:00Z'),status:'PARTIAL',currentStage:'GENERATING_REPORTS',errorSummary:'Eski analiz hatası'}})
+    expect(await scanRepository.completeRunAfterTopicRetry(run.id, 'manifest.json')).toBe(true)
+    expect((await prisma.scanRun.findUniqueOrThrow({where:{id:run.id}})).errorSummary).toBeNull()
+    await prisma.scanRun.update({where:{id:run.id},data:{status:'FAILED',currentStage:'DOWNLOADING_DOCUMENTS'}})
+    expect(await scanRepository.completeRunAfterTopicRetry(run.id, 'manifest.json')).toBe(false)
+  })
+
+  it('allows legacy validation failures to retry, but not unrelated blocked failures', async () => {
+    const run = await prisma.scanRun.create({ data: {requestKey:crypto.randomUUID(), targetDate:new Date('2026-09-11T00:00:00Z')} })
+    const edition = await prisma.gazetteEdition.create({ data:{scanRunId:run.id, publicationDate:run.targetDate, type:'MAIN', indexUrl:'https://example.test/index', discoveryOrder:0} })
+    const document = await prisma.collectedDocument.create({data:{editionId:edition.id, title:'Kanun', sourceUrl:'https://example.test/doc', publicationOrder:0}})
+    const topic = await prisma.topicProcess.create({data:{scanRunId:run.id, documentId:document.id, status:'BLOCKED', lastErrorCategory:'INVALID_RESPONSE'}})
+    expect((await repository.getTopicDetail(topic.id))?.retryAvailable).toBe(true)
+    const key = crypto.randomUUID()
+    const queued = await repository.requestTopicRetry(topic.id, key)
+    expect(await repository.requestTopicRetry(topic.id, key)).toEqual(queued)
+    expect((await prisma.topicProcess.findUniqueOrThrow({where:{id:topic.id}})).status).toBe('QUEUED')
+    await prisma.topicProcess.update({where:{id:topic.id},data:{status:'BLOCKED',lastErrorCategory:'PERMISSION'}})
+    await expect(repository.requestTopicRetry(topic.id, crypto.randomUUID())).rejects.toThrow('hazır değil')
+  })
+
   it('requeues the original chat revision when its provider call awaits retry', async () => {
     const run = await prisma.scanRun.create({ data: { requestKey: crypto.randomUUID(), targetDate: new Date('2026-09-11T00:00:00.000Z') } })
     const edition = await prisma.gazetteEdition.create({ data: { scanRunId: run.id, publicationDate: run.targetDate, type: 'MAIN', indexUrl: 'https://example.test/index', discoveryOrder: 0 } })

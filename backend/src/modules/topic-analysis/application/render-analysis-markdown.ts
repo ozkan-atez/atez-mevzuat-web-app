@@ -6,7 +6,7 @@ export function renderAnalysisMarkdown(analysis: AnalysisResult): string {
     section('Belge kimliği', [
       `- Başlık: ${escapeMarkdown(analysis.document.title)}`,
       ...(analysis.document.documentNumber ? [`- Belge numarası: ${escapeMarkdown(analysis.document.documentNumber)}`] : []),
-      `- Resmî Gazete: ${analysis.document.gazetteDate} / ${escapeMarkdown(analysis.document.gazetteNumber)}`,
+      analysis.document.sourceOrigin ? `- Yayın kaynağı: ${escapeMarkdown(analysis.document.sourceOrigin.name)} / ${analysis.document.gazetteDate} (${analysis.document.sourceOrigin.authority === 'OFFICIAL' ? 'Resmî kaynak' : 'Destekleyici kaynak'})` : `- Resmî Gazete: ${analysis.document.gazetteDate} / ${escapeMarkdown(analysis.document.gazetteNumber)}`,
       `- Kaynak: ${analysis.document.sourceUrl}`,
       `- Topic: ${analysis.topicId}`,
     ]),

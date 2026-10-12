@@ -1,3 +1,4 @@
+import { normalizeDocumentContent } from './normalize-document-content'
 import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -8,11 +9,12 @@ import { AiProviderError, executeWithAiRetries } from '../../ai/domain/ai-errors
 import type { PrismaScanRepository } from '../infrastructure/prisma-scan-repository'
 import { parseAssets } from '../infrastructure/resmi-gazete-parser'
 import type { ObjectStore, OfficialHttp, PreviousSourceCandidateRecord, PreviousSourceSearch, PreviousSourceWorkItem, StoredBlob } from './ports'
-import { buildPreviousSourcePreflightRequest, PREVIOUS_SOURCE_CONFIGURATION_HASH, PREVIOUS_SOURCE_PROMPT_VERSION } from './previous-source-prompts'
+import { buildPreviousSourceQueries, buildPreviousSourcePreflightRequest, PREVIOUS_SOURCE_CONFIGURATION_HASH, PREVIOUS_SOURCE_PROMPT_VERSION } from './previous-source-prompts'
 import { selectPreviousSource } from './previous-source-matcher'
 import { parsePreviousSourcePreflightResponse, type PreviousSourceIntent } from './previous-source-schemas'
 
 interface Dependencies {
+  documentIds?: string[]
   repository: PrismaScanRepository
   aiModel: AiModelClient
   search: PreviousSourceSearch
@@ -36,7 +38,7 @@ export async function executePreviousSourceDiscovery(runId: string, dependencies
     model: dependencies.model,
     promptVersion: PREVIOUS_SOURCE_PROMPT_VERSION,
     configurationHash: PREVIOUS_SOURCE_CONFIGURATION_HASH,
-  })
+  }, dependencies.documentIds)
   const work = await dependencies.repository.listPreviousSourceWork(runId)
   if (work.length === 0) return
   const run = await dependencies.repository.getExecutionRun(runId)
@@ -77,7 +79,7 @@ async function processJob(
     intent = item.intent
   } else {
     const currentBytes = await dependencies.objectStore.getContent(item.document.storedObject.objectKey)
-    const visibleText = item.document.storedObject.mediaType === 'text/html' ? extractVisibleText(currentBytes) : ''
+    const visibleText = item.document.storedObject.mediaType === 'text/html' ? extractVisibleText(currentBytes) : item.document.storedObject.mediaType === 'text/plain' ? currentBytes.toString('utf8') : ''
     const built = buildPreviousSourcePreflightRequest({
       documentId: item.documentId,
       title: item.document.title,
@@ -85,6 +87,7 @@ async function processJob(
       sourceUrl: item.document.sourceUrl,
       documentType: item.document.documentType,
       visibleText,
+      ...(item.document.storedObject.mediaType === 'application/pdf' ? {documentParts: normalizeDocumentContent({id:item.documentId,title:item.document.title,mediaType:item.document.storedObject.mediaType,bytes:currentBytes})} : {}),
     }, dependencies.model)
     intent = await generateIntent(item.id, built.request, dependencies)
     await dependencies.repository.savePreviousSourceIntent(item.id, intent)
@@ -96,7 +99,7 @@ async function processJob(
 
   const rawCandidates = []
   const seen = new Set<string>()
-  for (const query of intent.queryCandidates) {
+  for (const query of buildPreviousSourceQueries(intent)) {
     for (const candidate of await dependencies.search.search({ query, endDate: dayBefore(item.document.publicationDate), limit: 10 })) {
       if (!seen.has(candidate.url)) {
         seen.add(candidate.url)

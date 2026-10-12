@@ -1,3 +1,4 @@
+import { getActorContext, resourceOwnership, reportAccessWhere } from '../../../platform/actor-context'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import type { PublishedReportBase, ReportDraftRecord, ReportDraftRepository } from '../application/ports'
 import { matchEditablePattern } from '../domain/report-patch'
@@ -9,7 +10,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
 
   async getPublishedBase(topicId: string): Promise<PublishedReportBase | null> {
     const revision = await this.prisma.reportRevision.findFirst({
-      where: { report: { topicId }, status: 'VALIDATED' },
+      where: { report: { AND: [reportAccessWhere()], OR: [{ topicId }, { id: topicId, topicId: null, card: 'K6' }] }, status: 'VALIDATED' },
       orderBy: { version: 'desc' },
       select: {
         version: true,
@@ -19,16 +20,17 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
           select: {
             basename: true,
             scanRunId: true,
+            scanRun: { select: { targetDate: true } },
             topic: { select: { document: { select: { edition: { select: { publicationDate: true } } } } } },
           },
         },
       },
     })
     const topic = revision?.report.topic
-    if (!revision || !topic) return null
+    if (!revision || !revision.report.scanRunId) return null
     return {
       runId: revision.report.scanRunId,
-      targetDate: toIsoDate(topic.document.edition.publicationDate),
+      targetDate: toIsoDate(topic?.document.edition.publicationDate ?? revision.report.scanRun!.targetDate),
       version: revision.version,
       analysisRevisionId: revision.analysisRevisionId,
       basename: revision.report.basename,
@@ -36,22 +38,31 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
     }
   }
 
+  async getPublishedHistory(topicId:string) {
+    const revisions=await this.prisma.reportRevision.findMany({where:{report:{AND:[reportAccessWhere()],OR:[{topicId},{id:topicId,topicId:null,card:'K6'}]},status:'VALIDATED',draftId:{not:null}},orderBy:{version:'desc'},take:20,include:{draft:{include:{edits:{orderBy:{sequence:'asc'}}}}}})
+    return revisions.filter(r=>(r.draft?.topicId ?? r.draft?.reportId)===topicId).map(r=>({version:r.version,createdAt:r.createdAt.toISOString(),edits:mapDraft(r.draft!).edits.map(e=>({...e,revertible:false}))}))
+  }
+
   async getOpenDraft(topicId: string): Promise<ReportDraftRecord | null> {
     const draft = await this.prisma.reportDraft.findFirst({
-      where: { topicId, status: 'OPEN' },
+      where: { AND: [reportAccessWhere()], OR: [{ topicId }, { reportId: topicId }], status: 'OPEN' },
       include: { edits: { orderBy: { sequence: 'asc' } } },
     })
     return draft ? mapDraft(draft) : null
   }
 
   async openDraft(input: { topicId: string; baseVersion: number; spec: unknown; createdBy: string | null }): Promise<ReportDraftRecord> {
+    const report = await this.prisma.topicReport.findFirst({where:{AND:[reportAccessWhere()],OR:[{topicId:input.topicId},{id:input.topicId,topicId:null,card:'K6'}]}})
+    if (!report) throw new DraftConflictError('Rapor bulunamadı.')
     try {
       const draft = await this.prisma.reportDraft.create({
         data: {
-          topicId: input.topicId,
+          ...resourceOwnership(true),
+          topicId: report.topicId,
+          reportId: report.topicId ? null : report.id,
           baseVersion: input.baseVersion,
           specJson: input.spec as Prisma.InputJsonValue,
-          createdBy: input.createdBy,
+          createdBy: getActorContext()?.userId ?? input.createdBy,
         },
         include: { edits: true },
       })
@@ -74,7 +85,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
     })
     if (!edit) return null
     const draft = await this.prisma.reportDraft.findUnique({
-      where: { id: edit.draftId },
+      where: { id: edit.draftId,...reportAccessWhere() },
       include: { edits: { orderBy: { sequence: 'asc' } } },
     })
     return draft ? mapDraft(draft) : null
@@ -85,6 +96,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
    * never carry a spec that does not match its recorded history.
    */
   async appendEdits(input: {
+    analysisRevisionId?: string
     draftId: string
     spec: unknown
     requestKey: string | null
@@ -95,7 +107,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
   }): Promise<ReportDraftRecord> {
     const draft = await this.prisma.$transaction(async (tx) => {
       const current = await tx.reportDraft.findUnique({
-        where: { id: input.draftId },
+        where: { id: input.draftId,...reportAccessWhere() },
         select: { status: true, edits: { orderBy: { sequence: 'desc' }, take: 1, select: { sequence: true } } },
       })
       if (!current) throw new DraftConflictError('Taslak bulunamadı.')
@@ -122,8 +134,8 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
       }
 
       return tx.reportDraft.update({
-        where: { id: input.draftId },
-        data: { specJson: input.spec as Prisma.InputJsonValue },
+        where: { id: input.draftId,...reportAccessWhere() },
+        data: { specJson: input.spec as Prisma.InputJsonValue,...(input.analysisRevisionId?{analysisRevisionId:input.analysisRevisionId}:{}) },
         include: { edits: { orderBy: { sequence: 'asc' } } },
       })
     })
@@ -144,7 +156,8 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
 
 function mapDraft(draft: {
   id: string
-  topicId: string
+  topicId: string | null
+  reportId?: string | null
   baseVersion: number
   analysisRevisionId: string | null
   specJson: Prisma.JsonValue
@@ -164,10 +177,11 @@ function mapDraft(draft: {
     createdAt: Date
   }>
 }): ReportDraftRecord {
+  if(!draft.topicId && !draft.reportId) throw new DraftConflictError('Bu taslak bağımsız işlem ekranından düzenlenmelidir.')
   const revertedBy = new Map(draft.edits.filter((edit) => edit.revertsEditId).map((edit) => [edit.revertsEditId as string, edit.id]))
   return {
     id: draft.id,
-    topicId: draft.topicId,
+    topicId: (draft.topicId ?? draft.reportId)!,
     baseVersion: draft.baseVersion,
     analysisRevisionId: draft.analysisRevisionId,
     spec: draft.specJson,

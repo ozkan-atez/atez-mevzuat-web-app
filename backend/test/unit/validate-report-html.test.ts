@@ -17,6 +17,13 @@ describe('validateReportHtml', () => {
     expect(() => validateReportHtml(html, { card: 'K1', topicId, basename: `01-${topicId}.html` })).not.toThrow()
   })
 
+  it('renders source table blanks and dashes while rejecting empty narrative blocks', async () => {
+    const tableSpec: ReportSpec = {...spec, card:'K2', blocks:['B1','B2','B3','B8','B10'], table:{title:'Kaynak tablosu', columns:['Kod','Değer'], rows:[['3907',''],['3908','—']],note:null}}
+    const html = await renderReportHtml(tableSpec)
+    expect(() => validateReportHtml(html, {card:'K2',topicId,basename:`01-${topicId}.html`})).not.toThrow()
+    expect(() => validateReportHtml(html.replace('Yeni oran uygulanır.', '—'), {card:'K2',topicId,basename:`01-${topicId}.html`})).toThrow(/dolgu/)
+  })
+
   it('rejects scripts, unresolved placeholders and external images', () => {
     expect(() => validateReportHtml('<script>alert(1)</script>{{TITLE}}<img src="https://x">', { card: 'K1', topicId, basename: `01-${topicId}.html` })).toThrow()
   })

@@ -1,3 +1,7 @@
+import { GeminiBrowserResearch } from './modules/chat/infrastructure/gemini-browser-research'
+import { GeminiAiModelClient } from './modules/ai/infrastructure/gemini-ai-model-client'
+import { operationQueueName } from './platform/rabbitmq'
+import { rabbitQueue } from './platform/rabbitmq'
 import { buildApp } from './app'
 import { loadEnv } from './config/env'
 import { prisma } from './platform/database'
@@ -7,25 +11,33 @@ import { GraphMailSender } from './modules/delivery/infrastructure/graph-mail-se
 import { GoogleGenAI } from '@google/genai'
 import { GeminiChatModelClient, UnavailableChatModelClient, type GeminiChatChunk } from './modules/chat/infrastructure/gemini-chat-model-client'
 import type { ChatModelClient } from './modules/chat/application/chat-model-client'
+import { tariffCredentialsFromEnv } from './modules/managed-sources/tariff-auth'
+import { SingleWindowTariffLookup } from './modules/tariff/tariff-lookup'
 
 async function start() {
   const env = loadEnv()
   const objectStore = new S3ObjectStore(env.s3)
+  const tariffCredentials = tariffCredentialsFromEnv()
   const app = await buildApp({
     objectStore,
+    documentStore: objectStore,
     timezone: env.timezone,
     chatModel: createChatModel(env.gemini.apiKey, env.gemini.timeoutMs),
     chatModelName: env.gemini.model,
+    ...(env.gemini.apiKey?{browserResearch:new GeminiBrowserResearch(new GoogleGenAI({apiKey:env.gemini.apiKey}),process.env.GEMINI_BROWSER_MODEL ?? env.gemini.model)}:{}),
+    ...(env.gemini.apiKey ? {revisionModel: new GeminiAiModelClient({generateContent: async request => {
+      const response = await new GoogleGenAI({apiKey:env.gemini.apiKey!}).models.generateContent(request)
+      return {...(response.text ? {text:response.text} : {}),...(response.responseId ? {responseId:response.responseId} : {}),...(response.usageMetadata ? {usageMetadata:response.usageMetadata} : {})}
+    }}, {timeoutMs:env.gemini.timeoutMs})} : {}),
+    ...(tariffCredentials ? { tariffLookup: new SingleWindowTariffLookup(tariffCredentials) } : {}),
     pdfRenderer: new GotenbergPdfRenderer({ url: env.gotenberg.url, timeoutMs: env.gotenberg.timeoutMs }),
     mailSender: new GraphMailSender(env.graph),
     mailSenderIdentity: { address: env.graph.senderAddress, name: env.graph.senderName },
     healthChecks: {
       database: async () => { await prisma.$queryRawUnsafe('SELECT 1') },
       queue: async () => {
-        const rows = await prisma.$queryRawUnsafe<Array<{ table_name: string | null }>>(
-          "SELECT to_regclass('pgboss.job')::text AS table_name",
-        )
-        if (!rows[0]?.table_name) throw new Error('Queue schema is not ready')
+        const queues = await rabbitQueue.status()
+        if (queues.filter(queue => process.env.MODULAR_OPERATIONS_ENABLED === 'true' || queue.name !== operationQueueName).some(queue => queue.consumers === 0)) throw new Error('RabbitMQ worker is unavailable')
       },
       objectStore: async () => { await objectStore.ensureBucket() },
     },
@@ -33,8 +45,8 @@ async function start() {
 
   try {
     await objectStore.ensureBucket()
-    await app.listen({ port: env.port, host: '0.0.0.0' })
-    console.log(`🚀 Server listening on http://0.0.0.0:${env.port}`)
+    await app.listen({ port: env.port, host: process.env.API_HOST ?? '0.0.0.0' })
+    console.log(`🚀 Server listening on http://${process.env.API_HOST ?? '0.0.0.0'}:${env.port}`)
   } catch (err) {
     console.error('Error starting server:', err)
     process.exit(1)

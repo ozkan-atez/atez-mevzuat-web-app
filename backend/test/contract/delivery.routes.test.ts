@@ -66,7 +66,7 @@ describe('delivery HTTP contract', () => {
 
   it('builds the draft and source list from the analysis revision', async () => {
     const { topicId } = await seedTopic()
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer })
 
     const response = await app.inject({ method: 'GET', url: `/api/v1/topics/${topicId}/reports/1/delivery` })
 
@@ -86,7 +86,7 @@ describe('delivery HTTP contract', () => {
 
   it('renders the validated bulletin as a downloadable PDF', async () => {
     const { topicId } = await seedTopic()
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer })
 
     const response = await app.inject({ method: 'GET', url: `/api/v1/topics/${topicId}/reports/1/pdf` })
 
@@ -102,7 +102,7 @@ describe('delivery HTTP contract', () => {
       name: 'Gümrük Operasyon', description: null, emails: ['ops@atez.com', 'ortak@atez.com'], isActive: true,
     })
     const sent: MailMessage[] = []
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(true, sent) })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(true, sent) })
 
     const response = await app.inject({
       method: 'POST',
@@ -122,7 +122,7 @@ describe('delivery HTTP contract', () => {
 
   it('records a simulated dispatch when Graph is not configured', async () => {
     const { topicId } = await seedTopic()
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(false) })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(false) })
 
     const response = await app.inject({
       method: 'POST',
@@ -141,7 +141,7 @@ describe('delivery HTTP contract', () => {
     const { topicId } = await seedTopic()
     const key = crypto.randomUUID()
     const sent: MailMessage[] = []
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(true, sent) })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(true, sent) })
     const payload = { reportVersion: 1, recipients: ['yonetim@atez.com'], subject: 'konu', bodyText: 'Gövde metni.', attachPdf: false }
 
     const first = await app.inject({ method: 'POST', url: `/api/v1/topics/${topicId}/dispatches`, headers: { 'idempotency-key': key }, payload })
@@ -155,7 +155,7 @@ describe('delivery HTTP contract', () => {
 
   it('rejects a dispatch without any recipient', async () => {
     const { topicId } = await seedTopic()
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(true) })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: stubSender(true) })
 
     const response = await app.inject({
       method: 'POST',
@@ -171,7 +171,7 @@ describe('delivery HTTP contract', () => {
   it('marks the dispatch failed when the provider rejects it', async () => {
     const { topicId } = await seedTopic()
     const failing: MailSender = { configured: true, send: vi.fn().mockRejectedValue(new Error('boom')) }
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: failing })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository, objectStore, pdfRenderer, mailSender: failing })
 
     const response = await app.inject({
       method: 'POST',
@@ -186,7 +186,7 @@ describe('delivery HTTP contract', () => {
   })
 
   it('manages customer groups over the CRUD contract', async () => {
-    const app = await buildApp({ scanRepository, topicRepository, deliveryRepository })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, deliveryRepository })
 
     const created = await app.inject({ method: 'POST', url: '/api/v1/customer-groups', payload: { name: 'Yönetim', emails: ['Yonetim@atez.com'] } })
     expect(created.statusCode).toBe(201)

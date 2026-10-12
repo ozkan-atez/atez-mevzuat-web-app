@@ -1,3 +1,4 @@
+import { normalizeGrounding, type GroundingMetadata } from '../application/web-grounding'
 import { AiProviderError } from '../../ai/domain/ai-errors'
 import { mapGeminiError } from '../../ai/infrastructure/gemini-ai-model-client'
 import type { ChatModelChunk, ChatModelClient, ChatModelRequest, ChatTurn } from '../application/chat-model-client'
@@ -14,16 +15,17 @@ export interface GeminiChatTransportRequest {
   contents: Array<{ role: 'user' | 'model'; parts: GeminiChatPart[] }>
   config: {
     systemInstruction: string
-    tools?: Array<{ functionDeclarations: unknown[] }>
+    abortSignal?: AbortSignal
+    httpOptions?: { timeout: number }
+    tools?: Array<{ functionDeclarations: unknown[] } | {googleSearch:Record<string,never>} | {urlContext:Record<string,never>}>
   }
-  signal?: AbortSignal
 }
 
 export interface GeminiChatChunk {
   text?: string
   functionCalls?: Array<{ name?: string; args?: Record<string, unknown> }>
   /** The raw parts, which carry the thought signature the getter above drops. */
-  candidates?: Array<{ content?: { parts?: GeminiChatPart[] } }>
+  candidates?: Array<{ content?: { parts?: GeminiChatPart[] }; groundingMetadata?:GroundingMetadata }>
 }
 
 export interface GeminiChatTransport {
@@ -46,21 +48,26 @@ export class GeminiChatModelClient implements ChatModelClient {
     let timedOut = false
     const relay = () => controller.abort(input.signal?.reason)
     input.signal?.addEventListener('abort', relay, { once: true })
+    if (input.signal?.aborted) relay()
     const timer = setTimeout(() => { timedOut = true; controller.abort() }, this.options.timeoutMs)
 
     try {
+      if (controller.signal.aborted) throw input.signal?.reason ?? new DOMException('Aborted', 'AbortError')
       const stream = await this.transport.generateContentStream({
         model: input.model,
         contents: input.turns.map(toContent),
         config: {
           systemInstruction: input.systemInstruction,
-          ...(input.tools?.length ? { tools: [{ functionDeclarations: input.tools }] } : {}),
+          abortSignal: controller.signal,
+          httpOptions: { timeout: this.options.timeoutMs },
+          ...(input.webSearch ? {tools:[{googleSearch:{}},{urlContext:{}}]} : input.tools?.length ? { tools: [{ functionDeclarations: input.tools }] } : {}),
         },
-        signal: controller.signal,
       })
       for await (const chunk of stream) {
         if (timedOut) throw new AiProviderError('TIMEOUT', true, 'Gemini isteği zaman aşımına uğradı.')
         if (chunk.text) yield { type: 'text', text: chunk.text }
+        const grounding=chunk.candidates?.[0]?.groundingMetadata
+        if(grounding)yield {type:'grounding',research:normalizeGrounding(grounding)}
         for (const call of toolCallsOf(chunk)) yield { type: 'tool-call', call }
       }
       if (timedOut) throw new AiProviderError('TIMEOUT', true, 'Gemini isteği zaman aşımına uğradı.')

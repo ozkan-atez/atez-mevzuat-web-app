@@ -14,6 +14,8 @@ import { ReportSpecSchema, type ReportSpec } from './report-spec-schemas'
  * `#` stands for an array index.
  */
 export const EDITABLE_PATH_PATTERNS = [
+  'customization',
+  'customization.customHtml',
   'title',
   'typeLabel',
   'summary',
@@ -50,7 +52,7 @@ export function matchEditablePattern(path: string): EditablePathPattern | null {
 export const ReportFieldEditSchema = z.object({
   path: z.string().trim().min(1).max(120),
   /** `null` clears a nullable field such as `note`; arrays are replaced wholesale. */
-  value: z.union([z.string(), z.array(z.string()), z.null()]),
+  value: z.union([z.string(), z.array(z.string()), z.record(z.string(), z.unknown()), z.null()]),
 }).strict()
 
 export const ReportPatchSchema = z.object({
@@ -75,8 +77,8 @@ export class ReportPatchError extends Error {
 
 export interface AppliedEdit {
   path: string
-  previousValue: string | string[] | null
-  nextValue: string | string[] | null
+  previousValue: string | string[] | Record<string, unknown> | null
+  nextValue: string | string[] | Record<string, unknown> | null
 }
 
 /**
@@ -107,11 +109,11 @@ export function applyReportPatch(spec: ReportSpec, patch: ReportPatch): { spec: 
     const key = segments[segments.length - 1] as string
     const container = parent as Record<string, unknown>
     // A patch corrects an existing field; it never grows the spec with new keys.
-    if (!(key in container)) {
+    if (!(key in container) && edit.path !== 'customization') {
       throw new ReportPatchError('MISSING_TARGET', `"${edit.path}" bu raporda bulunmuyor.`, edit.path)
     }
 
-    const previousValue = container[key] as string | string[] | null
+    const previousValue = (container[key] ?? null) as string | string[] | Record<string, unknown> | null
     container[key] = edit.value
     applied.push({ path: edit.path, previousValue, nextValue: edit.value })
   }
@@ -148,11 +150,11 @@ function isKnownSpecPath(spec: ReportSpec, path: string): boolean {
   return true
 }
 
-function isSameValue(left: string | string[] | null, right: string | string[] | null): boolean {
+function isSameValue(left: string | string[] | Record<string, unknown> | null, right: string | string[] | Record<string, unknown> | null): boolean {
   if (Array.isArray(left) && Array.isArray(right)) {
     return left.length === right.length && left.every((item, index) => item === right[index])
   }
-  return left === right
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 function describeIssues(error: z.ZodError): string {

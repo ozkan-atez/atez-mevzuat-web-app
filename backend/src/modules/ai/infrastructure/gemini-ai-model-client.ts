@@ -75,7 +75,7 @@ export function mapGeminiError(error: unknown): AiProviderError {
   if (error instanceof AiProviderError) return error
   const status = readStatus(error)
   if (status === 401) return new AiProviderError('AUTHENTICATION', false, 'Gemini API anahtarı geçersiz veya eksik.', status)
-  if (status === 403) return new AiProviderError('PERMISSION', false, 'Gemini erişim izni reddedildi.', status)
+  if (status === 403) return new AiProviderError('PERMISSION', false, /project has been denied access/i.test(readProviderMessage(error)) ? 'Gemini projesinin erişimi sağlayıcı tarafından engellenmiş. Proje erişimini düzeltin veya erişimi açık bir projenin API anahtarını yapılandırın; yeniden deneme tek başına çözmez.' : 'Gemini erişim izni reddedildi. API anahtarının proje ve model yetkilerini kontrol edin.', status)
   if (status === 429) {
     const quota = readProviderMessage(error).toLowerCase().includes('quota')
     return quota

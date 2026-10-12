@@ -1,4 +1,4 @@
-import type { PgBoss } from 'pg-boss'
+import type { RabbitQueue } from '../../../platform/rabbitmq'
 import { topicAnalysisQueueName } from '../../../platform/queue'
 
 export interface TopicAnalysisCommand {
@@ -8,8 +8,8 @@ export interface TopicAnalysisCommand {
   messageId: string | null
 }
 
-export class PgBossTopicAnalysisQueue {
-  constructor(private readonly queue: PgBoss) {}
+export class RabbitTopicAnalysisQueue {
+  constructor(private readonly queue: RabbitQueue) {}
 
   async enqueue(command: TopicAnalysisCommand): Promise<string> {
     const id = await this.queue.send(topicAnalysisQueueName, command, { singletonKey: command.outboxId })

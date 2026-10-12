@@ -4,7 +4,7 @@ import { buildTopicAnalysisSystemInstruction, TOPIC_ANALYSIS_PROMPT_VERSION } fr
 describe('topic analysis prompt', () => {
   it('forbids topic splitting and HTML while requiring evidence', () => {
     const prompt = buildTopicAnalysisSystemInstruction()
-    expect(TOPIC_ANALYSIS_PROMPT_VERSION).toBe('topic-analysis-v1')
+    expect(TOPIC_ANALYSIS_PROMPT_VERSION).toBe('topic-analysis-v5-evidence-tables')
     expect(prompt).toContain('tek topic')
     expect(prompt).toContain('bölme')
     expect(prompt).toContain('HTML üretme')

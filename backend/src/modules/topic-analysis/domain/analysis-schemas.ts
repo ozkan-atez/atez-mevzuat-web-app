@@ -9,6 +9,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD olmal�
 const httpUrl = z.string().url().refine((value) => /^https?:\/\//.test(value), 'Kaynak URL http(s) olmalıdır')
 
 export const DocumentIdentitySchema = z.object({
+  sourceOrigin: z.object({name:nonEmptyText,authority:nonEmptyText,publicationDateKnown:z.boolean().optional()}).strict().optional(),
   title: nonEmptyText,
   documentNumber: nonEmptyText.optional(),
   gazetteDate: isoDate,
@@ -47,7 +48,9 @@ export const ComparisonSchema = z.object({
 export const AnalysisTableSchema = z.object({
   title: nonEmptyText,
   columns: z.array(nonEmptyText).min(2).max(12),
-  rows: z.array(z.array(nonEmptyText).min(2).max(12)).min(1).max(500),
+  // Source tables may legitimately use dashes or N/A for empty/not-applicable cells.
+  // Keep these verbatim; required narrative fields still reject filler text.
+  rows: z.array(z.array(z.string().trim()).min(2).max(12)).min(1).max(500),
   note: nonEmptyText.optional(),
   evidenceIds: z.array(nonEmptyText).min(1),
 }).strict().superRefine((table, context) => {
@@ -91,13 +94,14 @@ export const AnalysisResultSchema = z.object({
   effectiveDates: z.array(EffectiveDateSchema).max(20),
   comparisons: z.array(ComparisonSchema).max(20),
   tables: z.array(AnalysisTableSchema).max(20),
-  officialSources: z.array(SourceSchema).min(1),
+  officialSources: z.array(SourceSchema),
   supportingSources: z.array(SourceSchema).max(20),
   evidence: z.array(EvidenceLocatorSchema).min(1),
   unresolvedReferences: z.array(UnresolvedReferenceSchema).max(50),
   emailTitle: nonEmptyText.max(120),
   emailSummary: nonEmptyText.max(8_000),
 }).strict().superRefine((analysis, context) => {
+  if(!analysis.officialSources.length&&!analysis.supportingSources.length)context.addIssue({code:'custom',path:['officialSources'],message:'En az bir kaynak gerekli.'})
   const evidenceIds = new Set(analysis.evidence.map((item) => item.id))
   const referencedIds = [
     ...analysis.affectedParties.flatMap((item) => item.evidenceIds),

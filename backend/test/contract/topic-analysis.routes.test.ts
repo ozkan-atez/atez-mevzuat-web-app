@@ -30,7 +30,7 @@ describe('topic analysis HTTP contract', () => {
 
   it('returns immutable analysis and report revisions', async () => {
     const { topicId } = await seedTopic()
-    const app = await buildApp({ scanRepository, topicRepository })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository })
     const response = await app.inject({ method: 'GET', url: `/api/v1/topics/${topicId}` })
     expect(response.statusCode).toBe(200)
     expect(response.json()).toMatchObject({ id: topicId, thread: { messages: [] }, latestAnalysis: { version: 1 }, latestReport: { version: 1, card: 'K1' } })
@@ -42,7 +42,7 @@ describe('topic analysis HTTP contract', () => {
     const { runId } = await seedTopic()
     const report = await prisma.topicReport.findFirstOrThrow({ where: { scanRunId: runId } })
     const objectStore = { getContent: async () => Buffer.from('<!doctype html><p>ATEZ bülteni</p>') }
-    const app = await buildApp({ scanRepository, topicRepository, objectStore })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository, objectStore })
     const response = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${runId}/reports/${report.id}/html` })
     expect(response.statusCode).toBe(200)
     expect(response.headers['content-type']).toContain('text/html')
@@ -52,7 +52,7 @@ describe('topic analysis HTTP contract', () => {
 
   it('appends a revision request idempotently', async () => {
     const { topicId } = await seedTopic()
-    const app = await buildApp({ scanRepository, topicRepository })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository })
     const requestKey = crypto.randomUUID()
     const request = () => app.inject({ method: 'POST', url: `/api/v1/topics/${topicId}/messages`, headers: { 'idempotency-key': requestKey }, payload: { message: 'Etkilenen ithalatçıları daha açık anlat.' } })
     const first = await request()
@@ -67,7 +67,7 @@ describe('topic analysis HTTP contract', () => {
   it('lists the run topics and queues retry only while awaiting retry', async () => {
     const { runId, topicId } = await seedTopic()
     await prisma.topicProcess.update({ where: { id: topicId }, data: { status: 'AWAITING_RETRY', lastErrorCategory: 'RATE_LIMITED', lastErrorMessage: 'Gemini geçici olarak yoğun.' } })
-    const app = await buildApp({ scanRepository, topicRepository })
+    const app = await buildApp({ authRuntime: false, scanRepository, topicRepository })
     const list = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${runId}/topics` })
     const retry = await app.inject({ method: 'POST', url: `/api/v1/topics/${topicId}/retry`, headers: { 'idempotency-key': crypto.randomUUID() } })
     expect(list.json()).toMatchObject({ topics: [{ id: topicId, retryAvailable: true, errorMessage: 'Gemini geçici olarak yoğun.' }] })

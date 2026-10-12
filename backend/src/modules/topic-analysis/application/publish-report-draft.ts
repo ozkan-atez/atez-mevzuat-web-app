@@ -1,11 +1,13 @@
+import {randomUUID} from 'node:crypto'
 import { ReportSpecSchema } from '../domain/report-spec-schemas'
 import type { ReportDraftRepository, StoredTopicReport, TopicObjectStore } from './ports'
 import type { CreateTopicReportRevisionInput } from './ports'
-import { ReportDraftConflictError, ReportNotPublishedError } from './apply-report-field-edits'
+import { ReportDraftConflictError, ReportDraftBusyError, ReportNotPublishedError } from './apply-report-field-edits'
 import { renderReportHtml } from './render-report-html'
 import { validateReportHtml } from './validate-report-html'
 
 interface ReportRevisionWriter {
+  hasPendingReportRevisionWork?(topicId:string):Promise<boolean>
   createReportRevision(input: CreateTopicReportRevisionInput): Promise<StoredTopicReport>
 }
 
@@ -25,6 +27,7 @@ export async function publishReportDraft(
   input: { topicId: string; expectedVersion?: number },
   dependencies: Dependencies,
 ): Promise<StoredTopicReport> {
+  if(await dependencies.topicRepository.hasPendingReportRevisionWork?.(input.topicId))throw new ReportDraftBusyError('Rapor düzeltmesi hâlâ hazırlanıyor; tamamlandıktan sonra Kaydet ile sürüm oluşturabilirsiniz.')
   const draft = await dependencies.repository.getOpenDraft(input.topicId)
   if (!draft) throw new ReportNotPublishedError('Yayımlanacak açık taslak yok.')
   if (draft.edits.length === 0) throw new ReportNotPublishedError('Taslakta yayımlanacak değişiklik yok.')
@@ -44,10 +47,10 @@ export async function publishReportDraft(
   const spec = ReportSpecSchema.parse(draft.spec)
   const version = base.version + 1
   const revisionFolder = `r${String(version).padStart(2, '0')}`
-  const root = `runs/${base.targetDate.replaceAll('-', '/')}/${base.runId}/topics/${input.topicId}/reports/${revisionFolder}`
+  const root = `runs/${base.targetDate.replaceAll('-', '/')}/${base.runId}/topics/${input.topicId}/reports/${revisionFolder}/draft-${draft.id}/${randomUUID()}`
 
   const html = await renderReportHtml(spec)
-  validateReportHtml(html, { card: spec.card, topicId: input.topicId, basename: base.basename })
+  validateReportHtml(html, { customized: Boolean(spec.customization && (spec.customization.customHtml || spec.customization.sections.length || Object.keys(spec.customization.headings).length || spec.customization.order.length)), card: spec.card, topicId: spec.topicId, basename: base.basename })
 
   await dependencies.objectStore.putRunFile(`${root}/report-spec.json`, Buffer.from(JSON.stringify(spec)), 'application/json')
   await dependencies.objectStore.putRunFile(`${root}/${base.basename}`, Buffer.from(html), 'text/html; charset=utf-8')
@@ -64,6 +67,8 @@ export async function publishReportDraft(
     specObjectKey: `${root}/report-spec.json`,
     htmlObjectKey: `${root}/${base.basename}`,
     draftId: draft.id,
+    draftSequence:Math.max(...draft.edits.map(e=>e.sequence)),
+    draftUpdatedAt:draft.updatedAt,
   })
 
   await dependencies.repository.closeDraft(draft.id, 'PUBLISHED')

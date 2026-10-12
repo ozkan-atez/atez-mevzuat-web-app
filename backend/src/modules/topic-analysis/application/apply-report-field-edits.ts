@@ -11,6 +11,8 @@ export class ReportDraftConflictError extends Error {
 }
 
 export class ReportNotPublishedError extends Error {}
+export class ReportDraftBusyError extends Error {}
+export class ReportDraftChangedError extends Error {}
 
 export interface ApplyReportFieldEditsInput {
   topicId: string

@@ -30,6 +30,12 @@ function texts(chunks: ChatModelChunk[]): string[] {
 }
 
 describe('GeminiChatModelClient', () => {
+  it('enables Search and URL context in the dedicated research call and retains grounding metadata',async()=>{
+    const {transport,requests}=transportWith([{text:'Web yanıtı',candidates:[{groundingMetadata:{groundingChunks:[{web:{uri:'https://www.resmigazete.gov.tr/doc.htm',title:'Gazete'}}],webSearchQueries:['gümrük']}}]}])
+    const chunks=await collect(new GeminiChatModelClient(transport,{timeoutMs:1000}).streamReply({...request,webSearch:true}))
+    expect(requests[0]?.config.tools).toEqual([{googleSearch:{}},{urlContext:{}}])
+    expect(chunks).toContainEqual({type:'grounding',research:{sources:[{url:'https://www.resmigazete.gov.tr/doc.htm',title:'Gazete'}],queries:['gümrük'],citations:[],searchSuggestions:null}})
+  })
   it('maps conversation roles and yields only non-empty text chunks', async () => {
     const { transport, requests } = transportWith([{ text: 'Merhaba' }, {}, { text: ' dünya' }])
     const client = new GeminiChatModelClient(transport, { timeoutMs: 1_000 })
@@ -134,4 +140,12 @@ describe('GeminiChatModelClient', () => {
 
     await expect(collect(client.streamReply())).rejects.toMatchObject({ category: 'AUTHENTICATION' })
   })
+  it('passes cancellation to the SDK config instead of an ignored top-level property', async () => {
+    const { transport, requests } = transportWith([{ text: 'Merhaba' }])
+    const client = new GeminiChatModelClient(transport, { timeoutMs: 1000 })
+    await collect(client.streamReply(request))
+    expect(requests[0]!.config.abortSignal).toBeInstanceOf(AbortSignal)
+    expect(requests[0]!.config.httpOptions).toEqual({ timeout: 1000 })
+  })
+
 })

@@ -1,0 +1,8 @@
+ALTER TABLE "Source" ADD COLUMN IF NOT EXISTS "name" TEXT, ADD COLUMN IF NOT EXISTS "description" TEXT;
+ALTER TABLE "ScanRun" ADD COLUMN "automationId" TEXT, ADD COLUMN "workspaceConfig" JSONB;
+CREATE TABLE IF NOT EXISTS "ReportTemplate" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "description" TEXT, "html" TEXT NOT NULL, "sections" JSONB NOT NULL, "isActive" BOOLEAN NOT NULL DEFAULT true, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "ReportTemplate_pkey" PRIMARY KEY ("id"));
+ALTER TABLE "ReportTemplate" ADD COLUMN IF NOT EXISTS "sections" JSONB NOT NULL DEFAULT '[]'::jsonb, ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN NOT NULL DEFAULT true, ADD COLUMN IF NOT EXISTS "revision" INTEGER NOT NULL DEFAULT 1;
+CREATE UNIQUE INDEX IF NOT EXISTS "ReportTemplate_name_key" ON "ReportTemplate"("name");
+CREATE TABLE "WorkspaceAutomation" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "hour" INTEGER NOT NULL DEFAULT 8, "minute" INTEGER NOT NULL DEFAULT 0, "timezone" TEXT NOT NULL DEFAULT 'Europe/Istanbul', "isActive" BOOLEAN NOT NULL DEFAULT true, "sourceIds" TEXT[], "groupIds" TEXT[], "templateId" TEXT, "lastRunId" TEXT, "lastRunAt" TIMESTAMP(3), "lastError" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "WorkspaceAutomation_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "AcademyAttempt" ("id" TEXT NOT NULL, "lessonId" TEXT NOT NULL, "period" TEXT NOT NULL, "answers" JSONB NOT NULL, "score" INTEGER NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "AcademyAttempt_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "AcademyAttempt_lessonId_period_key" ON "AcademyAttempt"("lessonId", "period");

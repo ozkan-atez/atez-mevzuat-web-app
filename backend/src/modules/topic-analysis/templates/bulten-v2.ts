@@ -40,6 +40,7 @@ export interface PageSkeletonParams {
   reportId: string;
   issueNumber: string;
   displayDate: string;
+  sourceLabel?: string;
   cardHtml: string;
   logoDataUri: string;
 }
@@ -62,12 +63,12 @@ ${BULLETIN_V2_CSS}
   <main class="report">
     <header>
       <div class="topbar"><img class="logo" src="${p.logoDataUri}" alt="ATEZ Yazılım Teknolojileri"><span class="report-id">Rapor: ${p.reportId}</span></div>
-      <div class="header"><div class="header-grid"><h1 class="report-title">ATEZ Mevzuat Radarı Günlük Raporu</h1><div class="issue"><div>${p.issueNumber} Sayılı Resmî Gazete</div><div class="date"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="1.5"></rect><path d="M2 6.6h12M5.5 1.8v2.4M10.5 1.8v2.4"></path></svg><span>${p.displayDate}</span></div></div></div></div>
+      <div class="header"><div class="header-grid"><h1 class="report-title">ATEZ Mevzuat Radarı Günlük Raporu</h1><div class="issue"><div>${p.sourceLabel ?? `${p.issueNumber} Sayılı Resmî Gazete`}</div><div class="date"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="1.5"></rect><path d="M2 6.6h12M5.5 1.8v2.4M10.5 1.8v2.4"></path></svg><span>${p.displayDate}</span></div></div></div></div>
     </header>
     <section class="feed">
       ${p.cardHtml}
     </section>
-    <section class="fine"><div class="rule"></div><h2>Kaynak sınıflandırma sistemi</h2><p>ATEZ Mevzuat Bülteni’ndeki tüm veriler doğrudan Resmî Gazete, Ticaret Bakanlığı ve diğer ilgili gümrük idarelerinin resmî web sitelerinden derlenmektedir. “Değişiklik” ibaresi mevcut bir mevzuat maddesinin yenilenmesini, “Düzenleme” ise ilk kez yürürlüğe giren veya yeniden tanımlanan fıkraları temsil eder.</p><h2>Yasal uyarı / sorumluluk reddi</h2><p>Bu bültende yer alan gümrük ve dış ticaret mevzuatı bildirimleri yalnızca bilgilendirme amaçlı olup, hukuki bir tavsiye veya nihai karar niteliği taşımamaktadır. Düzenlemelerin resmî süreçlerde uygulanmasında Resmî Gazete’de yayımlanan orijinal metinler esas alınmalıdır.</p></section>
+    <section class="fine"><div class="rule"></div><h2>Kaynak sınıflandırma sistemi</h2><p>ATEZ Mevzuat Bülteni resmî kaynaklar ve açıkça belirtilen destekleyici kaynaklardan derlenir. Destekleyici kaynaklar bağlayıcı mevzuat hükmü olarak değerlendirilmez. “Değişiklik” ibaresi mevcut bir mevzuat maddesinin yenilenmesini, “Düzenleme” ise ilk kez yürürlüğe giren veya yeniden tanımlanan fıkraları temsil eder.</p><h2>Yasal uyarı / sorumluluk reddi</h2><p>Bu bültende yer alan gümrük ve dış ticaret mevzuatı bildirimleri yalnızca bilgilendirme amaçlı olup, hukuki bir tavsiye veya nihai karar niteliği taşımamaktadır. Düzenlemelerin resmî süreçlerde uygulanmasında Resmî Gazete’de yayımlanan orijinal metinler esas alınmalıdır.</p></section>
     <footer class="footer"><div class="footer-top"><h2 class="footer-head">İletişim &amp; destek</h2><p>mevzuat@atezyazilim.com &nbsp;|&nbsp; +90 (212) 000 0000</p></div><div class="footer-rule"></div><div class="footer-bottom"><div class="links"><span>Web Sitemiz</span><span>Gizlilik Politikası</span><span>Abonelikten Çık</span></div><p class="copyright">© 2026 Atez Yazılım Teknolojileri A.Ş. Tüm Hakları Saklıdır.</p></div></footer>
   </main>
 </body>

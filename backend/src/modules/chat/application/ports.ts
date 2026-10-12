@@ -1,3 +1,4 @@
+import type { WebResearch } from './web-grounding'
 export type ChatRole = 'USER' | 'ASSISTANT'
 export type ChatMessageStatus = 'COMPLETED' | 'FAILED'
 
@@ -9,12 +10,15 @@ export interface ChatSessionView {
 }
 
 export interface ChatMessageView {
+  research?: WebResearch
   id: string
   role: ChatRole
   content: string
   status: ChatMessageStatus
   errorDetail: string | null
   createdAt: string
+  documentVersionIds?: string[]
+  operationRequestIds?: string[]
 }
 
 /**
@@ -36,11 +40,14 @@ export interface ChatHistoryItem {
 }
 
 export interface AppendChatMessageInput {
+  research?: WebResearch
   sessionId: string
   role: ChatRole
   content: string
   status: ChatMessageStatus
   errorDetail?: string | null
+  documentVersionIds?: string[]
+  operationRequestIds?: string[]
 }
 
 export interface ChatRepository {

@@ -34,7 +34,7 @@ export interface DiscoveredDocument {
 }
 
 export interface DiscoveredEdition {
-  type: 'MAIN' | 'SUPPLEMENT'
+  type: 'MAIN' | 'SUPPLEMENT' | 'EXTERNAL'
   supplementNo: number | null
   indexUrl: string
   discoveryOrder: number
@@ -54,6 +54,8 @@ export interface FetchAttemptInput {
 }
 
 export interface ScanRunDetailDto {
+  sourceKeys?: string[]
+  sourceRuns?: Array<{ notes?:string[]; stages?: Array<{stage:string;status:string;totalItems:number;completedItems:number;error:string|null}>; id: string; status: string; source: { name: string; key: string }; documentCount: number; errorSummary: string | null }>
   id: string
   status: ScanRunStatus
   currentStage: ScanStage | null
@@ -97,6 +99,7 @@ export interface ScanRunDetailDto {
     basename: string
     card: 'K1' | 'K2' | 'K3' | 'K4' | 'K5' | 'K6'
     version: number
+    publishedAt?: string
     htmlObjectKey: string
   }>
   counts: {
@@ -116,7 +119,7 @@ export interface ScanRunDetailDto {
   }>
   editions: Array<{
     id: string
-    type: 'MAIN' | 'SUPPLEMENT'
+    type: 'MAIN' | 'SUPPLEMENT' | 'EXTERNAL'
     supplementNo: number | null
     documents: Array<{
       id: string
@@ -144,6 +147,8 @@ export interface ScanRunDetailDto {
 }
 
 export interface ScanRunSummaryDto {
+  automationName?: string | null
+  scheduleLabel?: string | null
   id: string
   trigger: 'MANUAL' | 'CRON'
   status: ScanRunStatus

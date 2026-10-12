@@ -1,0 +1,12 @@
+ALTER TABLE "WorkspaceAutomation" ADD COLUMN "datePolicy" TEXT NOT NULL DEFAULT 'PUBLISHED_DATE';
+ALTER TABLE "SourceScanRun" ADD COLUMN "datePolicy" TEXT NOT NULL DEFAULT 'PUBLISHED_DATE', ADD COLUMN "profileSnapshot" JSONB, ADD COLUMN "coverage" JSONB;
+ALTER TABLE "SourceScanDocument" ALTER COLUMN "publishedOn" DROP NOT NULL;
+ALTER TABLE "SourceScanDocument" ADD COLUMN "dateBasis" TEXT NOT NULL DEFAULT 'PUBLISHED';
+CREATE TABLE "SourceProfile" ("id" TEXT PRIMARY KEY, "sourceId" TEXT NOT NULL REFERENCES "Source"("id") ON DELETE CASCADE, "version" INTEGER NOT NULL, "status" TEXT NOT NULL DEFAULT 'DRAFT', "config" JSONB NOT NULL, "validation" JSONB, "verifiedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "SourceProfile_sourceId_version_key" ON "SourceProfile"("sourceId", "version");
+CREATE TABLE "SourceCredential" ("id" TEXT PRIMARY KEY, "sourceId" TEXT NOT NULL REFERENCES "Source"("id") ON DELETE CASCADE, "workspaceId" TEXT NOT NULL DEFAULT 'local', "encrypted" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT 'UNTESTED', "testedAt" TIMESTAMP(3), "updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE UNIQUE INDEX "SourceCredential_sourceId_workspaceId_key" ON "SourceCredential"("sourceId", "workspaceId");
+CREATE TABLE "SourceRunStage" ("id" TEXT PRIMARY KEY, "runId" TEXT NOT NULL REFERENCES "SourceScanRun"("id") ON DELETE CASCADE, "stage" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT 'PENDING', "totalItems" INTEGER NOT NULL DEFAULT 0, "completedItems" INTEGER NOT NULL DEFAULT 0, "error" TEXT, "startedAt" TIMESTAMP(3), "completedAt" TIMESTAMP(3));
+CREATE UNIQUE INDEX "SourceRunStage_runId_stage_key" ON "SourceRunStage"("runId", "stage");
+CREATE TABLE "SourceObservation" ("id" TEXT PRIMARY KEY, "sourceId" TEXT NOT NULL REFERENCES "Source"("id") ON DELETE CASCADE, "scope" TEXT NOT NULL DEFAULT 'inventory', "url" TEXT NOT NULL, "title" TEXT NOT NULL, "publishedOn" DATE, "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "contentHash" TEXT);
+CREATE UNIQUE INDEX "SourceObservation_sourceId_scope_url_key" ON "SourceObservation"("sourceId", "scope", "url");

@@ -1,3 +1,4 @@
+import type { TariffLookup } from '../../tariff/tariff-lookup'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,6 +16,7 @@ import { executeTopicAnalysis } from '../../topic-analysis/application/execute-t
 import { executeRunTopicAnalyses } from '../../topic-analysis/application/execute-run-topic-analyses'
 
 interface Dependencies {
+  tariffLookup?: TariffLookup
   repository: PrismaScanRepository
   http: OfficialHttp
   objectStore: ObjectStore
@@ -183,6 +185,7 @@ export async function executeScanRun(
         model: dependencies.gemini.model,
         maxAttempts: dependencies.gemini.maxAttempts,
         maxContextBytes: dependencies.gemini.maxContentBytes,
+        ...(dependencies.tariffLookup ? {tariffLookup: dependencies.tariffLookup} : {}),
       }),
       lifecycle: {
         analysisStarted: async (total) => { currentStage = 'ANALYZING_TOPICS'; await repository.startStage(runId, currentStage, total) },

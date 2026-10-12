@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildPreviousSourceQueries,
   buildPreviousSourcePreflightRequest,
   PREVIOUS_SOURCE_PROMPT_VERSION,
 } from '../../src/modules/scan-runs/application/previous-source-prompts'
@@ -20,7 +21,7 @@ describe('previous source preflight prompt and schema', () => {
     expect(built.request.parts).toEqual([{ text: expect.stringContaining('2018/5') }])
     expect(built.request.systemInstruction).toContain('yalnızca önceki kaynak aramasını daralt')
     expect(built.configurationHash).toMatch(/^[a-f0-9]{64}$/)
-    expect(PREVIOUS_SOURCE_PROMPT_VERSION).toBe('previous-source-preflight-v1')
+    expect(PREVIOUS_SOURCE_PROMPT_VERSION).toBe('previous-source-preflight-v3-document')
 
     expect(parsePreviousSourcePreflightResponse({
       needsPreviousSource: true,
@@ -33,6 +34,13 @@ describe('previous source preflight prompt and schema', () => {
       queryCandidates: ['2018/5', 'İthalatta Gözetim Uygulanmasına İlişkin Tebliğ'],
       reason: 'Mevcut tebliğin tablosunu değiştiriyor.',
     })).toMatchObject({ targetRegulationIdentifier: '2018/5', relationship: 'AMENDS' })
+  })
+
+  it('includes the PDF body as model input instead of relying on its title', () => {
+    const pdf = {inlineData:{mimeType:'application/pdf',data:Buffer.from('%PDF-1.7 source body').toString('base64')}}
+    const built = buildPreviousSourcePreflightRequest({documentId:'pdf-1',title:'Karar 11563',publicationDate:'2026-07-31',sourceUrl:'https://www.resmigazete.gov.tr/source.pdf',documentType:'KARAR',visibleText:'',documentParts:[pdf]},'gemini-test')
+    expect(built.request.parts.at(-1)).toEqual(pdf)
+    expect(built.request.parts).toHaveLength(2)
   })
 
   it('accepts a non-amendment without search fields', () => {
@@ -69,4 +77,8 @@ describe('previous source preflight prompt and schema', () => {
       queryCandidates: ['1', '2', '3', '4'],
     })).toThrow()
   })
+})
+
+it('searches the bare regulation identifier before compound model phrases and removes duplicates', () => {
+ expect(buildPreviousSourceQueries({targetRegulationIdentifier:'3350',queryCandidates:['3350 sayılı Cumhurbaşkanı Kararı','3350','İthalat Rejimi Kararı']})).toEqual(['3350','3350 sayılı Cumhurbaşkanı Kararı','İthalat Rejimi Kararı'])
 })

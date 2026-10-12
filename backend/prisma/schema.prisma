@@ -36,6 +36,7 @@ enum ScanStage {
 }
 
 enum EditionType {
+  EXTERNAL
   MAIN
   SUPPLEMENT
 }
@@ -206,7 +207,18 @@ enum TopicAiExecutionKind {
 }
 
 model ScanRun {
+  workspaceId String?
+  initiatorUserId String?
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  initiator User? @relation("ScanRunInitiator",fields:[initiatorUserId],references:[id],onDelete:Restrict)
+  reportDuplicateStatus String @default("PENDING")
+  reportDuplicateGroups Json?
+  reportDuplicateError String?
+  sourceKeys String[] @default(["resmi-gazete"])
+  sourceRuns SourceScanRun[]
   id                 String              @id @default(uuid())
+  automationId       String?
+  workspaceConfig    Json?
   requestKey         String              @unique
   scheduleSlot       String?
   trigger            ScanTrigger         @default(MANUAL)
@@ -242,6 +254,10 @@ model ScanRun {
 }
 
 model ScanOutbox {
+  workspaceId String?
+  initiatorUserId String?
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  initiator User? @relation("ScanOutboxInitiator",fields:[initiatorUserId],references:[id],onDelete:Restrict)
   id           String          @id @default(uuid())
   scanRunId    String
   scanRun      ScanRun         @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
@@ -272,6 +288,9 @@ model GazetteEdition {
 }
 
 model CollectedDocument {
+  externalSourceDocumentId String? @unique
+  sourceAuthority String?
+  sourceName String?
   id                String                   @id @default(uuid())
   editionId         String
   edition           GazetteEdition           @relation(fields: [editionId], references: [id], onDelete: Cascade)
@@ -371,6 +390,7 @@ model StoredObject {
   assets                  DocumentAsset[]
   previousSourceDocuments PreviousSourceDocument[]
   previousSourceAssets    PreviousSourceAsset[]
+  documentVersions        DocumentVersion[]
 }
 
 model DocumentAsset {
@@ -577,6 +597,10 @@ model AnalysisThread {
 }
 
 model ChatMessage {
+  workspaceId String?
+  initiatorUserId String?
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  initiator User? @relation("ChatMessageInitiator",fields:[initiatorUserId],references:[id],onDelete:Restrict)
   id           String          @id @default(uuid())
   threadId     String
   thread       AnalysisThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -614,16 +638,27 @@ model AnalysisRevision {
 }
 
 model TopicReport {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("TopicReportOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
   id            String           @id @default(uuid())
-  scanRunId     String
-  scanRun       ScanRun          @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  scanRunId     String?
+  scanRun       ScanRun?         @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
   topicId       String?
   topic         TopicProcess?    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  operationTaskId String? @unique
+  operationTask OperationTask? @relation(fields: [operationTaskId], references: [id], onDelete: Restrict)
+  actorScope String?
   title         String
   basename      String
   card          ReportCard
   latestVersion Int              @default(0)
   revisions     ReportRevision[]
+  drafts        ReportDraft[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
@@ -683,6 +718,10 @@ model TopicAiExecution {
 }
 
 model TopicOutbox {
+  workspaceId String?
+  initiatorUserId String?
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  initiator User? @relation("TopicOutboxInitiator",fields:[initiatorUserId],references:[id],onDelete:Restrict)
   id           String             @id @default(uuid())
   topicId      String
   topic        TopicProcess       @relation(fields: [topicId], references: [id], onDelete: Cascade)
@@ -700,10 +739,28 @@ model TopicOutbox {
 }
 
 model User {
+  academyAttempts AcademyAttempt[]
+  initiatedSourceScanRuns SourceScanRun[] @relation("SourceScanRunInitiator")
+  initiatedTopicOutboxs TopicOutbox[] @relation("TopicOutboxInitiator")
+  initiatedScanOutboxs ScanOutbox[] @relation("ScanOutboxInitiator")
+  initiatedScans ScanRun[] @relation("ScanRunInitiator")
+  initiatedRevisions ChatMessage[] @relation("ChatMessageInitiator")
+  ownedDocuments Document[] @relation("DocumentOwner")
+  ownedDocumentImports DocumentImport[] @relation("DocumentImportOwner")
+  ownedDocumentLinks DocumentLink[] @relation("DocumentLinkOwner")
+  ownedOperationRequests OperationRequest[] @relation("OperationRequestOwner")
+  ownedOperationTasks OperationTask[] @relation("OperationTaskOwner")
+  ownedSourceCoverages SourceCoverage[] @relation("SourceCoverageOwner")
+  ownedTopicReports TopicReport[] @relation("TopicReportOwner")
+  ownedReportDrafts ReportDraft[] @relation("ReportDraftOwner")
+  chats ChatSession[]
+  authSessions AuthSession[]
+  identities ExternalIdentity[]
+  memberships WorkspaceMembership[]
   id        String   @id @default(uuid())
   email     String   @unique
   name      String?
-  role      String   @default("ADMIN")
+  role      String   @default("VIEWER")
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -711,6 +768,8 @@ model User {
 
 model Source {
   id            String    @id @default(uuid())
+  name          String?
+  description   String?
   key           String    @unique
   baseUrl       String
   authorityType String
@@ -720,21 +779,36 @@ model Source {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  profiles SourceProfile[]
+  credentials SourceCredential[]
+  observations SourceObservation[]
   documents Document[]
+  endpoints SourceEndpoint[]
+  sourceRuns SourceScanRun[]
 }
 
 model Document {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("DocumentOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
   id            String   @id @default(uuid())
-  sourceId      String
+  sourceId      String?
+  origin        String @default("SOURCE")
+  actorScope    String @default("local-workspace")
   externalId    String?
-  canonicalUrl  String   @unique
+  canonicalUrl  String?
+  canonicalKey String? @unique
   title         String
-  publishedOn   DateTime @db.Date
+  publishedOn   DateTime? @db.Date
   institution   String?
   regulationNum String?
   createdAt     DateTime @default(now())
 
-  source   Source            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  source   Source?           @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   versions DocumentVersion[]
 
   @@unique([sourceId, externalId])
@@ -749,6 +823,14 @@ model DocumentVersion {
   mimeType         String   @default("application/pdf")
   createdAt        DateTime @default(now())
 
+  storedObjectId String?
+  storedObject StoredObject? @relation(fields: [storedObjectId], references: [id], onDelete: Restrict)
+  originalFilename String?
+  extractionMetadata Json?
+  extractorVersion String?
+  textObjectKey String?
+  fetchedAt DateTime? @default(now())
+  imports DocumentImport[]
   document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
 
   @@unique([documentId, contentHash])
@@ -780,6 +862,11 @@ enum GeneralChatMessageStatus {
 /// audit record of a report's revisions and must not be deleted or retitled by
 /// ordinary chat.
 model ChatSession {
+  legacyOwnerId String?
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  owner User? @relation(fields:[ownerId],references:[id],onDelete:Restrict)
+  workspaceId String?
+  visibility String @default("LEGACY")
   id        String               @id @default(uuid())
   ownerId   String?
   title     String?
@@ -795,7 +882,10 @@ model GeneralChatMessage {
   role        GeneralChatRole
   content     String
   status      GeneralChatMessageStatus @default(COMPLETED)
+  research Json?
   errorDetail String?
+  documentVersionIds String[] @default([])
+  operationRequestIds String[] @default([])
   createdAt   DateTime                 @default(now())
 
   @@index([sessionId, createdAt])
@@ -852,9 +942,21 @@ enum ReportEditSource {
 }
 
 model ReportDraft {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("ReportDraftOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
   id                 String            @id @default(uuid())
-  topicId            String
-  topic              TopicProcess      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  reportId           String?
+  report             TopicReport? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  topicId            String?
+  topic              TopicProcess?     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  operationTaskId String? @unique
+  operationTask OperationTask? @relation(fields:[operationTaskId],references:[id],onDelete:Restrict)
+  actorScope String?
   baseVersion        Int
   /// Set when an analysis revision staged its result here; publishing binds to it.
   analysisRevisionId String?
@@ -890,4 +992,502 @@ model ReportFieldEdit {
 
   @@unique([draftId, sequence])
   @@index([draftId, createdAt])
+}
+
+model ReportTemplate {
+  revision Int @default(1)
+  id        String   @id @default(uuid())
+  name      String   @unique
+  description String?
+  html      String
+  sections  Json
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BackgroundJob {
+  id String @id
+  queue String
+  status String @default("RUNNING")
+  leaseUntil DateTime
+  attempts Int @default(0)
+  lastError String?
+  updatedAt DateTime @updatedAt
+  @@index([status, leaseUntil])
+}
+
+model WorkspaceAutomation {
+  datePolicy String @default("PUBLISHED_DATE")
+  id        String @id @default(uuid())
+  name      String
+  scheduleVersion Int @default(1)
+  times     String[] @default([])
+  weekdays  Int[] @default([1, 2, 3, 4, 5, 6, 7])
+  hour      Int @default(8)
+  minute    Int @default(0)
+  timezone  String @default("Europe/Istanbul")
+  isActive  Boolean @default(true)
+  sourceIds String[]
+  groupIds  String[]
+  templateId String?
+  lastRunId String?
+  lastRunAt DateTime?
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AcademyAttempt {
+  ownerUserId String?
+  workspaceId String?
+  ownerUser User? @relation(fields:[ownerUserId],references:[id],onDelete:Restrict)
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  id String @id @default(uuid())
+  lessonId String
+  period String
+  answers Json
+  score Int
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, ownerUserId, lessonId, period])
+  @@index([workspaceId, ownerUserId, createdAt])
+}
+
+/// A discovered URL is evidence only after it is explicitly activated.
+model SourceEndpoint {
+  id              String   @id @default(uuid())
+  sourceId        String
+  url             String
+  title           String
+  reason          String?
+  keywords        String?
+  status          String   @default("PROPOSED")
+  adapter         String?
+  managedSourceId String?
+  discoveredAt    DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, status])
+  @@unique([sourceId, url])
+}
+
+model SourceScanRun {
+  workspaceId String?
+  initiatorUserId String?
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  initiator User? @relation("SourceScanRunInitiator",fields:[initiatorUserId],references:[id],onDelete:Restrict)
+  stages SourceRunStage[]
+  profileSnapshot Json?
+  coverage Json?
+  datePolicy String @default("PUBLISHED_DATE")
+  processingScanRunId String? @unique
+  queueVersion Int @default(0)
+  queueDispatchedAt DateTime?
+  operations OperationRequest[]
+  id          String    @id @default(uuid())
+  sourceId    String
+  scanRunId   String?
+  requestKey  String    @unique
+  targetDate  DateTime  @db.Date
+  trigger     String    @default("MANUAL")
+  scheduleSlot String?
+  status      String    @default("QUEUED")
+  errorSummary String?
+  reportHtml  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  source    Source @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  scanRun   ScanRun? @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  documents SourceScanDocument[]
+
+  @@index([targetDate, createdAt])
+  @@index([scanRunId])
+  @@index([status, createdAt])
+}
+
+model SourceScanDocument {
+  captureStatus String @default("PENDING")
+  captureError String?
+  capturedFiles Json?
+  filterDecision String?
+  filterReason String?
+  processingStatus String @default("PENDING")
+  processingError String?
+  topicId String?
+  reportVersion Int?
+  id          String   @id @default(uuid())
+  runId       String
+  url         String
+  title       String
+  publishedOn DateTime? @db.Date
+  dateBasis String @default("PUBLISHED")
+  contentText String?
+  contentHash String?
+  feedUrl     String
+  createdAt   DateTime @default(now())
+
+  run SourceScanRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, url])
+}
+
+/// User-curated external references. These are not official Gazette documents.
+model ManagedSource {
+  id           String   @id @default(uuid())
+  url          String   @unique
+  title        String
+  description  String?
+  keywords     String?
+  contentText  String?
+  contentType  String?
+  fetchError   String?
+  fetchedAt    DateTime?
+  useInChat    Boolean  @default(true)
+  useInRuns    Boolean  @default(true)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  snapshots    ManagedSourceSnapshot[]
+
+  @@index([isActive, useInChat])
+  @@index([isActive, useInRuns])
+}
+
+model ManagedSourceSnapshot {
+  id              String   @id @default(uuid())
+  managedSourceId String
+  url             String
+  contentHash     String
+  contentText     String
+  contentType     String
+  fetchedAt       DateTime @default(now())
+
+  managedSource ManagedSource @relation(fields: [managedSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([managedSourceId, contentHash])
+  @@index([managedSourceId, fetchedAt])
+}
+
+model SourceProfile {
+  id String @id @default(uuid())
+  sourceId String
+  version Int
+  status String @default("DRAFT")
+  config Json
+  validation Json?
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  @@unique([sourceId, version])
+}
+model SourceCredential {
+  id String @id @default(uuid())
+  sourceId String
+  workspaceId String @default("local")
+  encrypted String
+  status String @default("UNTESTED")
+  testedAt DateTime?
+  updatedAt DateTime @updatedAt
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  @@unique([sourceId, workspaceId])
+}
+model SourceRunStage {
+  id String @id @default(uuid())
+  runId String
+  stage String
+  status String @default("PENDING")
+  totalItems Int @default(0)
+  completedItems Int @default(0)
+  error String?
+  startedAt DateTime?
+  completedAt DateTime?
+  run SourceScanRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  @@unique([runId, stage])
+}
+model SourceObservation {
+  id String @id @default(uuid())
+  sourceId String
+  scope String @default("inventory")
+  url String
+  title String
+  publishedOn DateTime? @db.Date
+  firstSeenAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  contentHash String?
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  @@unique([sourceId, scope, url])
+}
+
+model DocumentImport {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("DocumentImportOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
+ id String @id @default(uuid())
+ actorScope String
+ idempotencyKey String
+ payloadHash String
+ status String @default("PENDING")
+ documentVersionId String?
+ documentVersion DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+ error String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([actorScope, idempotencyKey])
+ @@index([actorScope, createdAt])
+}
+
+model OperationRequest {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("OperationRequestOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
+ sourceRunId String?
+ sourceRun SourceScanRun? @relation(fields:[sourceRunId],references:[id],onDelete:Restrict)
+ id String @id @default(uuid())
+ actorScope String
+ idempotencyKey String
+ payloadHash String
+ operation String
+ mode String
+ parameters Json
+ status String @default("QUEUED")
+ cancelRequested Boolean @default(false)
+ tasks OperationTask[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([actorScope, idempotencyKey])
+ @@index([actorScope, createdAt])
+}
+
+model OperationTask {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("OperationTaskOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
+ id String @id @default(uuid())
+ requestId String
+ request OperationRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+ actorScope String
+ operation String
+ inputSignature String
+ parameters Json
+ dependencyIds String[] @default([])
+ status String @default("QUEUED")
+ reused Boolean @default(false)
+ errorCategory String?
+ errorMessage String?
+ leaseOwner String?
+ leaseUntil DateTime?
+ attemptNumber Int @default(0)
+ reports TopicReport[]
+ drafts ReportDraft[]
+ attempts OperationAttempt[]
+ artifacts OperationArtifact[]
+ outbox OperationOutbox[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([actorScope, inputSignature, status])
+ @@index([status, leaseUntil])
+}
+
+model OperationAttempt {
+ id String @id @default(uuid())
+ taskId String
+ task OperationTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+ number Int
+ leaseOwner String
+ status String @default("RUNNING")
+ startedAt DateTime @default(now())
+ completedAt DateTime?
+ errorMessage String?
+ providerRequestId String?
+ @@unique([taskId, number])
+}
+
+model OperationArtifact {
+ id String @id @default(uuid())
+ taskId String
+ task OperationTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+ kind String
+ referenceId String?
+ objectKey String?
+ data Json?
+ createdAt DateTime @default(now())
+ @@index([taskId])
+}
+
+model OperationOutbox {
+ id String @id @default(uuid())
+ taskId String
+ task OperationTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+ status String @default("PENDING")
+ attempts Int @default(0)
+ availableAt DateTime @default(now())
+ leaseUntil DateTime?
+ dispatchedAt DateTime?
+ errorMessage String?
+ createdAt DateTime @default(now())
+ @@index([status, availableAt])
+}
+
+model DocumentLink {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("DocumentLinkOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
+ id String @id @default(uuid())
+ actorScope String
+ documentVersionId String
+ sessionId String?
+ messageId String?
+ scanRunId String?
+ sourceRunId String?
+ topicId String?
+ role String @default("ATTACHMENT")
+ createdAt DateTime @default(now())
+ @@index([actorScope, sessionId])
+}
+
+model SourceCoverage {
+  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+  ownerUser User? @relation("SourceCoverageOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
+
+  workspaceId String?
+  ownerUserId String?
+  visibility String @default("LEGACY")
+
+ id String @id @default(uuid())
+ actorScope String
+ sourceId String
+ targetDate DateTime @db.Date
+ profileVersion String
+ datePolicy String
+ status String
+ visitedPages Json
+ missingPages Json
+ taskId String?
+ createdAt DateTime @default(now())
+ @@index([actorScope, sourceId, targetDate])
+}
+
+
+model ExternalIdentity {
+ sessions AuthSession[]
+ id String @id @default(uuid())
+ issuer String
+ subject String
+ userId String
+ user User @relation(fields:[userId],references:[id],onDelete:Restrict)
+ createdAt DateTime @default(now())
+ @@unique([issuer,subject])
+ @@index([userId])
+}
+model Workspace {
+  academyAttempts AcademyAttempt[]
+  sourceScanRunActors SourceScanRun[]
+  topicOutboxActors TopicOutbox[]
+  scanOutboxActors ScanOutbox[]
+  scans ScanRun[]
+  revisionMessages ChatMessage[]
+  documents Document[]
+  documentImports DocumentImport[]
+  documentLinks DocumentLink[]
+  operationRequests OperationRequest[]
+  operationTasks OperationTask[]
+  sourceCoverages SourceCoverage[]
+  topicReports TopicReport[]
+  reportDrafts ReportDraft[]
+  chats ChatSession[]
+  authSessions AuthSession[]
+ id String @id @default(uuid())
+ key String @unique
+ name String
+ createdAt DateTime @default(now())
+ memberships WorkspaceMembership[]
+}
+model WorkspaceMembership {
+ id String @id @default(uuid())
+ workspaceId String
+ workspace Workspace @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+ userId String
+ user User @relation(fields:[userId],references:[id],onDelete:Restrict)
+ role String @default("VIEWER")
+ permissions String[] @default([])
+ active Boolean @default(true)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([workspaceId,userId])
+}
+model AuthLoginAttempt {
+ idHash String @id
+ stateHash String
+ issuer String
+ clientId String
+ encryptedPayload String
+ returnTo String
+ expiresAt DateTime
+ consumedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([expiresAt])
+}
+model AuthSession {
+ user User @relation(fields:[userId],references:[id],onDelete:Restrict)
+ identity ExternalIdentity @relation(fields:[identityId],references:[id],onDelete:Restrict)
+ workspace Workspace @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
+ idHash String @id
+ userId String
+ identityId String
+ workspaceId String
+ issuer String
+ subject String
+ clientId String
+ providerSid String?
+ csrfToken String
+ encryptedTokens String?
+ accessExpiresAt DateTime
+ idleExpiresAt DateTime
+ absoluteExpiresAt DateTime
+ version Int @default(0)
+ refreshOwner String?
+ refreshUntil DateTime?
+ revoked Boolean @default(false)
+ revokedAt DateTime?
+ reason String?
+ createdAt DateTime @default(now())
+ lastSeenAt DateTime @default(now())
+ @@index([issuer,subject])
+ @@index([issuer,providerSid])
+ @@index([absoluteExpiresAt])
+}
+model LogoutReplay {
+ clientId String?
+ providerSid String?
+ subject String?
+ issuedAt DateTime?
+ id String @id @default(uuid())
+ issuer String
+ jtiHash String
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@unique([issuer,jtiHash])
+ @@index([expiresAt])
 }

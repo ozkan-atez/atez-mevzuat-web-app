@@ -10,6 +10,7 @@ interface Options {
   repository: PrismaScanRepository
   topicRepository?: PrismaTopicAnalysisRepository
   objectStore?: Pick<TopicObjectStore, 'getContent'>
+  validateSourceKeys?: (keys: string[]) => Promise<void>
   timezone?: string
 }
 
@@ -60,7 +61,9 @@ export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
     if (!keyResult.success || !bodyResult.success) {
       return reply.code(400).send({ message: 'Geçerli Idempotency-Key ve YYYY-MM-DD tarihi gereklidir' })
     }
-    const run = await options.repository.createManualRun({ requestKey: keyResult.data, targetDate: bodyResult.data.targetDate })
+    const sourceKeys=bodyResult.data.sourceKeys??['resmi-gazete']
+    try { if(bodyResult.data.sourceKeys)await options.validateSourceKeys?.(sourceKeys) } catch(error) { return reply.code(422).send({message:error instanceof Error?error.message:'Kaynak seçimi geçersiz.'}) }
+    const run = await options.repository.createManualRun({ requestKey: keyResult.data, targetDate: bodyResult.data.targetDate, sourceKeys, ...(bodyResult.data.datePolicy?{datePolicy:bodyResult.data.datePolicy}:{}) })
     return reply.code(202).send({ runId: run.id, status: run.status, targetDate: run.targetDate })
   })
 
@@ -107,7 +110,12 @@ export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
       Connection: 'keep-alive',
     })
     let lastPayload = ''
+    let sending = false
     const send = async () => {
+      if (sending || reply.raw.writableEnded) return
+      sending = true
+      try {
+      await request.assertSessionActive?.()
       const run = await options.repository.getRun(id)
       if (!run) return
       const payload = JSON.stringify(run)
@@ -116,13 +124,17 @@ export async function scanRunsRoutes(app: FastifyInstance, options: Options) {
         lastPayload = payload
       }
       if (terminalStatuses.has(run.status)) close()
+      } catch {
+        if (!reply.raw.writableEnded) reply.raw.write('event: error\ndata: {"message":"Oturum veya erişim izni sona erdi."}\n\n')
+        close()
+      } finally { sending = false }
     }
     const timer = setInterval(() => void send(), 1_000)
     const close = () => {
       clearInterval(timer)
       if (!reply.raw.writableEnded) reply.raw.end()
     }
-    request.raw.once('close', close)
+    reply.raw.once('close', close)
     await send()
   })
 }

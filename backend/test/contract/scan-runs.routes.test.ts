@@ -11,7 +11,7 @@ describe('scan run HTTP contract', () => {
   afterAll(() => prisma.$disconnect())
 
   it('accepts a valid manual scan and returns 202', async () => {
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
     const response = await app.inject({
       method: 'POST', url: '/api/v1/scan-runs',
       headers: { 'idempotency-key': '55a7f2ac-2f19-4e1b-b46d-3ca1f1be3d42' },
@@ -23,7 +23,7 @@ describe('scan run HTTP contract', () => {
   })
 
   it('rejects an invalid calendar date', async () => {
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
     const response = await app.inject({
       method: 'POST', url: '/api/v1/scan-runs',
       headers: { 'idempotency-key': crypto.randomUUID() },
@@ -34,7 +34,7 @@ describe('scan run HTTP contract', () => {
   })
 
   it('returns a safe 404 for an unknown run', async () => {
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
     const response = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${crypto.randomUUID()}` })
     expect(response.statusCode).toBe(404)
     expect(response.json()).toEqual({ message: 'Tarama bulunamadı' })
@@ -44,7 +44,7 @@ describe('scan run HTTP contract', () => {
   it('lists recent real runs newest first', async () => {
     const older = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-13' })
     const newer = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/scan-runs?limit=10' })
 
@@ -73,7 +73,7 @@ describe('scan run HTTP contract', () => {
       },
     })
     await prisma.aiJob.update({ where: { id: job.id }, data: { status: 'COMPLETED' } })
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
 
     const response = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${run.id}` })
 
@@ -93,7 +93,7 @@ describe('scan run HTTP contract', () => {
     })
     await repository.markFilterRunning(run.id, job.id, 1)
     await repository.markFilterAwaitingRetry(run.id, job.id, { category: 'RATE_LIMITED', providerStatus: 429, message: 'Gemini geçici olarak yoğun.' })
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
     const requestKey = crypto.randomUUID()
 
     const accepted = await app.inject({ method: 'POST', url: `/api/v1/scan-runs/${run.id}/ai-filter/retry`, headers: { 'idempotency-key': requestKey } })
@@ -110,7 +110,7 @@ describe('scan run HTTP contract', () => {
 
   it('rejects AI filter retry for a run that is not paused', async () => {
     const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
     const response = await app.inject({ method: 'POST', url: `/api/v1/scan-runs/${run.id}/ai-filter/retry`, headers: { 'idempotency-key': crypto.randomUUID() } })
     expect(response.statusCode).toBe(409)
     await app.close()
@@ -135,7 +135,7 @@ describe('scan run HTTP contract', () => {
       data: { scanRunId: run.id, stage: 'DISCOVERING_PREVIOUS_SOURCES', status: 'AWAITING_RETRY', totalItems: 1, failedItems: 1 },
     })
     await prisma.scanRun.update({ where: { id: run.id }, data: { status: 'AWAITING_RETRY', currentStage: 'DISCOVERING_PREVIOUS_SOURCES' } })
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
     const requestKey = crypto.randomUUID()
 
     const accepted = await app.inject({ method: 'POST', url: `/api/v1/scan-runs/${run.id}/previous-sources/retry`, headers: { 'idempotency-key': requestKey } })
@@ -165,7 +165,7 @@ describe('scan run HTTP contract', () => {
       { scanRunId: run.id, documentId: edition.documents[1]!.id, status: 'RUNNING', model: 'gemini-3.7-flash', promptVersion: 'v1', configurationHash: 'a'.repeat(64) },
     ] })
     await prisma.scanRun.update({ where: { id: run.id }, data: { status: 'RUNNING', currentStage: 'DISCOVERING_PREVIOUS_SOURCES' } })
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
 
     const response = await app.inject({ method: 'GET', url: `/api/v1/scan-runs/${run.id}` })
 
@@ -176,7 +176,7 @@ describe('scan run HTTP contract', () => {
   it('exposes today\'s scheduled slots with their runs for the dashboard', async () => {
     const created = await repository.createScheduledRun({ targetDate: todayInIstanbul(), slotKey: 'ANA_SAYI' })
     const repeated = await repository.createScheduledRun({ targetDate: todayInIstanbul(), slotKey: 'ANA_SAYI' })
-    const app = await buildApp({ scanRepository: repository, timezone: 'Europe/Istanbul' })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository, timezone: 'Europe/Istanbul' })
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/scan-runs/schedule' })
 

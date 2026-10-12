@@ -2,6 +2,7 @@ import { AiProviderError } from '../../ai/domain/ai-errors'
 import type { AnalysisResult } from '../domain/analysis-schemas'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import type { CreateTopicReportRevisionInput, RunReportContext, StoredTopicReport, TopicObjectStore } from './ports'
+import { applyAutomationTemplate } from './apply-automation-template'
 import { buildReportSpec } from './build-report-spec'
 import { renderReportHtml } from './render-report-html'
 import { validateReportHtml } from './validate-report-html'
@@ -17,6 +18,7 @@ export interface TopicAnalysisOutput {
 }
 
 export interface TopicPublicationRepository {
+  getTopicSequence?(topicId:string):Promise<number>
   ensureTopics(runId: string): Promise<Array<{ id: string; documentId: string; status: string }>>
   getRunReportContext(runId: string): Promise<RunReportContext | null>
   nextReportVersion(runId: string, topicId: string | null): Promise<number>
@@ -97,7 +99,7 @@ export async function executeRunTopicAnalyses(runId: string, dependencies: Depen
   await dependencies.lifecycle?.reportsStarted(passAnalyses.length)
   const topicReports: StoredTopicReport[] = []
   for (const item of passAnalyses) {
-    const sequence = allTopics.findIndex((topic) => topic.id === item.analysis.topicId) + 1
+    const sequence = dependencies.repository.getTopicSequence ? await dependencies.repository.getTopicSequence(item.analysis.topicId) : allTopics.findIndex((topic) => topic.id === item.analysis.topicId) + 1
     try {
       topicReports.push(await publishTopicAnalysis(context, item, sequence, dependencies))
     } catch (error) {
@@ -145,7 +147,7 @@ export async function publishTopicAnalysis(
 ): Promise<StoredTopicReport> {
   const topicId = output.analysis.topicId
   await dependencies.repository.markTopicRendering(topicId)
-  const spec = buildReportSpec(output.analysis, { sequence })
+  const spec = applyAutomationTemplate(buildReportSpec(output.analysis, { sequence,...(context.sourceOrigin?{sourceOrigin:context.sourceOrigin}:{}) }), context.workspaceConfig)
   const version = await dependencies.repository.nextReportVersion(context.runId, topicId)
   const revision = `r${String(version).padStart(2, '0')}`
   const basename = `${String(sequence).padStart(2, '0')}-${topicId}.html`
@@ -154,7 +156,7 @@ export async function publishTopicAnalysis(
   const htmlObjectKey = `${root}/report.html`
   const html = await renderReportHtml(spec)
   await dependencies.repository.markTopicValidating(topicId)
-  validateReportHtml(html, { card: spec.card, topicId, basename })
+  validateReportHtml(html, { customized: Boolean(spec.customization && (spec.customization.customHtml || spec.customization.sections.length || Object.keys(spec.customization.headings).length || spec.customization.order.length)), card: spec.card, topicId, basename })
   await dependencies.objectStore.putRunFile(specObjectKey, Buffer.from(JSON.stringify(spec)), 'application/json')
   await dependencies.objectStore.putRunFile(htmlObjectKey, Buffer.from(html), 'text/html; charset=utf-8')
   return dependencies.repository.createReportRevision({

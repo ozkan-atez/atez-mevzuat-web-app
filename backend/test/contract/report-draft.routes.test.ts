@@ -70,7 +70,7 @@ async function seedPublishedReport() {
   return { topicId: topic.id, analysisRevisionId: analysis.id }
 }
 
-const appFor = (topicId: string) => buildApp({ scanRepository, topicRepository, draftRepository, objectStore: objectStore(topicId) })
+const appFor = (topicId: string) => buildApp({ authRuntime: false, scanRepository, topicRepository, draftRepository, objectStore: objectStore(topicId) })
 
 describe('report draft HTTP contract', () => {
   beforeEach(async () => { await prisma.scanRun.deleteMany(); written.clear() })
@@ -188,6 +188,38 @@ describe('report draft HTTP contract', () => {
     expect(reverted.json().spec.title).toBe('İthalat Tebliğinde Değişiklik')
     expect(reverted.json().draft.edits).toHaveLength(2)
     expect(reverted.json().draft.edits[0].revertedByEditId).toBe(reverted.json().draft.edits[1].id)
+    await app.close()
+  })
+
+  it('resolves a saved template against report content and publishes safe layout HTML', async () => {
+    const {topicId} = await seedPublishedReport()
+    const template = await prisma.reportTemplate.create({data:{name: `Şablon ${crypto.randomUUID()}`,description:'Test',html:'<!DOCTYPE html><html><head><style>body{color:red}</style></head><body><div style="display:grid;gap:16px;position:fixed"><h1>{{title}}</h1><p>{{date}}</p>{{sections}}</div></body></html>',sections:[{id:'summary',heading:'Özel Özet',html:'<section><h2>{{heading}}</h2>{{content}}</section>',enabled:true}]}})
+    const app = await appFor(topicId)
+    const applied = await app.inject({method:'POST',url:`/api/v1/topics/${topicId}/draft/workspace`,headers:{'idempotency-key':crypto.randomUUID()},payload:{templateId:template.id,expectedVersion:1}})
+    expect(applied.statusCode).toBe(200)
+    expect(applied.json().html).toContain('Özel Özet')
+    expect(applied.json().html).toContain('Özet metni.')
+    expect(applied.json().html).toContain('style="display: grid; gap: 16px"')
+    expect(applied.json().html).not.toContain('{{')
+    expect(applied.json().html).not.toContain('position:fixed')
+    const published = await app.inject({method:'POST',url:`/api/v1/topics/${topicId}/draft/publish`,payload:{expectedVersion:1}})
+    expect(published.statusCode).toBe(201)
+    expect(published.json().version).toBe(2)
+    const revision = await prisma.reportRevision.findFirstOrThrow({where:{report:{topicId},version:2}})
+    expect(written.get(revision.htmlObjectKey)?.toString()).toContain('Özel Özet')
+    await app.close()
+    await prisma.reportTemplate.delete({where:{id:template.id}})
+  })
+
+  it('adds local text evidence without requiring an invented URL', async () => {
+    const {topicId} = await seedPublishedReport()
+    const app = await appFor(topicId)
+    const applied = await app.inject({method:'POST',url:`/api/v1/topics/${topicId}/draft/sources`,headers:{'idempotency-key':crypto.randomUUID()},payload:{expectedVersion:1,source:{label:'Uzman notu',kind:'FILE',fileName:'note.txt',content:'Ek mevzuat notu.'}}})
+    expect(applied.statusCode).toBe(200)
+    expect(applied.json().spec.customization.sources[0]).toMatchObject({url:'',kind:'FILE',fileName:'note.txt'})
+    expect(applied.json().html).toContain('Uzman notu')
+    const published = await app.inject({method:'POST',url:`/api/v1/topics/${topicId}/draft/publish`,payload:{expectedVersion:1}})
+    expect(published.statusCode).toBe(201)
     await app.close()
   })
 

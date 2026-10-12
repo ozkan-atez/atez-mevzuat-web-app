@@ -1,3 +1,4 @@
+import type { TariffLookup } from '../../tariff/tariff-lookup'
 import type { AiModelClient } from '../../ai/application/ai-model-client'
 import type { PrismaScanRepository } from '../../scan-runs/infrastructure/prisma-scan-repository'
 import { resumeRunAfterTopicRetry } from '../../scan-runs/application/execute-scan-run'
@@ -15,6 +16,7 @@ interface Dependencies {
   aiModel: AiModelClient
   model: string
   maxAttempts: number
+  tariffLookup?: TariffLookup
   maxContextBytes: number
 }
 
@@ -52,7 +54,8 @@ export async function recoverAnalysisForRetry(
     aiModel: AiModelClient
     model: string
     maxAttempts: number
-    maxContextBytes: number
+    tariffLookup?: TariffLookup
+  maxContextBytes: number
   },
 ): Promise<TopicAnalysisOutput> {
   if (existing.latestAnalysis && ['ANALYZED', 'RENDERING', 'VALIDATING'].includes(existing.status)) {

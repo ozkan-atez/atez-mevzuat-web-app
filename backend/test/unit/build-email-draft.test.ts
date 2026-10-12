@@ -51,6 +51,17 @@ describe('buildEmailDraft', () => {
     expect(draft.bodyText).toContain('Mevzuat: İthalat Tebliğinde Değişiklik')
   })
 
+  it('does not call a ministry publication a Gazette publication', () => {
+    const draft = buildEmailDraft({ ...input, gazetteUrl: 'https://ticaret.gov.tr/duyuru', fallbackTitle: 'Bakanlık duyurusu', analysisJson: { broken: true } })
+    expect(draft.sources[0]).toMatchObject({ kind: 'OFFICIAL', url: 'https://ticaret.gov.tr/duyuru' })
+    expect(draft.bodyText).not.toContain("T.C. Resmî Gazete'de yayımlanan")
+    expect(draft.bodyText).toContain('Bakanlık duyurusu kaynağında')
+  })
+  it('keeps commercial source reports classified as supporting evidence', () => {
+    const draft = buildEmailDraft({ ...input, gazetteUrl: 'https://www.mevzuat.net/duyuru', fallbackTitle: 'Mevzuat.Net', analysisJson: { broken: true } })
+    expect(draft.sources[0]).toMatchObject({ kind: 'SUPPORTING', label: 'Mevzuat.Net' })
+    expect(draft.bodyText).not.toContain('Resmî Gazete')
+  })
   it('escapes the edited body so no draft can inject markup into the mail', () => {
     const draft = buildEmailDraft({ ...input, analysisJson: analysis })
     const html = renderEmailHtml({ bodyText: '<script>alert(1)</script> devam', sources: draft.sources })

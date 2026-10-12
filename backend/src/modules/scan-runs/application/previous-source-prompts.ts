@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
-import type { StructuredAiRequest } from '../../ai/application/ai-model-client'
+import type { AiInputPart, StructuredAiRequest } from '../../ai/application/ai-model-client'
 import { previousSourceResponseJsonSchema } from './previous-source-schemas'
 
-export const PREVIOUS_SOURCE_PROMPT_VERSION = 'previous-source-preflight-v1'
+export const PREVIOUS_SOURCE_PROMPT_VERSION = 'previous-source-preflight-v3-document'
 
 export interface PreviousSourcePreflightInput {
   documentId: string
@@ -11,9 +11,10 @@ export interface PreviousSourcePreflightInput {
   sourceUrl: string
   documentType: string | null
   visibleText: string
+  documentParts?: AiInputPart[]
 }
 
-const systemInstruction = `Sen Resmî Gazete mevzuat kimliği çıkarma sistemisin. Görevin rapor veya hukuki analiz yazmak değil, yalnızca önceki kaynak aramasını daraltacak kısa ve kesin bir arama niyeti üretmektir.
+const systemInstruction = `Sen kaynak belgelerden mevzuat kimliği çıkarma sistemisin. Belge resmî yayın, kurum duyurusu veya meslek kuruluşu haberi olabilir; ikincil kaynağı resmî yayın olarak sunma. Görevin rapor veya hukuki analiz yazmak değil, yalnızca önceki kaynak aramasını daraltacak kısa ve kesin bir arama niyeti üretmektir.
 Metinde değiştirilen, kaldırılan, süresi uzatılan veya uygulanan önceki mevzuatın adını ve kimliğini aynen ayıkla. Güncel yayının Karar/Tebliğ numarasını hedef mevzuat numarası sanma.
 Açık bir Tebliğ No (örneğin 2018/5), karar numarası veya yönetmelik adı varsa ilk sorgu adayı en ayırt edici tam kimlik olsun. En fazla üç sorgu üret. Önceki kaynağa gerek yoksa relationship NONE kullan.`
 
@@ -38,8 +39,13 @@ export function buildPreviousSourcePreflightRequest(input: PreviousSourcePreflig
     request: {
       model,
       systemInstruction,
-      parts: [{ text: JSON.stringify(payload) }],
+      parts: [{ text: JSON.stringify(payload) }, ...(input.documentParts ?? [])],
       responseJsonSchema: previousSourceResponseJsonSchema,
     },
   }
+}
+
+/** Official search treats long phrases differently; always try the exact number first. */
+export function buildPreviousSourceQueries(intent: {targetRegulationIdentifier: string | null; queryCandidates: string[]}): string[] {
+  return [...new Set([intent.targetRegulationIdentifier, ...intent.queryCandidates].filter((value): value is string => Boolean(value?.trim())).map(value => value.trim()))]
 }

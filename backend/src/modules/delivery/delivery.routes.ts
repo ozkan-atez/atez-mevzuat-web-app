@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { getActorContext } from '../../platform/actor-context'
 import { idempotencyKeySchema } from '../scan-runs/scan-runs.schemas'
 import type { PrismaTopicAnalysisRepository } from '../topic-analysis/infrastructure/prisma-topic-analysis-repository'
 import type { TopicObjectStore } from '../topic-analysis/application/ports'
@@ -23,7 +24,11 @@ interface Options {
 }
 
 export async function customerGroupRoutes(app: FastifyInstance, options: Pick<Options, 'repository'>) {
-  app.get('/', async (_request, reply) => reply.send({ groups: await options.repository.listCustomerGroups() }))
+  app.get('/', async (_request, reply) => {
+    const groups = await options.repository.listCustomerGroups()
+    const actor = getActorContext()
+    return reply.send({ groups: !actor || actor.permissions.includes('config.manage') ? groups : groups.map(group => ({ ...group, emails: [] })) })
+  })
 
   app.post('/', async (request, reply) => {
     const body = customerGroupCreateSchema.safeParse(request.body)
@@ -83,6 +88,7 @@ export async function topicDeliveryRoutes(app: FastifyInstance, options: Options
       context,
       draft: buildEmailDraft({
         analysisJson,
+        ...(context.specObjectKey && options.objectStore ? {reportSpec: JSON.parse((await options.objectStore.getContent(context.specObjectKey)).toString('utf-8')) as unknown} : {}),
         fallbackTitle: context.title,
         gazetteUrl: context.sourceUrl,
         targetDate: context.targetDate,
@@ -97,6 +103,8 @@ export async function topicDeliveryRoutes(app: FastifyInstance, options: Options
     if (!Number.isInteger(version) || version < 1) return reply.code(400).send({ message: 'Geçerli rapor revizyonu gereklidir' })
     const loaded = await loadContext(id, version)
     if (!loaded) return reply.code(404).send({ message: 'Rapor bulunamadı' })
+    const actor = getActorContext()
+    if (actor && !actor.permissions.includes('delivery.send')) return reply.send({ topicId: loaded.context.topicId, reportVersion: loaded.context.reportVersion, targetDate: loaded.context.targetDate, sources: loaded.draft.sources, draft: { subject: '', bodyText: '', attachmentName: '' }, sender: { configured: false }, groups: [], suggestedGroupIds: [], dispatches: [] })
     return reply.send({
       topicId: loaded.context.topicId,
       reportVersion: loaded.context.reportVersion,
@@ -111,6 +119,7 @@ export async function topicDeliveryRoutes(app: FastifyInstance, options: Options
         ? { configured: true as const, address: options.sender?.address ?? null, name: options.sender?.name ?? null }
         : { configured: false as const, note: 'Microsoft Graph yapılandırması eksik; gönderim simüle edilir.' },
       groups: await options.repository.listCustomerGroups(),
+      suggestedGroupIds: await options.repository.getSuggestedGroupIds?.(loaded.context.runId) ?? [],
       dispatches: await options.repository.listTopicDispatches(id),
     })
   })

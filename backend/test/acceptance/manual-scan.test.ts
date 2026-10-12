@@ -1,3 +1,7 @@
+import { RabbitQueue } from '../../src/platform/rabbitmq'
+import { prisma as queuePrisma } from '../../src/platform/database'
+import { manualScanQueueName } from '../../src/platform/queue'
+import { executeScanCommand } from '../../src/modules/scan-runs/application/execute-scan-command'
 import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { PrismaClient } from '@prisma/client'
 import { readFile } from 'node:fs/promises'
@@ -135,7 +139,7 @@ describe('manual scan acceptance', () => {
   })
 
   it('archives a complete run and reuses content on a same-date rescan', async () => {
-    const app = await buildApp({ scanRepository: repository })
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
     const requestKey = crypto.randomUUID()
     const create = () => app.inject({
       method: 'POST',
@@ -244,4 +248,31 @@ describe('manual scan acceptance', () => {
     expect(recovered?.counts.documents).toBe(4)
     expect(recovered?.editions).toHaveLength(3)
   })
+  it.skipIf(!process.env.RABBITMQ_TEST_URL)('completes manual and scheduled Gazette jobs through RabbitMQ and the worker handler', async () => {
+    process.env.RABBITMQ_URL = process.env.RABBITMQ_TEST_URL!
+    const broker = new RabbitQueue()
+    const app = await buildApp({ authRuntime: false, scanRepository: repository })
+    try {
+      await broker.work(manualScanQueueName, async jobs => {
+        for (const job of jobs) await executeScanCommand(prisma, job.data, job.retryCount, resumeStalled => executeScanRun(job.data.runId, { repository, topicRepository, http, objectStore, maxRunBytes: 10_000_000n, aiModel, gemini, previousSourceSearch }, job.data.type, { resumeStalled }))
+      })
+      const response = await app.inject({ method: 'POST', url: '/api/v1/scan-runs', headers: { 'idempotency-key': crypto.randomUUID() }, payload: { trigger: 'MANUAL', targetDate: '2026-09-11' } })
+      expect(response.statusCode).toBe(202)
+      const manualId = response.json().runId
+      const scheduled = await repository.createScheduledRun({ targetDate: '2026-09-11', slotKey: 'ANA_SAYI' })
+      for (const row of await repository.claimPendingOutbox(10)) {
+        const jobId = await broker.send(manualScanQueueName, { outboxId: row.id, runId: row.scanRunId, type: row.commandType }, { singletonKey: row.id })
+        await repository.markOutboxDispatched(row.id, jobId)
+      }
+      for (const id of [manualId, scheduled.id]) {
+        await expect.poll(async () => (await repository.getRun(id))?.status, { timeout: 10000 }).toBe('COMPLETED')
+        const run = await repository.getRun(id)
+        expect(run?.counts.documents).toBe(4)
+        expect(run?.editions).toHaveLength(3)
+        expect((await repository.getExecutionRun(id))?.indexObjectKey).not.toBeNull()
+        expect(await prisma.topicReport.count({ where: { scanRunId: id } })).toBeGreaterThan(0)
+      }
+    } finally { await broker.close(); await app.close(); await queuePrisma.$disconnect() }
+  }, 30000)
+
 })

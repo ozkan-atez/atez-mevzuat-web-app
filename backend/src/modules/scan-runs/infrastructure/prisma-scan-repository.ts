@@ -1,5 +1,7 @@
+import {getActorContext,privateActorScope,jobInitiatorFields,reportAccessWhere,topicAccessWhere} from '../../../platform/actor-context'
+import {createHash} from 'node:crypto'
 import { Prisma, type PrismaClient } from '@prisma/client'
-import { scheduleRequestKey, type ScanScheduleSlotKey } from '../domain/scan-schedule'
+import { findScheduleSlot, scheduleRequestKey, type ScanScheduleSlotKey } from '../domain/scan-schedule'
 import type { ScanRunStatus, ScanStage } from '../domain/scan-run'
 import type {
   AiCallCompletion,
@@ -30,23 +32,33 @@ import type {
 export class PrismaScanRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async createManualRun(input: { requestKey: string; targetDate: string }): Promise<{
+  async createManualRun(input: { requestKey: string; targetDate: string; sourceKeys?: string[]; datePolicy?: string }): Promise<{
     id: string
     status: ScanRunStatus
     targetDate: string
   }> {
+    if(getActorContext())input={...input,requestKey:`actor-scan:${createHash('sha256').update(`${privateActorScope()}:${input.requestKey}`).digest('hex')}`}
     const run = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.scanRun.findUnique({ where: { requestKey: input.requestKey } })
       if (existing) return existing
 
       return tx.scanRun.create({
         data: {
+          ...(getActorContext()?{workspaceId:getActorContext()!.workspaceId,initiatorUserId:getActorContext()!.serviceActor?null:getActorContext()!.userId}:{}),
           requestKey: input.requestKey,
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
           timezone: 'Europe/Istanbul',
-          outbox: { create: { requestKey: input.requestKey } },
+          sourceKeys: input.sourceKeys ?? ['resmi-gazete'],
+          workspaceConfig: {datePolicy:input.datePolicy??'PUBLISHED_DATE'},
+          outbox: { create: { ...jobInitiatorFields(),requestKey: input.requestKey } },
         },
       })
+    }).catch(async error => {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existing = await this.prisma.scanRun.findUnique({ where: { requestKey: input.requestKey } })
+        if (existing) return existing
+      }
+      throw error
     })
 
     return {
@@ -60,7 +72,7 @@ export class PrismaScanRepository {
    * Idempotent per (date, slot): the request key is unique, so a cron firing twice
    * — a retry, a restarted worker — reuses the run instead of scanning again.
    */
-  async createScheduledRun(input: { targetDate: string; slotKey: ScanScheduleSlotKey }): Promise<{
+  async createScheduledRun(input: { targetDate: string; slotKey: ScanScheduleSlotKey; sourceKeys?: string[] }): Promise<{
     id: string
     status: ScanRunStatus
     targetDate: string
@@ -77,10 +89,17 @@ export class PrismaScanRepository {
           trigger: 'CRON',
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
           timezone: 'Europe/Istanbul',
-          outbox: { create: { requestKey } },
+          ...(input.sourceKeys ? { sourceKeys: input.sourceKeys } : {}),
+          outbox: { create: { ...jobInitiatorFields(),requestKey } },
         },
       })
       return { run, created: true }
+    }).catch(async error => {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existing = await this.prisma.scanRun.findUnique({ where: { requestKey } })
+        if (existing) return { run: existing, created: false }
+      }
+      throw error
     })
 
     return {
@@ -283,7 +302,10 @@ export class PrismaScanRepository {
   async completeRunAfterTopicRetry(runId: string, manifestObjectKey: string): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
       const claimed = await tx.scanRun.updateMany({
-        where: { id: runId, status: 'AWAITING_RETRY' },
+        where: { id: runId, OR: [
+          {status: 'AWAITING_RETRY'},
+          {status: {in: ['PARTIAL', 'FAILED']}, currentStage: {in: ['ANALYZING_TOPICS', 'GENERATING_REPORTS']}},
+        ] },
         data: {
           status: 'COMPLETED', currentStage: 'WRITING_MANIFEST', totalItems: 1, completedItems: 1,
           failedItems: 0, manifestObjectKey, completedAt: new Date(), errorSummary: null,
@@ -307,14 +329,16 @@ export class PrismaScanRepository {
     const run = await this.prisma.scanRun.findUnique({
       where: { id: runId },
       include: {
+        sourceRuns: { orderBy: { createdAt: 'asc' }, include: { stages: true, documents: { orderBy: { title: 'asc' } }, source: { select: { name: true, key: true } }, _count: { select: { documents: true } } } },
         stages: { orderBy: { createdAt: 'asc' } },
         aiJobs: { where: { kind: 'DOCUMENT_FILTER' }, include: { decisions: true } },
         previousSourceJobs: { include: { source: true } },
         topicProcesses: {
+          where:topicAccessWhere(),
           orderBy: [{ document: { edition: { discoveryOrder: 'asc' } } }, { document: { publicationOrder: 'asc' } }],
-          include: { document: true, analyses: { orderBy: { version: 'desc' }, take: 1 }, reports: { include: { revisions: { orderBy: { version: 'desc' }, take: 1 } } } },
+          include: { document: true, analyses: { orderBy: { version: 'desc' }, take: 1 }, reports: { where:reportAccessWhere(),include: { revisions: { orderBy: { version: 'desc' }, take: 1 } } } },
         },
-        topicReports: { include: { revisions: { where: { status: 'VALIDATED' }, orderBy: { version: 'desc' }, take: 1 } } },
+        topicReports: { where:reportAccessWhere(),include: { revisions: { where: { status: 'VALIDATED' }, orderBy: { version: 'desc' }, take: 1 } } },
         editions: { orderBy: { discoveryOrder: 'asc' }, include: { documents: { orderBy: { publicationOrder: 'asc' }, include: { _count: { select: { assets: true } } } } } },
       },
     })
@@ -344,10 +368,20 @@ export class PrismaScanRepository {
     const analysisFailed = run.topicProcesses.filter((topic) => topic.status === 'FAILED' || topic.status === 'BLOCKED').length
     const reports = run.topicReports.flatMap((report) => {
       const revision = report.revisions[0]
-      return revision ? [{ id: report.id, topicId: report.topicId, title: report.title, basename: report.basename, card: revision.card, version: revision.version, htmlObjectKey: revision.htmlObjectKey }] : []
+      return revision ? [{ id: report.id, topicId: report.topicId, title: report.title, basename: report.basename, card: revision.card, version: revision.version, publishedAt: revision.createdAt.toISOString(), htmlObjectKey: revision.htmlObjectKey }] : []
     })
+    const externalEditions: ScanRunDetailDto['editions'] = (run.sourceRuns ?? []).filter(source => source.documents?.length).map(source => ({
+      id: source.id, type: 'EXTERNAL', supplementNo: null,
+      documents: source.documents.map(document => ({
+        id: document.id, title: document.title, sourceUrl: document.url,
+        validationStatus: document.captureStatus === 'COMPLETED' ? 'VALID' : ['FAILED', 'PARTIAL'].includes(document.captureStatus) ? 'INVALID' : 'PENDING',
+        assetCount: Array.isArray(document.capturedFiles) ? document.capturedFiles.filter(file => file && typeof file === 'object' && !Array.isArray(file) && file.status === 'STORED' && file.role !== 'DOCUMENT').length : 0,
+        filter: document.filterDecision === 'IN' || document.filterDecision === 'OUT' ? { titleDecision: document.filterDecision, finalDecision: document.filterDecision, reason: document.filterReason ?? '' } : null,
+        previousSource: null,
+      })),
+    }))
     return {
-      id: run.id, status: run.status, currentStage: run.currentStage,
+      id: run.id, sourceKeys: run.sourceKeys, status: run.status, currentStage: run.currentStage,
       targetDate: run.targetDate.toISOString().slice(0, 10), startedAt: run.startedAt?.toISOString() ?? null,
       completedAt: run.completedAt?.toISOString() ?? null, errorSummary: run.errorSummary,
       filter: filterJob ? {
@@ -386,9 +420,10 @@ export class PrismaScanRepository {
         }),
       } : null,
       reports,
-      counts: { editions: run.editions.length, documents: run.editions.reduce((n, e) => n + e.documents.length, 0), assets, completedItems: run.completedItems, totalItems: run.totalItems, failedItems: run.failedItems },
+      sourceRuns: (run.sourceRuns ?? []).map(item => ({ id: item.id, status: item.status, source: { name: item.source.name ?? item.source.key, key: item.source.key }, stages: item.stages, notes: Array.isArray((item.coverage as {notes?:unknown}|null)?.notes) ? (item.coverage as {notes:string[]}).notes.filter(n=>typeof n==='string') : [], documentCount: item._count.documents, errorSummary: item.errorSummary })),
+      counts: { editions: run.editions.length + externalEditions.length, documents: [...run.editions, ...externalEditions].reduce((n, e) => n + e.documents.length, 0), assets: assets + externalEditions.flatMap(edition => edition.documents).reduce((sum, document) => sum + document.assetCount, 0), completedItems: run.completedItems, totalItems: run.totalItems, failedItems: run.failedItems },
       stages: run.stages.map((stage) => ({ stage: stage.stage, status: stage.status, completedItems: stage.completedItems, totalItems: stage.totalItems, failedItems: stage.failedItems })),
-      editions: run.editions.map((edition) => ({
+      editions: [...externalEditions, ...run.editions.map((edition) => ({
         id: edition.id, type: edition.type, supplementNo: edition.supplementNo,
         documents: edition.documents.map((document) => {
           const decision = filterDecisions.get(document.id)
@@ -413,19 +448,26 @@ export class PrismaScanRepository {
             } : null,
           }
         }),
-      })),
+      })),],
     }
   }
 
   async listRuns(limit: number): Promise<ScanRunSummaryDto[]> {
     const runs = await this.prisma.scanRun.findMany({
+      where: { OR: [{ NOT: { requestKey: { startsWith: 'external-processing:' } } }, { workspaceConfig: { path: ['internalSourceProcessing'], equals: false } }] },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
       include: { editions: { include: { documents: { include: { _count: { select: { assets: true } } } } } } },
     })
+    const automationIds = [...new Set(runs.flatMap(run => run.automationId ? [run.automationId] : []))]
+    const automations = automationIds.length ? await this.prisma.workspaceAutomation.findMany({where:{id:{in:automationIds}},select:{id:true,name:true}}) : []
+    const names = new Map(automations.map(automation => [automation.id, automation.name]))
     return runs.map((run) => ({
       id: run.id,
       trigger: run.trigger,
+      automationName: run.workspaceConfig && typeof run.workspaceConfig === 'object' && !Array.isArray(run.workspaceConfig) && typeof run.workspaceConfig.automationName === 'string'
+        ? run.workspaceConfig.automationName : run.automationId ? names.get(run.automationId) ?? null : null,
+      scheduleLabel: run.scheduleSlot ? findScheduleSlot(run.scheduleSlot)?.label ?? null : null,
       status: run.status,
       currentStage: run.currentStage,
       targetDate: run.targetDate.toISOString().slice(0, 10),
@@ -476,7 +518,7 @@ export class PrismaScanRepository {
       title: document.title,
       sourceUrl: document.sourceUrl,
       publicationOrder: document.publicationOrder,
-      editionLabel: document.edition.type === 'MAIN' ? 'Ana Sayı' : `${document.edition.supplementNo ?? ''}. Mükerrer Sayı`,
+      editionLabel: document.edition.type === 'EXTERNAL' ? (document.sourceName ?? 'Harici kaynak') : document.edition.type === 'MAIN' ? 'Ana Sayı' : `${document.edition.supplementNo ?? ''}. Mükerrer Sayı`,
       storedObject: document.storedObject ? {
         objectKey: document.storedObject.objectKey,
         sha256: document.storedObject.sha256,
@@ -647,7 +689,7 @@ export class PrismaScanRepository {
       if (!run || !job || run.status !== 'AWAITING_RETRY' || run.currentStage !== 'AI_FILTERING' || job.status !== 'AWAITING_RETRY') {
         throw new AiFilterRetryConflictError('AI filter is not awaiting retry')
       }
-      const command = await tx.scanOutbox.create({ data: { scanRunId: runId, commandType: 'RETRY_AI_FILTER', requestKey } })
+      const command = await tx.scanOutbox.create({ data: { ...jobInitiatorFields(),scanRunId: runId, commandType: 'RETRY_AI_FILTER', requestKey } })
       await Promise.all([
         tx.scanRun.update({ where: { id: runId }, data: { status: 'QUEUED', errorSummary: null } }),
         tx.aiJob.update({ where: { id: job.id }, data: { status: 'QUEUED', lastErrorCategory: null, lastErrorMessage: null } }),
@@ -657,9 +699,10 @@ export class PrismaScanRepository {
     })
   }
 
-  async ensurePreviousSourceJobs(runId: string, configuration: PreviousSourceConfiguration): Promise<PreviousSourceJobRecord[]> {
+  async ensurePreviousSourceJobs(runId: string, configuration: PreviousSourceConfiguration, documentIds?: string[]): Promise<PreviousSourceJobRecord[]> {
     const documents = await this.prisma.collectedDocument.findMany({
       where: {
+        ...(documentIds ? {id:{in:documentIds}} : {}),
         edition: { scanRunId: runId },
         filterDecisions: { some: { aiJob: { kind: 'DOCUMENT_FILTER' }, finalDecision: 'IN' } },
       },
@@ -950,7 +993,7 @@ export class PrismaScanRepository {
         throw new PreviousSourceRetryConflictError('Previous source discovery is not awaiting retry')
       }
 
-      const command = await tx.scanOutbox.create({ data: { scanRunId: runId, commandType: 'RETRY_PREVIOUS_SOURCES', requestKey } })
+      const command = await tx.scanOutbox.create({ data: { ...jobInitiatorFields(),scanRunId: runId, commandType: 'RETRY_PREVIOUS_SOURCES', requestKey } })
       await Promise.all([
         tx.scanRun.update({ where: { id: runId }, data: { status: 'QUEUED', errorSummary: null } }),
         tx.previousSourceJob.updateMany({
@@ -1077,17 +1120,17 @@ export class PrismaScanRepository {
       } : null,
     }))
     const topics = await this.prisma.topicProcess.findMany({
-      where: { scanRunId: runId },
+      where: { scanRunId: runId,...topicAccessWhere() },
       orderBy: { createdAt: 'asc' },
       include: {
         evidenceBundle: true,
         analyses: { orderBy: { version: 'asc' } },
         executions: { orderBy: [{ kind: 'asc' }, { attemptNo: 'asc' }] },
-        reports: { include: { revisions: { orderBy: { version: 'asc' } } } },
+        reports: { where:reportAccessWhere(),include: { revisions: { orderBy: { version: 'asc' } } } },
       },
     })
     const noChangeReports = await this.prisma.topicReport.findMany({
-      where: { scanRunId: runId, topicId: null, card: 'K6' },
+      where: { scanRunId: runId,...reportAccessWhere(), topicId: null, card: 'K6' },
       include: { revisions: { orderBy: { version: 'asc' } } },
     })
     const topicAnalysisAudit: NonNullable<CompletedRunSnapshot['topicAnalysisAudit']> = {

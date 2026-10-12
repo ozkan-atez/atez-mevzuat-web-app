@@ -1,3 +1,4 @@
+import { ReportSpecSchema } from '../../topic-analysis/domain/report-spec-schemas'
 import { AnalysisResultSchema } from '../../topic-analysis/domain/analysis-schemas'
 
 export interface DeliverySource {
@@ -15,6 +16,7 @@ export interface EmailDraft {
 }
 
 interface Input {
+  reportSpec?: unknown
   analysisJson: unknown
   fallbackTitle: string
   gazetteUrl: string
@@ -31,15 +33,26 @@ export function buildEmailDraft(input: Input): EmailDraft {
   const parsed = AnalysisResultSchema.safeParse(input.analysisJson)
   const analysis = parsed.success ? parsed.data : null
 
-  const title = analysis?.emailTitle ?? input.fallbackTitle
-  const summary = analysis?.emailSummary ?? ''
+  const report = ReportSpecSchema.safeParse(input.reportSpec)
+  const spec = report.success ? report.data : null
+  const title = spec && spec.card !== 'K6' ? spec.title : analysis?.emailTitle ?? input.fallbackTitle
+  const summary = spec && spec.card !== 'K6' ? spec.summary : analysis?.emailSummary ?? ''
+  const sourceUrl = spec?.source.url ?? input.gazetteUrl
+  let host = ''
+  try { host = new URL(sourceUrl).hostname.toLowerCase() } catch { /* Retain stored source as supporting evidence. */ }
+  const isGazette = host === 'resmigazete.gov.tr' || host === 'www.resmigazete.gov.tr'
+  const primarySource: DeliverySource = isGazette
+    ? { kind: 'GAZETTE', label: `Resmî Gazete — ${input.fallbackTitle}`, url: sourceUrl }
+    : { kind: spec?.card === 'K5' || !host.endsWith('.gov.tr') ? 'SUPPORTING' : 'OFFICIAL', label: spec?.source.label ?? analysis?.officialSources.find(source => source.url === sourceUrl)?.label ?? analysis?.supportingSources.find(source => source.url === sourceUrl)?.label ?? input.fallbackTitle, url: sourceUrl }
 
   return {
     subject: `[ATEZ Mevzuat Radarı] ${title}`,
     bodyText: [
       'Sayın İlgili,',
       '',
-      "T.C. Resmî Gazete'de yayımlanan aşağıdaki mevzuat düzenlemesine ilişkin hazırlanan kurumsal bülten bilgilerinize sunulmuştur:",
+      primarySource.kind === 'GAZETTE'
+        ? "T.C. Resmî Gazete'de yayımlanan aşağıdaki mevzuat düzenlemesine ilişkin hazırlanan kurumsal bülten bilgilerinize sunulmuştur:"
+        : `${primarySource.label} kaynağında yayımlanan belgeye ilişkin hazırlanan kurumsal bülten bilgilerinize sunulmuştur:`,
       '',
       `Mevzuat: ${title}`,
       `Tarih: ${input.targetDate}`,
@@ -49,7 +62,7 @@ export function buildEmailDraft(input: Input): EmailDraft {
       'ATEZ Yazılım Teknolojileri',
     ].join('\n'),
     attachmentName: `${toFileSlug(title)}.pdf`,
-    sources: collectSources(analysis, input),
+    sources: [...collectSources(analysis, input, primarySource), ...(spec?.customization?.sources ?? []).filter(source => source.url).map(source => ({kind: 'SUPPORTING' as const, label: source.label, url: source.url}))].filter((source,index,list) => list.findIndex(item => item.url === source.url) === index),
   }
 }
 
@@ -82,8 +95,9 @@ export function renderEmailHtml(input: { bodyText: string; sources: DeliverySour
 function collectSources(
   analysis: { officialSources: Array<{ label: string; url: string }>; supportingSources: Array<{ label: string; url: string }> } | null,
   input: Pick<Input, 'gazetteUrl' | 'fallbackTitle' | 'previousSource'>,
+  primarySource: DeliverySource,
 ): DeliverySource[] {
-  const sources: DeliverySource[] = [{ kind: 'GAZETTE', label: `Resmî Gazete — ${input.fallbackTitle}`, url: input.gazetteUrl }]
+  const sources: DeliverySource[] = [primarySource]
   if (input.previousSource) {
     sources.push({ kind: 'PREVIOUS', label: input.previousSource.title, url: input.previousSource.sourceUrl })
   }

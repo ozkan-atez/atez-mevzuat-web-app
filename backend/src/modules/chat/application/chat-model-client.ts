@@ -1,3 +1,4 @@
+import type { WebResearch } from './web-grounding'
 import type { ChatToolDeclaration } from './chat-tools'
 import type { ChatMessageView } from './ports'
 
@@ -30,8 +31,10 @@ export type ChatTurn =
 export type ChatModelChunk =
   | { type: 'text'; text: string }
   | { type: 'tool-call'; call: ToolCall }
+  | { type: 'grounding'; research: WebResearch }
 
 export interface ChatModelRequest {
+  webSearch?: boolean
   model: string
   systemInstruction: string
   turns: ChatTurn[]

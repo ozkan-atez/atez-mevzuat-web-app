@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { AiModelClient } from '../../ai/application/ai-model-client'
 import { AiProviderError } from '../../ai/domain/ai-errors'
 import { ReportPatchError, type ReportFieldEdit } from '../domain/report-patch'
-import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
+import { ReportCustomizationSchema, ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import type { ReportDraftRepository, TopicObjectStore } from './ports'
 import type { PatchResponse } from './patch-prompts'
 import {
@@ -137,17 +137,18 @@ export async function executePromptPatch(
 ): Promise<void> {
   const message = await dependencies.repository.getTopicRevisionMessage(command.topicId, command.messageId)
   if (!message) throw new Error('Revizyon talebi bulunamadı.')
+  if(await dependencies.draftRepository.findDraftByRequestKey(`patch:${message.id}`))return
 
   const spec = await currentSpec(command.topicId, dependencies)
   if (!spec) {
-    await recordOutcome(command.topicId, 'ERROR', 'Bu mevzuat için yayımlanmış bir bülten bulunamadı.', dependencies)
+    await recordOutcome(command.topicId, 'ERROR', 'Bu mevzuat için yayımlanmış bir bülten bulunamadı.', dependencies,`patch-error:${message.id}`)
     return
   }
 
   const inputHash = createHash('sha256').update(`${JSON.stringify(spec)}\n${message.content}\n${dependencies.model}`).digest('hex')
   const attempted = await requestPatch(command.topicId, message, spec, inputHash, dependencies)
   if (!attempted.ok) {
-    await recordOutcome(command.topicId, 'ERROR', attempted.message, dependencies)
+    await recordOutcome(command.topicId, 'ERROR', attempted.message, dependencies,`patch-error:${message.id}`)
     return
   }
   const parsed = attempted.parsed
@@ -162,7 +163,7 @@ export async function executePromptPatch(
   const escalations = requests.filter((request) => request.outcome === 'NEEDS_ANALYSIS')
   const refusals = requests.filter((request) => request.outcome === 'NOT_POSSIBLE')
 
-  if (applicable.length === 0) {
+  if (applicable.length === 0 && !parsed.data.customizationJson) {
     if (escalations.length > 0 || parsed.data.outcome === 'NEEDS_ANALYSIS') {
       // The facts have to move, so the request is handed to the analysis path rather
       // than dropped — the user asked for a change and should get one.
@@ -178,7 +179,7 @@ export async function executePromptPatch(
       return
     }
     await recordOutcome(command.topicId, 'REVISION_RESULT',
-      refusals[0]?.reason ?? parsed.data.reason ?? 'Talep, düzenlenebilir alanlarla karşılanamadı.', dependencies)
+      refusals[0]?.reason ?? parsed.data.reason ?? 'Talep, düzenlenebilir alanlarla karşılanamadı.', dependencies,`patch-result:${message.id}`)
     return
   }
 
@@ -199,6 +200,11 @@ export async function executePromptPatch(
   }))
 
   try {
+    if (parsed.data.customizationJson) {
+      const raw = JSON.parse(parsed.data.customizationJson) as Record<string, unknown>
+      const customization = ReportCustomizationSchema.parse({...spec.customization, ...raw, sources: spec.customization?.sources ?? []})
+      edits.push({path: 'customization', value: customization})
+    }
     const view = await applyReportFieldEdits({
       topicId: command.topicId,
       patch: { edits },

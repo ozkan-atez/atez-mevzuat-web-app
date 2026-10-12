@@ -1,4 +1,6 @@
-import type { PrismaClient } from '@prisma/client'
+import type { WebResearch } from '../application/web-grounding'
+import { getActorContext, privateActorScope, resourceOwnership, chatAccessWhere } from '../../../platform/actor-context'
+import { Prisma, type PrismaClient } from '@prisma/client'
 import {
   ChatSessionNotFoundError,
   type AppendChatMessageInput,
@@ -15,7 +17,7 @@ export class PrismaChatRepository implements ChatRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async createSession(): Promise<ChatSessionView> {
-    const session = await this.prisma.chatSession.create({ data: {} })
+    const session = await this.prisma.chatSession.create({ data: {...(getActorContext()?{workspaceId:getActorContext()!.workspaceId,ownerId:getActorContext()!.userId,visibility:'PRIVATE'}:{})} })
     return {
       id: session.id,
       title: session.title,
@@ -25,12 +27,12 @@ export class PrismaChatRepository implements ChatRepository {
   }
 
   async sessionExists(id: string): Promise<boolean> {
-    return (await this.prisma.chatSession.count({ where: { id } })) === 1
+    return (await this.prisma.chatSession.count({ where: { id, ...chatAccessWhere() } })) === 1
   }
 
   async getMessages(sessionId: string): Promise<ChatMessageView[]> {
     const messages = await this.prisma.generalChatMessage.findMany({
-      where: { sessionId },
+      where: { sessionId, session:chatAccessWhere() },
       orderBy: { createdAt: 'asc' },
     })
     return messages.map(toMessageView)
@@ -43,22 +45,30 @@ export class PrismaChatRepository implements ChatRepository {
    */
   async appendMessage(input: AppendChatMessageInput): Promise<ChatMessageView> {
     return this.prisma.$transaction(async (tx) => {
-      const session = await tx.chatSession.findUnique({ where: { id: input.sessionId } })
+      const session = await tx.chatSession.findFirst({ where: { id: input.sessionId,...chatAccessWhere() } })
       if (!session) throw new ChatSessionNotFoundError('Sohbet bulunamadı.')
       const message = await tx.generalChatMessage.create({
         data: {
+          ...(input.research ? {research:input.research as unknown as Prisma.InputJsonValue} : {}),
           sessionId: input.sessionId,
           role: input.role,
           content: input.content,
           status: input.status,
           errorDetail: input.errorDetail ?? null,
+          documentVersionIds: input.documentVersionIds ?? [],
+          operationRequestIds: input.operationRequestIds ?? [],
         },
       })
+      if (input.documentVersionIds?.length) {
+        await tx.documentLink.createMany({ data: [...new Set(input.documentVersionIds)].map(documentVersionId => ({
+          ...resourceOwnership(),actorScope:privateActorScope(), documentVersionId, sessionId: input.sessionId, messageId: message.id, role: 'ATTACHMENT',
+        })) })
+      }
       // The first thing the user said names the conversation; later messages never
       // rename it, so the list stays stable as the user reads it.
       const title = session.title ?? (input.role === 'USER' ? firstLine(input.content, TITLE_LENGTH) : null)
       await tx.chatSession.update({
-        where: { id: input.sessionId },
+        where: { id: input.sessionId,...chatAccessWhere() },
         data: { updatedAt: new Date(), ...(title && !session.title ? { title } : {}) },
       })
       return toMessageView(message)
@@ -66,21 +76,13 @@ export class PrismaChatRepository implements ChatRepository {
   }
 
   async listHistory(): Promise<ChatHistoryItem[]> {
-    const [sessions, threads] = await Promise.all([
-      this.prisma.chatSession.findMany({
-        include: {
-          messages: { orderBy: { createdAt: 'desc' }, take: 1 },
-          _count: { select: { messages: true } },
-        },
-      }),
-      this.prisma.analysisThread.findMany({
-        include: {
-          messages: { orderBy: { createdAt: 'desc' }, take: 1 },
-          _count: { select: { messages: true } },
-          topic: { select: { id: true, document: { select: { title: true } } } },
-        },
-      }),
-    ])
+    // Report threads are internal audit records, not user-created conversations.
+    const sessions = await this.prisma.chatSession.findMany({
+      where:chatAccessWhere(),
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+      include: { messages: { orderBy: { createdAt: 'desc' }, take: 1 }, _count: { select: { messages: true } } },
+    })
 
     const general: ChatHistoryItem[] = sessions.map((session) => ({
       id: session.id,
@@ -92,17 +94,8 @@ export class PrismaChatRepository implements ChatRepository {
       target: `/chat/${session.id}`,
     }))
 
-    const revisions: ChatHistoryItem[] = threads.map((thread) => ({
-      id: thread.id,
-      type: 'REPORT_REVISION',
-      title: thread.title ?? thread.topic.document.title,
-      preview: thread.messages[0] ? firstLine(thread.messages[0].content, PREVIEW_LENGTH) : null,
-      messageCount: thread._count.messages,
-      updatedAt: thread.updatedAt.toISOString(),
-      target: `/reports/${thread.topic.id}`,
-    }))
+    return general
 
-    return [...general, ...revisions].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
   }
 
   /**
@@ -110,25 +103,35 @@ export class PrismaChatRepository implements ChatRepository {
    * audit trail, and passing its id here must delete nothing.
    */
   async deleteSession(id: string): Promise<boolean> {
-    return (await this.prisma.chatSession.deleteMany({ where: { id } })).count === 1
+    return this.prisma.$transaction(async tx => {
+      const deleted = await tx.chatSession.deleteMany({ where: { id, ...chatAccessWhere() } })
+      if (deleted.count) await tx.documentLink.deleteMany({ where: { actorScope:privateActorScope(), sessionId: id } })
+      return deleted.count === 1
+    })
   }
 }
 
 function toMessageView(message: {
+  research?: Prisma.JsonValue | null
   id: string
   role: 'USER' | 'ASSISTANT'
   content: string
   status: 'COMPLETED' | 'FAILED'
   errorDetail: string | null
   createdAt: Date
+  documentVersionIds?: string[]
+  operationRequestIds?: string[]
 }): ChatMessageView {
   return {
+    ...(message.research ? {research:message.research as unknown as WebResearch} : {}),
     id: message.id,
     role: message.role,
     content: message.content,
     status: message.status,
     errorDetail: message.errorDetail,
     createdAt: message.createdAt.toISOString(),
+    documentVersionIds: message.documentVersionIds ?? [],
+    operationRequestIds: message.operationRequestIds ?? [],
   }
 }
 

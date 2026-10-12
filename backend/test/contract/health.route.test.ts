@@ -3,7 +3,7 @@ import { buildApp } from '../../src/app'
 
 describe('GET /api/health', () => {
   it('reports every required dependency as ready', async () => {
-    const app = await buildApp({
+    const app = await buildApp({ authRuntime: false,
       healthChecks: {
         database: vi.fn().mockResolvedValue(undefined),
         queue: vi.fn().mockResolvedValue(undefined),
@@ -21,7 +21,7 @@ describe('GET /api/health', () => {
   })
 
   it('returns unavailable when a dependency cannot be reached', async () => {
-    const app = await buildApp({
+    const app = await buildApp({ authRuntime: false,
       healthChecks: {
         database: vi.fn().mockResolvedValue(undefined),
         queue: vi.fn().mockResolvedValue(undefined),

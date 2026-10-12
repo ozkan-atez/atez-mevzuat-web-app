@@ -84,3 +84,10 @@ describe('GeminiAiModelClient', () => {
     expect(sleep).toHaveBeenNthCalledWith(2, 1_000)
   })
 })
+
+it('identifies a denied project as an actionable non-retryable provider block',async()=>{
+ const transport={generateContent:vi.fn().mockRejectedValue({status:403,message:'Your project has been denied access. Please contact support.'})}
+ const client=new GeminiAiModelClient(transport,{timeoutMs:100})
+ await expect(executeWithAiRetries(()=>client.generateStructured(request),{maxAttempts:3})).rejects.toMatchObject({category:'PERMISSION',retryable:false,message:expect.stringContaining('projesinin erişimi')})
+ expect(transport.generateContent).toHaveBeenCalledTimes(1)
+})

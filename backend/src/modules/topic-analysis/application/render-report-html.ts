@@ -1,3 +1,5 @@
+import { load } from 'cheerio'
+import { sanitizeReportFragment } from '../domain/sanitize-report-fragment'
 import { readFile } from 'node:fs/promises'
 import type { ReportSpec } from '../domain/report-spec-schemas'
 import { renderPageSkeleton } from '../templates/bulten-v2'
@@ -5,13 +7,14 @@ import { renderPageSkeleton } from '../templates/bulten-v2'
 let logoDataUri: string | undefined
 
 export async function renderReportHtml(spec: ReportSpec): Promise<string> {
-  const cardHtml = renderCard(spec)
+  const cardHtml = customizeCard(renderCard(spec), spec)
   return renderPageSkeleton({
     topicId: spec.topicId ?? 'degisiklik-yok',
     documentTitle: escapeHtml(spec.documentTitle),
     reportId: escapeHtml(spec.reportId),
     issueNumber: escapeHtml(spec.issueNumber),
     displayDate: escapeHtml(spec.displayDate),
+    ...('sourceOrigin' in spec && spec.sourceOrigin ? {sourceLabel:escapeHtml(`${spec.sourceOrigin.name} · ${spec.sourceOrigin.authority === 'OFFICIAL' ? 'Resmî kaynak' : 'Destekleyici kaynak'}${spec.sourceOrigin.publicationDateKnown===false?' · Yayın tarihi bilinmiyor; gösterilen tarih tarama tarihidir.':''}`)} : {}),
     cardHtml,
     logoDataUri: await loadLogo(),
   })
@@ -34,7 +37,7 @@ function field(path: string): string {
   return ` data-field="${path}"`
 }
 
-function renderCard(spec: ReportSpec): string {
+export function renderCard(spec: ReportSpec): string {
   if (spec.card === 'K6') return `<article class="card empty-state">
   <div class="badge badge--info">Tür: Bilgi</div>
   <div class="empty-title"><h2>Kapsam içi değişiklik yok</h2><span class="info-mark" aria-label="Bilgi">i</span></div>
@@ -87,3 +90,34 @@ function sourceRow(source: { label: string; url: string }): string { return `<di
 
 function escapeHtml(value: string): string { return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;') }
 function escapeAttribute(value: string): string { return escapeHtml(value) }
+
+function customizeCard(html: string, spec: ReportSpec): string {
+  const config = spec.customization
+  if (!config) return html
+  const $ = load(html, {}, false)
+  const card = $('article').first()
+  const source = card.children('.source').last().clone()
+  if (config.customHtml !== null) card.html(`<div${field('customization.customHtml')}>${sanitizeReportFragment(config.customHtml)}</div>`)
+  else {
+    const groupKeys = ['summary', 'comparison', 'affectedParties', 'dates', 'note', 'table', 'supportingSource']
+    const keyed: Array<{key: string; html: string}> = []
+    card.children('section,aside,.source-class').each((_, element) => {
+      const node = $(element)
+      const firstField = node.find('[data-field]').first().attr('data-field') ?? ''
+      const key = node.hasClass('source-class') ? 'supportingSource' : firstField.startsWith('table.') ? 'table' : firstField.startsWith('timeline.') ? 'dates' : ['oldDeadline','removedRule'].includes(firstField) ? 'comparison' : firstField.split('.')[0] ?? 'summary'
+      if (groupKeys.includes(key)) {
+        if (config.headings[key]) node.find('h2').first().text(config.headings[key]!)
+        keyed.push({key,html: $.html(node)})
+        node.remove()
+      }
+    })
+    for (const section of config.sections) keyed.push({key: `custom:${section.id}`, html: `<section class="block"><h2>${escapeHtml(section.title)}</h2>${sanitizeReportFragment(section.html)}</section>`})
+    const rank = (key: string) => config.order.indexOf(key) < 0 ? config.order.length + keyed.findIndex(item => item.key === key) : config.order.indexOf(key)
+    keyed.sort((a,b) => rank(a.key) - rank(b.key))
+    card.children('.source').remove()
+    for (const section of keyed) card.append(section.html)
+  }
+  if (config.sources.length) card.append(`<section class="block"><h2>${escapeHtml(config.headings.sources ?? 'Kaynakça')}</h2><ul>${config.sources.map(item => `<li>${item.url ? `<a href="${escapeAttribute(item.url)}" rel="noreferrer">${escapeHtml(item.label)}</a>` : escapeHtml(item.label)}${item.fileName ? ` — ${escapeHtml(item.fileName)}` : ''}</li>`).join('')}</ul></section>`)
+  card.append(source)
+  return $.html()
+}

@@ -1,3 +1,4 @@
+import {getActorContext,topicAccessWhere,reportAccessWhere} from '../../../platform/actor-context'
 import { Prisma, type PrismaClient } from '@prisma/client'
 
 export class CustomerGroupNotFoundError extends Error {}
@@ -13,6 +14,13 @@ export interface CustomerGroupInput {
 
 export class PrismaDeliveryRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  async getSuggestedGroupIds(runId: string): Promise<string[]> {
+    const run = await this.prisma.scanRun.findUnique({ where: { id: runId }, select: { workspaceConfig: true } })
+    const config = run?.workspaceConfig
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return []
+    return Array.isArray(config.groupIds) ? config.groupIds.filter((value): value is string => typeof value === 'string') : []
+  }
 
   async listCustomerGroups() {
     const groups = await this.prisma.customerGroup.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] })
@@ -54,7 +62,7 @@ export class PrismaDeliveryRepository {
 
   async listTopicDispatches(topicId: string) {
     const dispatches = await this.prisma.emailDispatch.findMany({
-      where: { topicId },
+      where: { topicId,...(getActorContext()?{topic:{reports:{some:reportAccessWhere()}}}:{}) },
       orderBy: { createdAt: 'desc' },
       take: 20,
     })
@@ -81,6 +89,7 @@ export class PrismaDeliveryRepository {
     bodyHtml: string
     attachmentName: string | null
   }): Promise<{ id: string }> {
+    if(getActorContext() && !await this.prisma.topicReport.findFirst({where:{topicId:input.topicId,...reportAccessWhere()},select:{id:true}}))throw new CustomerGroupNotFoundError('Rapor bulunamadı.')
     try {
       return await this.prisma.emailDispatch.create({ data: input, select: { id: true } })
     } catch (error) {

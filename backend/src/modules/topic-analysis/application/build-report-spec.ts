@@ -1,15 +1,17 @@
 import type { AnalysisResult } from '../domain/analysis-schemas'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 
-export function buildReportSpec(analysis: AnalysisResult, options: { sequence: number }): ReportSpec {
+export function buildReportSpec(analysis: AnalysisResult, options: { sequence: number; sourceOrigin?: {name:string;authority:string;publicationDateKnown?:boolean|undefined} }): ReportSpec {
+  options = {...options,...(!options.sourceOrigin && analysis.document.sourceOrigin ? {sourceOrigin:analysis.document.sourceOrigin} : {})}
   const sequence = String(options.sequence).padStart(2, '0')
   const common = {
+    ...(options.sourceOrigin ? {sourceOrigin:options.sourceOrigin} : {}),
     schemaVersion: 1 as const,
     templateFamily: 'bulten-v2' as const,
     reportId: `${compactDate(analysis.document.gazetteDate)}-${sequence}`,
     topicId: analysis.topicId,
     documentTitle: `ATEZ Mevzuat Radarı Günlük Raporu — ${analysis.document.title}`,
-    issueNumber: analysis.document.gazetteNumber,
+    issueNumber: options.sourceOrigin?.name ?? analysis.document.gazetteNumber,
     displayDate: displayDate(analysis.document.gazetteDate),
     typeLabel: typeLabel(analysis.change.type),
     title: analysis.document.title,
@@ -18,7 +20,11 @@ export function buildReportSpec(analysis: AnalysisResult, options: { sequence: n
     affectedParties: analysis.affectedParties.slice(0, 3).map((item) => `${item.name}: ${item.impact}`),
     dates: analysis.effectiveDates.slice(0, 3).map((item) => `${displayDate(item.date, false)}: ${item.description}`),
     note: analysis.change.operationalImpact ?? null,
-    source: { label: analysis.officialSources[0]?.label ?? 'T.C. Resmî Gazete', url: analysis.officialSources[0]?.url ?? analysis.document.sourceUrl },
+    customization: {
+      headings: {}, order: [], sections: [], templateId: null, customHtml: null,
+      sources: [...analysis.officialSources, ...analysis.supportingSources].filter((item,index,list) => list.findIndex(other => other.url === item.url) === index).map((item,index) => ({id: `analysis-source-${index}`, label: item.label, url: item.url, content: `Analizde kullanılan kaynak: ${item.label} (${item.url})`, kind: 'URL' as const})),
+    },
+    source: { label: options.sourceOrigin?.name ?? analysis.officialSources[0]?.label ?? 'T.C. Resmî Gazete', url: options.sourceOrigin ? analysis.document.sourceUrl : analysis.officialSources[0]?.url ?? analysis.document.sourceUrl },
   }
 
   if (analysis.status === 'PASS_NO_RELEVANT_CONTENT') {
@@ -29,12 +35,16 @@ export function buildReportSpec(analysis: AnalysisResult, options: { sequence: n
       topicId: null,
       card: 'K6',
       documentTitle: 'ATEZ Mevzuat Radarı Günlük Raporu — Değişiklik Yok',
-      issueNumber: analysis.document.gazetteNumber,
+      issueNumber: options.sourceOrigin?.name ?? analysis.document.gazetteNumber,
       displayDate: displayDate(analysis.document.gazetteDate),
       emptyDayText: analysis.change.summary.slice(0, 180),
       source: common.source,
       blocks: ['B1', 'B10'],
     })
+  }
+
+  if (options.sourceOrigin && options.sourceOrigin.authority !== 'OFFICIAL') {
+    return ReportSpecSchema.parse({...common,card:'K5',typeLabel:'Destekleyici duyuru',source:{label:options.sourceOrigin.name,url:analysis.document.sourceUrl},supportingSource:{label:options.sourceOrigin.name,url:analysis.document.sourceUrl},blocks:['B1','B2','B3','B9','B10']})
   }
 
   if (analysis.change.type === 'REPEAL' || analysis.change.type === 'SUSPENSION') {

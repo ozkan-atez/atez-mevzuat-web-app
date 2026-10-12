@@ -1,0 +1,15 @@
+import Fastify from 'fastify'
+import {describe,it,expect,vi} from 'vitest'
+import {automationOperationRoutes} from '../../src/modules/operations/automation-operations.routes'
+import type {OperationService} from '../../src/modules/operations/operation-service'
+const setup=async()=>{
+ const automation={id:'automation1',name:'Günlük kaynak',sourceIds:['source1'],templateId:'template1',datePolicy:'NEW_OR_CHANGED',timezone:'Europe/Istanbul',times:['08:00'],hour:8,minute:0}
+ const service={prisma:{workspaceAutomation:{findUnique:vi.fn().mockResolvedValue(automation)},sourceScanRun:{findUnique:vi.fn()}},start:vi.fn().mockResolvedValue({id:'operation1',status:'QUEUED'})}
+ const app=Fastify();await app.register(automationOperationRoutes,{service:service as unknown as OperationService,prefix:'/api/v1'});await app.ready();return{app,service}
+}
+describe('explicit single-stage automation operation adapter',()=>{
+ it('uses configured source and date policy without touching the scheduler or starting a whole scan',async()=>{const{app,service}=await setup();try{const response=await app.inject({method:'POST',url:'/api/v1/automations/automation1/operations',headers:{'idempotency-key':'request1'},payload:{operation:'DISCOVER',mode:'FILL_MISSING',date:'2026-10-11'}});expect(response.statusCode).toBe(202);expect(service.start).toHaveBeenCalledWith(expect.objectContaining({operation:'DISCOVER',sourceId:'source1',date:'2026-10-11',datePolicy:'NEW_OR_CHANGED',automationId:'automation1'}),expect.stringMatching(/^automation-stage:[a-f0-9]{64}$/));expect(response.json().publicationMode).toBe('MANUAL_APPROVAL')}finally{await app.close()}})
+ it('rejects a source outside the selected automation before creating work',async()=>{const{app,service}=await setup();try{const response=await app.inject({method:'POST',url:'/api/v1/automations/automation1/operations',headers:{'idempotency-key':'request1'},payload:{operation:'DISCOVER',mode:'FORCE',sourceId:'other',date:'2026-10-11'}});expect(response.statusCode).toBe(422);expect(service.start).not.toHaveBeenCalled()}finally{await app.close()}})
+ it('requires an explicit discovery date rather than assigning today silently',async()=>{const{app,service}=await setup();try{const response=await app.inject({method:'POST',url:'/api/v1/automations/automation1/operations',headers:{'idempotency-key':'request1'},payload:{operation:'DISCOVER',mode:'FORCE'}});expect(response.statusCode).toBe(422);expect(service.start).not.toHaveBeenCalled()}finally{await app.close()}})
+ it('uses the configured report template but leaves publication separate',async()=>{const{app,service}=await setup();try{const response=await app.inject({method:'POST',url:'/api/v1/automations/automation1/operations',headers:{'idempotency-key':'request1'},payload:{operation:'BUILD_REPORT',mode:'FILL_MISSING',analysisTaskId:'analysis1'}});expect(response.statusCode).toBe(202);expect(service.start).toHaveBeenCalledWith(expect.objectContaining({operation:'BUILD_REPORT',templateId:'template1',analysisTaskId:'analysis1'}),expect.stringMatching(/^automation-stage:[a-f0-9]{64}$/))}finally{await app.close()}})
+})

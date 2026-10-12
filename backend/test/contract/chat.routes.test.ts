@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../../src/app'
 import type { ChatModelClient } from '../../src/modules/chat/application/chat-model-client'
 import type { AssistantKnowledge } from '../../src/modules/chat/application/assistant-knowledge'
@@ -55,12 +55,31 @@ let repository: MemoryChatRepository
 
 async function startApp(chatModel: ChatModelClient = model) {
   repository = new MemoryChatRepository()
-  return buildApp({ chatRepository: repository, chatModel, chatModelName: 'gemini-test', chatKnowledge: knowledge })
+  return buildApp({ authRuntime: false, chatRepository: repository, chatModel, chatModelName: 'gemini-test', chatKnowledge: knowledge })
 }
 
 describe('chat routes', () => {
   beforeAll(async () => { app = await startApp() })
   afterAll(() => app.close())
+
+  it('starts a real queued scan from a chat command and returns its run link', async () => {
+    const scanStarter = { startScan: vi.fn().mockResolvedValue({ id: 'scan-28', status: 'QUEUED', targetDate: '2026-07-28' }) }
+    const chatRepository = new MemoryChatRepository()
+    const scanApp = await buildApp({ authRuntime: false, chatRepository, chatModel: model, chatKnowledge: knowledge, chatScanStarter: scanStarter })
+    try {
+      const sessionId = (await scanApp.inject({ method: 'POST', url: '/api/v1/chat/sessions' })).json<{ id: string }>().id
+      const response = await scanApp.inject({
+        method: 'POST', url: `/api/v1/chat/sessions/${sessionId}/messages`,
+        payload: { content: '28 Temmuz 2026 taramasını başlat ve rapor oluştur' },
+      })
+      expect(response.statusCode).toBe(200)
+      expect(scanStarter.startScan).toHaveBeenCalledWith({ targetDate: '2026-07-28', requestKey: expect.any(String) })
+      expect(response.body).toContain('/runs/scan-28')
+      expect(response.body).toContain('event: complete')
+    } finally {
+      await scanApp.close()
+    }
+  })
 
   it('creates a session and streams typed events for a valid message', async () => {
     const created = await app.inject({ method: 'POST', url: '/api/v1/chat/sessions' })
@@ -122,4 +141,12 @@ describe('chat routes', () => {
     expect(response.body).not.toContain('provider down')
     await failingApp.close()
   })
+  it('lists only published reports for the correction picker', async () => {
+    const report = { topicId: 'published', title: 'Tebliğ', version: 2, gazetteDate: '2026-10-09', card: 'K1', issueNumber: '1', summary: '', sourceUrl: 'https://example.com', reportUrl: '/reports/published', publishedAt: '2026-10-09T07:00:00Z' }
+    vi.spyOn(knowledge, 'searchReports').mockResolvedValue([report, { ...report, topicId: 'empty-day', title: 'Değişiklik yok', card: 'K6', revisionEditable: true }, { ...report, topicId: 'pending', version: 0 }, { ...report, topicId: 'document-report', revisionEditable: false }])
+    const response = await app.inject({ method: 'GET', url: '/api/v1/chat/reports' })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ reports: [{ topicId: 'published', title: 'Tebliğ', version: 2, gazetteDate: '2026-10-09' },{topicId:'empty-day',title:'Değişiklik yok',version:2,gazetteDate:'2026-10-09'}] })
+  })
+
 })

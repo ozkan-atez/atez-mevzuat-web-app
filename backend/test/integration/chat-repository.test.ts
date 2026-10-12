@@ -50,17 +50,25 @@ describe('PrismaChatRepository', () => {
       .rejects.toThrow(/Sohbet bulunamadı/)
   })
 
-  it('lists report revision threads alongside general sessions, pointing at their report', async () => {
+  it('preserves attached version IDs and removes only conversation links when deleting a session', async () => {
+    const session = await repository.createSession()
+    const versionId = crypto.randomUUID()
+    const message = await repository.appendMessage({ sessionId: session.id, role: 'USER', content: 'Bu belgeyi incele', status: 'COMPLETED', documentVersionIds: [versionId] })
+    expect((await repository.getMessages(session.id))[0]?.documentVersionIds).toEqual([versionId])
+    expect(await prisma.documentLink.findFirst({ where: { messageId: message.id } })).toMatchObject({ documentVersionId: versionId, sessionId: session.id, role: 'ATTACHMENT' })
+    await repository.deleteSession(session.id)
+    expect(await prisma.documentLink.count({ where: { messageId: message.id } })).toBe(0)
+  })
+
+  it('lists only user conversations while preserving report audit threads', async () => {
     const session = await repository.createSession()
     await repository.appendMessage({ sessionId: session.id, role: 'USER', content: 'GTİP nedir?', status: 'COMPLETED' })
-    const { topicId } = await seedTopicThread('PET reçine revizyonu')
+    const { threadId } = await seedTopicThread('PET reçine revizyonu')
 
     const history = await repository.listHistory()
 
-    expect(history.map((item) => item.type).sort()).toEqual(['GENERAL', 'REPORT_REVISION'])
-    expect(history.find((item) => item.type === 'REPORT_REVISION')).toMatchObject({
-      title: 'PET Reçine Tebliği', target: `/reports/${topicId}`, preview: 'PET reçine revizyonu',
-    })
+    expect(history.map(item => item.type)).toEqual(['GENERAL'])
+    expect(await prisma.analysisThread.count({ where: { id: threadId } })).toBe(1)
   })
 
   it('never deletes a revision thread through general-session deletion', async () => {

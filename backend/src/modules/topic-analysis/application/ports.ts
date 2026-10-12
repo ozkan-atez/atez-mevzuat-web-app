@@ -16,6 +16,8 @@ export interface TopicEvidenceAsset {
 }
 
 export interface TopicEvidenceInput {
+  sourceOrigin?: {name:string;authority:string;publicationDateKnown?:boolean|undefined}
+  managedSources?: Array<{id:string;title:string;sourceUrl:string;description:string|null;contentText:string;fetchedAt:string}>
   topicId: string
   runId: string
   targetDate: string
@@ -105,6 +107,8 @@ export interface TopicAnalysisRepository {
 }
 
 export interface RunReportContext {
+  sourceOrigin?: {name:string;authority:string;publicationDateKnown?:boolean|undefined}
+  workspaceConfig?: unknown
   runId: string
   targetDate: string
   indexSourceUrl: string
@@ -125,6 +129,8 @@ export interface CreateTopicReportRevisionInput {
   requestMessageId?: string
   /** Set when the revision came from a published draft, linking it to its edits. */
   draftId?: string
+  draftSequence?: number
+  draftUpdatedAt?: string
 }
 
 export interface StoredTopicReport {
@@ -198,7 +204,9 @@ export interface ReportDraftRepository {
   openDraft(input: { topicId: string; baseVersion: number; spec: unknown; createdBy: string | null }): Promise<ReportDraftRecord>
   /** Binds the draft to the analysis revision whose result it now carries. */
   setDraftAnalysisRevision(draftId: string, analysisRevisionId: string): Promise<void>
+  getPublishedHistory?(topicId:string): Promise<Array<{version:number;createdAt:string;edits:ReportDraftRecord['edits']}>>
   appendEdits(input: {
+    analysisRevisionId?: string
     draftId: string
     spec: unknown
     requestKey: string | null

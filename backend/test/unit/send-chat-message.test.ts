@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { AiProviderError } from '../../src/modules/ai/domain/ai-errors'
 import { sendChatMessage } from '../../src/modules/chat/application/send-chat-message'
 import type { ChatModelChunk, ChatModelClient, ChatModelRequest, ChatStreamEvent } from '../../src/modules/chat/application/chat-model-client'
 import type { AssistantKnowledge } from '../../src/modules/chat/application/assistant-knowledge'
@@ -60,6 +61,55 @@ function message(content: string, role: 'USER' | 'ASSISTANT' = 'USER'): ChatMess
 }
 
 describe('sendChatMessage', () => {
+  it('uses the browser only for an explicit chat request without invoking a source scan',async()=>{
+    const repository=new MemoryChatRepository(),model=new StubModel()
+    const scanStarter={startScan:vi.fn()}
+    const research={mode:'browser' as const,completed:true,sources:[{title:'Gazete',url:'https://www.resmigazete.gov.tr'}],citations:[],queries:[],searchSuggestions:null}
+    const browserResearch={async *run(){yield {type:'activity' as const,label:'İnceleniyor'};yield {type:'result' as const,content:'Tarayıcı yanıtı',research}}}
+    const events=await collect(sendChatMessage({sessionId:'s1',content:'Bu sayfayı incele',browserAgent:true},{repository,model,modelName:'test',knowledge,scanStarter,browserResearch}))
+    expect(repository.saved.at(-1)?.research).toEqual(research)
+    expect(events.at(-1)?.type).toBe('complete')
+    expect(model.requests).toHaveLength(0)
+    expect(scanStarter.startScan).not.toHaveBeenCalled()
+  })
+  it('persists web sources and excludes private conversation history and document tools from Search',async()=>{
+    const repository=new MemoryChatRepository()
+    repository.messages=[message('Private document text')]
+    const research={sources:[{title:'Resmî Gazete',url:'https://www.resmigazete.gov.tr/doc.htm'}],citations:[],queries:['gümrük'],searchSuggestions:null}
+    const model=new StubModel([],[[{type:'text',text:'Kaynaklı yanıt.'},{type:'grounding',research}]])
+    const events=await collect(sendChatMessage({sessionId:'s1',content:'Web’de gümrük duyurularını bul',webSearch:true},{repository,model,modelName:'test',knowledge}))
+    expect(model.requests[0]).toMatchObject({webSearch:true,turns:[{role:'user',content:'Web’de gümrük duyurularını bul'}]})
+    expect(model.requests[0]?.tools).toBeUndefined()
+    expect(repository.saved.at(-1)?.research).toEqual(research)
+    expect(events.at(-1)?.type).toBe('complete')
+  })
+  it('starts a requested scan without waiting for the model to choose a tool', async () => {
+    const repository = new MemoryChatRepository()
+    const model = new StubModel()
+    const scanStarter = { startScan: vi.fn().mockResolvedValue({ id: 'run-28', status: 'QUEUED', targetDate: '2026-07-28' }) }
+
+    const events = await collect(sendChatMessage(
+      { sessionId: 's1', content: '28 Temmuz 2026 için tarama ve rapor oluştur' },
+      { repository, model, modelName: 'gemini-test', knowledge, scanStarter },
+    ))
+
+    expect(scanStarter.startScan).toHaveBeenCalledWith({ targetDate: '2026-07-28', requestKey: expect.any(String) })
+    expect(model.requests).toHaveLength(0)
+    expect(events).toContainEqual({ type: 'tool', name: 'tarama_baslat', label: 'Mevzuat taramasını başlatıyor' })
+    expect(repository.saved.at(-1)?.content).toContain('/runs/run-28')
+    expect(repository.saved.at(-1)?.content).toContain('Raporlar tarama tamamlandığında')
+  })
+
+  it('does not claim a run started when creation fails', async () => {
+    const repository = new MemoryChatRepository()
+    const events = await collect(sendChatMessage(
+      { sessionId: 's1', content: '28 Temmuz 2026 taramasını başlat' },
+      { repository, model: new StubModel(), modelName: 'gemini-test', knowledge,
+        scanStarter: { startScan: async () => { throw new Error('database unavailable') } } },
+    ))
+    expect(events.at(-1)).toEqual({ type: 'error', message: 'Tarama başlatılamadı. Lütfen yeniden deneyin.' })
+    expect(repository.saved.at(-1)).toMatchObject({ status: 'FAILED', errorDetail: 'Tarama başlatılamadı. Lütfen yeniden deneyin.' })
+  })
   it('persists the user message before streaming and completes one assistant message', async () => {
     const repository = new MemoryChatRepository()
     const model = new StubModel()
@@ -170,4 +220,28 @@ describe('sendChatMessage', () => {
     expect(JSON.stringify(events)).not.toContain('AIza')
     expect(repository.saved.at(-1)).toMatchObject({ role: 'ASSISTANT', status: 'FAILED', content: '' })
   })
+  it('answers report queries with real data even when Gemini permission is denied', async () => {
+    const repository = new MemoryChatRepository(); const model = new StubModel()
+    model.error = new AiProviderError('PERMISSION', false, 'provider private text', 403)
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: 'son raporları göster' }, { repository, model, modelName: 'gemini-test', knowledge }))
+    expect(model.requests).toHaveLength(0)
+    expect(events.at(-1)?.type).toBe('complete')
+    expect(repository.saved.at(-1)).toMatchObject({ status: 'COMPLETED', content: expect.stringContaining('İthalat Tebliği') })
+  })
+  it('stores and streams a readable permission error without a raw technical code', async () => {
+    const repository = new MemoryChatRepository(); const model = new StubModel()
+    model.error = new AiProviderError('PERMISSION', false, 'provider private text', 403)
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: 'Merhaba' }, { repository, model, modelName: 'gemini-test', knowledge }))
+    expect(events.at(-1)).toMatchObject({ type: 'error', message: expect.stringContaining('erişim reddedildi') })
+    expect(repository.saved.at(-1)?.errorDetail).not.toContain('MODEL_GENERATION_FAILED')
+    expect(repository.saved.at(-1)?.errorDetail).not.toContain('private text')
+  })
+
+  it('does not store an empty model output as a successful reply', async () => {
+    const repository = new MemoryChatRepository(); const model = new StubModel([])
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: 'Merhaba' }, { repository, model, modelName: 'gemini-test', knowledge }))
+    expect(events.at(-1)?.type).toBe('error')
+    expect(repository.saved.at(-1)?.status).toBe('FAILED')
+  })
+
 })

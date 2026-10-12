@@ -1,9 +1,9 @@
-import type { PgBoss } from 'pg-boss'
+import type { RabbitQueue } from '../../../platform/rabbitmq'
 import type { ScanCommand, ScanQueue } from '../application/ports'
 import { manualScanQueueName } from '../../../platform/queue'
 
-export class PgBossScanQueue implements ScanQueue {
-  constructor(private readonly queue: PgBoss) {}
+export class RabbitScanQueue implements ScanQueue {
+  constructor(private readonly queue: RabbitQueue) {}
 
   async enqueue(command: ScanCommand): Promise<string> {
     const id = await this.queue.send(manualScanQueueName, command, { singletonKey: command.outboxId })

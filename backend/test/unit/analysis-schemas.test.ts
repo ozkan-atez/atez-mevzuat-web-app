@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parseGeneratedAnalysis } from '../../src/modules/topic-analysis/application/execute-topic-analysis'
 import { AnalysisResultSchema } from '../../src/modules/topic-analysis/domain/analysis-schemas'
 
 function validAnalysis(overrides: Record<string, unknown> = {}) {
@@ -50,4 +51,28 @@ describe('AnalysisResultSchema', () => {
       tables: [{ title: 'Oranlar', columns: ['GTİP', 'Oran'], rows: [['3907']], evidenceIds: ['evidence-1'] }],
     }))).toThrow(/sütun/i)
   })
+})
+
+it('ignores malformed model provenance while still validating the analysis',()=>{
+ const value=validAnalysis();const generated={...value,document:{...value.document,sourceOrigin:{}}}
+ expect(parseGeneratedAnalysis(generated).document.sourceOrigin).toBeUndefined()
+ expect(()=>parseGeneratedAnalysis({...generated,change:{}})).toThrow()
+})
+it('can reload a normalized supporting-source analysis without fabricated official sources',()=>{
+ const value=validAnalysis();expect(AnalysisResultSchema.parse({...value,officialSources:[],supportingSources:value.officialSources}).officialSources).toEqual([])
+ expect(()=>AnalysisResultSchema.parse({...value,officialSources:[],supportingSources:[]})).toThrow()
+})
+
+it('permits source-table empty markers but still rejects filler in narrative fields', () => {
+ const table = {title:'Kaynak verileri', columns:['GTİP','Değer'], rows:[['3907','-'], ['3908','—'], ['3909','N/A'], ['3910','']], evidenceIds:['evidence-1']}
+ expect(AnalysisResultSchema.parse(validAnalysis({tables:[table]})).tables[0]!.rows).toEqual(table.rows)
+ expect(() => AnalysisResultSchema.parse(validAnalysis({change:{type:'AMENDMENT',detailedAnalysis:'—',summary:'Özet'}}))).toThrow(/Dolgu/)
+ expect(() => AnalysisResultSchema.parse(validAnalysis({tables:[{...table, rows:[['3907',null]]}]}))).toThrow()
+})
+it('shortens an overlong email subject while preserving the complete source title', () => {
+ const title = 'Mevzuat başlığı '.repeat(20)
+ const parsed = parseGeneratedAnalysis(validAnalysis({emailTitle:title, document:{...validAnalysis().document,title}}))
+ expect(parsed.emailTitle.length).toBeLessThanOrEqual(120)
+ expect(parsed.emailTitle.endsWith('…')).toBe(true)
+ expect(parsed.document.title).toBe(title.trim())
 })

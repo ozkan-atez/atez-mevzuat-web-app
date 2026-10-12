@@ -103,11 +103,55 @@ describe('executeTopicAnalysis', () => {
     expect(repository.revisions).toEqual([])
   })
 
-  it('blocks malformed output without persisting a revision', async () => {
+  it('retries malformed output and leaves an actionable retry after exhaustion', async () => {
     const repository = new MemoryRepository()
     await expect(executeTopicAnalysis(topicId, dependencies(new FixedAi({ ...validAnalysis(), topics: [] }), repository))).rejects.toThrow()
-    expect(repository.status).toBe('BLOCKED')
+    expect(repository.status).toBe('AWAITING_RETRY')
+    expect(repository.executions).toHaveLength(2)
+    expect(repository.error?.message).not.toContain('unrecognized_keys')
     expect(repository.revisions).toEqual([])
+  })
+
+  it('feeds validation issues back to the model and saves only a corrected response', async () => {
+    const repository = new MemoryRepository()
+    const requests: StructuredAiRequest[] = []
+    const ai: AiModelClient = {
+      async generateStructured(request) {
+        requests.push(request)
+        const json = requests.length === 1
+          ? {...validAnalysis(), tables: [{title: 'Oranlar', columns: ['GTİP', 'Oran'], rows: [['3907']], evidenceIds: ['evidence-1']}]}
+          : validAnalysis()
+        return {json, providerRequestId: null, usage: {inputTokens: 10, outputTokens: 10}}
+      },
+    }
+    await executeTopicAnalysis(topicId, dependencies(ai, repository))
+    expect(requests).toHaveLength(2)
+    expect(JSON.stringify(requests[1]!.parts)).toContain('Tablo satırı sütun sayısıyla eşleşmelidir')
+    expect(requests[1]!.parts.slice(0, -1)).toEqual(requests[0]!.parts)
+    expect(repository.revisions).toHaveLength(1)
+    expect(repository.executions.map(item => item.status)).toEqual(['FAILED', 'COMPLETED'])
+  })
+
+  it('accepts source table dashes and shortens only the email subject without a second call', async () => {
+    const repository = new MemoryRepository()
+    const original = validAnalysis()
+    original.document.title = 'Uzun mevzuat başlığı '.repeat(12)
+    const ai = new FixedAi({...original, emailTitle: original.document.title,
+      tables: [{title: 'Oranlar', columns: ['GTİP', 'Oran'], rows: [['3907', '—'], ['3908', 'N/A']], evidenceIds: ['evidence-1']}]})
+    const result = await executeTopicAnalysis(topicId, dependencies(ai, repository))
+    expect(ai.calls).toBe(1)
+    expect(result.analysis.document.title).toBe(original.document.title.trim())
+    expect(result.analysis.emailTitle.length).toBeLessThanOrEqual(120)
+    expect(result.analysis.tables[0]!.rows[0]![1]).toBe('—')
+  })
+
+  it('rejects inferred former rules when no previous document was retrieved', async () => {
+    const repository = new MemoryRepository()
+    const ai = new FixedAi({...validAnalysis(),change:{...validAnalysis().change,previousRule:'Önceden özel bir oran yoktu.'},comparisons:[{label:'Oran',before:'Yoktu',after:'Yeni oran',evidenceIds:['evidence-1']}]})
+    await expect(executeTopicAnalysis(topicId,dependencies(ai,repository))).rejects.toMatchObject({category:'INVALID_RESPONSE'})
+    expect(ai.calls).toBe(2)
+    expect(repository.revisions).toEqual([])
+    expect(repository.status).toBe('AWAITING_RETRY')
   })
 
   it('reuses a persisted analysis revision after a retry delivery crash', async () => {

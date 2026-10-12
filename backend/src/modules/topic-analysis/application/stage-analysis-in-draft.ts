@@ -12,6 +12,9 @@ export interface StageAnalysisInput {
   /** The report spec the analysis revision produced. */
   spec: ReportSpec
   analysisRevisionId: string
+  previousSpec?: ReportSpec
+  preserveCustomization?: boolean
+  stageKind?: 'ANALYSIS' | 'PUBLICATION'
   prompt: string | null
   chatMessageId: string | null
 }
@@ -31,6 +34,8 @@ export async function stageAnalysisInDraft(
   input: StageAnalysisInput,
   dependencies: Dependencies,
 ): Promise<{ stagedChanges: number }> {
+  const requestKey=input.chatMessageId?`${input.stageKind==='PUBLICATION'?'publication':'analysis'}-stage:${input.chatMessageId}`:null
+  if(requestKey && await dependencies.repository.findDraftByRequestKey(requestKey))return {stagedChanges:0}
   const base = await dependencies.repository.getPublishedBase(input.topicId)
   if (!base) throw new Error('Bu mevzuat için yayımlanmış bir bülten yok.')
 
@@ -39,7 +44,11 @@ export async function stageAnalysisInDraft(
     ? ReportSpecSchema.parse(open.spec)
     : ReportSpecSchema.parse(JSON.parse((await dependencies.objectStore.getContent(base.specObjectKey)).toString('utf8')))
 
-  const differences = diffReportSpecs(current, input.spec)
+  // Analysis revisions retain the user's layout, source evidence and custom sections.
+  const target=ReportSpecSchema.parse({...input.spec,...(input.preserveCustomization!==false?{customization:current.customization}:{})})
+  const baseline=input.previousSpec?ReportSpecSchema.parse({...input.previousSpec,...(input.preserveCustomization!==false?{customization:current.customization}:{})}):current
+  const revisedSpec=input.previousSpec && baseline.card===target.card?mergeChangedFields(current,baseline,target):target
+  const differences = diffReportSpecs(current, revisedSpec)
   if (differences.length === 0) return { stagedChanges: 0 }
 
   const draft = open ?? await dependencies.repository.openDraft({
@@ -51,8 +60,9 @@ export async function stageAnalysisInDraft(
 
   await dependencies.repository.appendEdits({
     draftId: draft.id,
-    spec: input.spec,
-    requestKey: input.chatMessageId ? `analysis-stage:${input.chatMessageId}` : null,
+    analysisRevisionId:input.analysisRevisionId,
+    spec: revisedSpec,
+    requestKey,
     source: 'AI',
     prompt: input.prompt,
     chatMessageId: input.chatMessageId,
@@ -66,6 +76,21 @@ export async function stageAnalysisInDraft(
 
   // Publishing must bind the report to the analysis it was rendered from, not to
   // the older one the draft started on.
-  await dependencies.repository.setDraftAnalysisRevision(draft.id, input.analysisRevisionId)
   return { stagedChanges: differences.length }
+}
+
+
+/** Apply only fields changed by this analysis; keep unrelated earlier draft edits. */
+function mergeChangedFields(current:ReportSpec,baseline:ReportSpec,target:ReportSpec):ReportSpec {
+ const merged=JSON.parse(JSON.stringify(current)) as Record<string,unknown>
+ for(const change of diffReportSpecs(baseline,target)) {
+  const parts=change.path.split('.')
+  let source:unknown=target,exists=true
+  for(const part of parts){if(!source || typeof source!=='object' || !Object.hasOwn(source,part)){exists=false;break}source=(source as Record<string,unknown>)[part]}
+  let destination=merged
+  for(const part of parts.slice(0,-1)){if(!destination[part] || typeof destination[part]!=='object')destination[part]={};destination=destination[part] as Record<string,unknown>}
+  const key=parts.at(-1)!
+  if(exists)destination[key]=JSON.parse(JSON.stringify(source));else delete destination[key]
+ }
+ return ReportSpecSchema.parse(merged)
 }
