@@ -9,10 +9,8 @@ export const applyEditsSchema = z.object({
   edits: z.array(ReportFieldEditSchema).min(1).max(50),
   /** The revision the client rendered; omitted only when it has not loaded one yet. */
   expectedVersion: z.number().int().positive().optional(),
-  expectedDraftUpdatedAt: z.string().datetime().nullable().optional(),
 }).strict()
 
 export const publishDraftSchema = z.object({
   expectedVersion: z.number().int().positive().optional(),
-  expectedDraftUpdatedAt: z.string().datetime().nullable().optional(),
 }).strict()

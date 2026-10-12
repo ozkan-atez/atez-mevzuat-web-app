@@ -1,5 +1,3 @@
-import { emptyChatContext, ChatScopeError, type ChatScopeResolver } from './application/chat-context'
-import type { UsageRecorder } from '../usage/metered-chat-model'
 import type { BrowserResearch } from './application/browser-research'
 import { installLocalWorkspaceBoundary } from '../../platform/local-workspace-access'
 import type { ChatOperations } from './application/chat-operations'
@@ -13,8 +11,6 @@ import { MAX_MESSAGE_LENGTH, sendChatMessage } from './application/send-chat-mes
 import type { TariffLookup } from '../tariff/tariff-lookup'
 
 export interface ChatRouteOptions {
-  scopeResolver?:ChatScopeResolver
-  recordUsage?:UsageRecorder
   browserResearch?:BrowserResearch
   repository: ChatRepository
   model: ChatModelClient
@@ -26,8 +22,6 @@ export interface ChatRouteOptions {
 }
 
 const messageBodySchema = z.object({
-  requestKey:z.string().uuid().optional(),
-  context:z.object({mode:z.enum(['SELECTED','WEB','BROWSER']),sourceIds:z.array(z.string().uuid()).max(30),documentVersionIds:z.array(z.string().uuid()).max(10),templateId:z.string().uuid().optional(),templateRevision:z.number().int().positive().optional()}).strict().optional(),
   browserAgent:z.boolean().optional(),
   webSearch:z.boolean().optional(),
   content: z.string().trim().min(1).max(MAX_MESSAGE_LENGTH),
@@ -51,7 +45,7 @@ export async function chatRoutes(app: FastifyInstance, options: ChatRouteOptions
   app.get('/sessions/:id/messages', async (request, reply) => {
     const { id } = request.params as { id: string }
     if (!await options.repository.sessionExists(id)) return reply.code(404).send({ message: 'Sohbet bulunamadı.' })
-    return reply.send({ context:await options.repository.getContext?.(id) ?? emptyChatContext(), sessionId: id, messages: await options.repository.getMessages(id) })
+    return reply.send({ sessionId: id, messages: await options.repository.getMessages(id) })
   })
 
   app.delete('/sessions/:id', async (request, reply) => {
@@ -72,12 +66,6 @@ export async function chatRoutes(app: FastifyInstance, options: ChatRouteOptions
     for (const versionId of new Set(body.data.documentVersionIds)) {
       if (!await options.knowledge.getArchiveDocumentVersion?.({ versionId })) return reply.code(404).send({ message: 'Seçilen belge sürümü bulunamadı veya erişilemiyor.' })
     }
-
-    const previous=await options.repository.getContext?.(id)
-    const context=body.data.context ?? {...(previous??emptyChatContext()),documentVersionIds:body.data.documentVersionIds,mode:body.data.webSearch?'WEB' as const:body.data.browserAgent?'BROWSER' as const:'SELECTED' as const}
-    if((context.mode!=='SELECTED' || body.data.webSearch || body.data.browserAgent)&&(context.sourceIds.length||context.documentVersionIds.length))return reply.code(400).send({message:'Web araştırmasına geçmek için seçili kaynakları ve belgeleri kaldırın.'})
-    try { if(options.scopeResolver)await options.scopeResolver.resolve(context) }
-    catch(error) {if(error instanceof ChatScopeError)return reply.code(422).send({message:error.message});throw error}
 
     // The browser closing the tab must stop the provider call; otherwise the model
     // keeps generating an answer nobody will ever read.
@@ -103,7 +91,7 @@ export async function chatRoutes(app: FastifyInstance, options: ChatRouteOptions
     }, 3000) : null
     try {
       for await (const event of sendChatMessage(
-        { ...(body.data.requestKey?{requestKey:body.data.requestKey}:{}), ...(options.scopeResolver?{context}:{}), sessionId: id, content: body.data.content, ...(body.data.webSearch?{webSearch:true}:{}), ...(body.data.browserAgent?{browserAgent:true}:{}), documentVersionIds: body.data.documentVersionIds, ...(body.data.operationMode ? { operationMode: body.data.operationMode } : {}), signal: controller.signal },
+        { sessionId: id, content: body.data.content, ...(body.data.webSearch?{webSearch:true}:{}), ...(body.data.browserAgent?{browserAgent:true}:{}), documentVersionIds: body.data.documentVersionIds, ...(body.data.operationMode ? { operationMode: body.data.operationMode } : {}), signal: controller.signal },
         { ...options, onFailure: (error) => request.log.error({ err: error }, 'Sohbet yanıtı tamamlanamadı') },
       )) {
         if (controller.signal.aborted || reply.raw.writableEnded) break

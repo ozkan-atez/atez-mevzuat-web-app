@@ -1,7 +1,6 @@
-import { ReportConversationPanel } from '../revision/ReportConversationPanel'
 import { ReportCorrectionDrawer } from '../revision/ReportCorrectionDrawer'
 import { Can } from '../auth/Can'
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Drawer, Empty, Select, Typography } from 'antd'
 import { CloseOutlined, MenuOutlined } from '@ant-design/icons'
@@ -16,8 +15,6 @@ import { getTopic } from '../analysis/api'
 import { ReportWorkspace } from '../revision/ReportWorkspace'
 
 interface ChatLocationState {
-  scanIntent?:boolean
-  context?:import('./types').ChatContext
   browserAgent?:boolean
   webSearch?:boolean
   initialMessage?: string
@@ -27,14 +24,9 @@ interface ChatLocationState {
 export function ChatScreen() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const selectedSourceId=searchParams.get('sourceId')
-  const sourceHandoff=useMemo(()=>selectedSourceId?{mode:'SELECTED' as const,sourceIds:[selectedSourceId],documentVersionIds:[]}:undefined,[selectedSourceId])
-  const reportId = searchParams.get('report')
-  const reportConversationId=searchParams.get('conversation')
   const topicId = searchParams.get('topic')
   const navigate = useNavigate()
   const location = useLocation()
-  const initialContext=(location.state as ChatLocationState|null)?.context
   const initialBrowserAgent=(location.state as ChatLocationState | null)?.browserAgent
   const initialWebSearch = (location.state as ChatLocationState | null)?.webSearch
   const initialDocumentVersionIds = (location.state as ChatLocationState | null)?.documentVersionIds
@@ -110,18 +102,18 @@ export function ChatScreen() {
     if (creating.current || !content.trim()) return
     creating.current = true
     setHandoffError(null)
-    return createChatSession()
-      .then((session) => {navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage: content.trim(), documentVersionIds,...(options.context?{context:options.context}:{}),...(options.webSearch?{webSearch:true}:{}),...(options.browserAgent?{browserAgent:true}:{}) }, viewTransition: true });return true})
+    createChatSession()
+      .then((session) => navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage: content.trim(), documentVersionIds,...(options.webSearch?{webSearch:true}:{}),...(options.browserAgent?{browserAgent:true}:{}) }, viewTransition: true }))
       .catch((caught: unknown) => {
         creating.current = false
-        setHandoffError(caught instanceof Error ? caught.message : 'Sohbet başlatılamadı.');return false
+        setHandoffError(caught instanceof Error ? caught.message : 'Sohbet başlatılamadı.')
       })
   }, [navigate])
 
   useEffect(() => {
     if (sessionId || !initialMessage) return
-    startConversation(initialMessage, initialDocumentVersionIds,{...(initialContext?{context:initialContext}:{}),...(initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})})
-  }, [initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, initialContext, sessionId, startConversation])
+    startConversation(initialMessage, initialDocumentVersionIds,initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})
+  }, [initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, sessionId, startConversation])
 
   // The handed-over message is sent exactly once, and the router state is cleared
   // so a refresh or a back-navigation cannot resend it.
@@ -137,10 +129,10 @@ export function ChatScreen() {
       if (cancelled || handedOff.current === key) return
       handedOff.current = key
       navigate(`/chat/${sessionId}`, { replace: true, state: null })
-      void conversation.send(initialMessage, initialDocumentVersionIds,{...(initialContext?{context:initialContext}:{}),...(initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})})
+      void conversation.send(initialMessage, initialDocumentVersionIds,initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})
     })
     return () => { cancelled = true }
-  }, [conversation.send, initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, initialContext, navigate, sessionId])
+  }, [conversation.send, initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, navigate, sessionId])
 
 
   const handleDelete = useCallback(async (id: string) => {
@@ -164,8 +156,8 @@ export function ChatScreen() {
   // On the empty state there is no conversation yet, so the first message opens
   // one and is sent through the same handoff the dashboard uses.
   const send = (content: string, documentVersionIds: string[] = [], options:ChatSendOptions = {}) => {
-    if (sessionId) return conversation.send(content, documentVersionIds,options)
-    else return startConversation(content, documentVersionIds,options)
+    if (sessionId) void conversation.send(content, documentVersionIds,options)
+    else startConversation(content, documentVersionIds,options)
   }
 
   const openReportLink = (event: MouseEvent<HTMLDivElement>) => {
@@ -209,7 +201,6 @@ export function ChatScreen() {
       </Drawer>
 
       <section className="atez-chat-main">
-        {reportId ? <div className="atez-chat-scroll"><Button type="text" onClick={()=>navigate('/chat')}>Genel sohbete dön</Button><ReportConversationPanel key={reportId} reportId={reportId} initialConversationId={reportConversationId??undefined} showPreview /></div> : <>
         <header className="atez-chat-header">
           <Button aria-label="Sohbet geçmişini aç" icon={<MenuOutlined />} onClick={() => setIsDrawerOpen(true)} className="atez-chat-menu-button" />
           <div><Typography.Text strong>{history.find((item) => item.id === sessionId)?.title ?? 'Mevzuat Asistanı'}</Typography.Text><Typography.Text type="secondary" className="atez-chat-header-subtitle">Genel mevzuat soruları</Typography.Text></div>
@@ -226,7 +217,7 @@ export function ChatScreen() {
           <Alert className="atez-chat-error" type="warning" showIcon message={handoffError ?? conversation.error} />
         )}
 
-        <Can permission="chat.write"><ConversationComposer key={sessionId??'new'} scanIntent={Boolean((location.state as ChatLocationState|null)?.scanIntent)} initialContext={conversation.messages.findLast(message=>message.context)?.context??sourceHandoff} isSending={conversation.isSending} onStop={conversation.stop} onSend={send} /></Can></>}
+        <Can permission="chat.write"><ConversationComposer isSending={conversation.isSending} onStop={conversation.stop} onSend={send} /></Can>
       </section>
       <ReportCorrectionDrawer open={reportOpen} onClose={closeReport} extra={<Button size="small" onClick={() => void loadReports()} loading={reportLoading}>Raporları yenile</Button>}>
         <div className="atez-report-correction-content">

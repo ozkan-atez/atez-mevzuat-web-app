@@ -1,5 +1,3 @@
-import { sectionSchema, semanticDefaultSections } from './template-sections'
-import { templateAccessWhere } from '../managed-sources/source-access'
 import { isLocalWorkspaceRequest } from '../../platform/local-workspace-access'
 import { getActorContext, privateResourceWhere } from '../../platform/actor-context'
 import type { FastifyInstance } from 'fastify'
@@ -14,10 +12,10 @@ import { rabbitQueue } from '../../platform/rabbitmq'
 import { getDayActivity } from './day-activity'
 
 const sourceSchema = z.object({ key: z.string().trim().min(1).max(120), name: z.string().trim().min(1).max(200), description: z.string().max(2000).nullable().optional(), baseUrl: z.url().refine(s => ['https:', 'http:'].includes(new URL(s).protocol)), authorityType: z.enum(['OFFICIAL', 'REFERENCE', 'COMMERCIAL', 'PROFESSIONAL', 'UNVERIFIED']).default('REFERENCE'), isActive: z.boolean().default(true) })
-const templateSchema = z.object({ revision: z.number().int().positive().optional(), name: z.string().trim().min(1).max(200), description: z.string().max(2000).nullable().optional(), html: z.string().min(1).max(500000), sections: z.array(sectionSchema).min(1).max(30).refine(rows => new Set(rows.map(r => r.id)).size === rows.length, 'Bölüm kimlikleri benzersiz olmalıdır.'), isActive: z.boolean().default(true) })
+const sectionSchema = z.object({ id: z.string().min(1).max(80), heading: z.string().max(300), html: z.string().max(100000), enabled: z.boolean() })
+const templateSchema = z.object({ name: z.string().trim().min(1).max(200), description: z.string().max(2000).nullable().optional(), html: z.string().min(1).max(500000), sections: z.array(sectionSchema).min(1).max(30).refine(rows => new Set(rows.map(r => r.id)).size === rows.length, 'Bölüm kimlikleri benzersiz olmalıdır.'), isActive: z.boolean().default(true) })
 export const automationSchema = z.object({ name: z.string().trim().min(1).max(200), datePolicy: z.enum(['PUBLISHED_DATE','NEW_OR_CHANGED']).default('PUBLISHED_DATE'), times: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)).max(24).refine(times => new Set(times).size === times.length, 'Tekrar saatleri benzersiz olmalıdır.').default([]), weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).refine(days => new Set(days).size === days.length, 'Günler benzersiz olmalıdır.').default([1,2,3,4,5,6,7]), hour: z.number().int().min(0).max(23).default(8), minute: z.number().int().min(0).max(59).default(0), timezone: z.string().refine(tz => DateTime.now().setZone(tz).isValid).default('Europe/Istanbul'), sourceIds: z.array(z.string().min(1)).min(1), groupIds: z.array(z.string().min(1)).default([]), templateId: z.string().nullable().default(null), isActive: z.boolean().default(true) })
 const userSchema = z.object({ email: z.email(), name: z.string().max(200).nullable().optional(), role: z.enum(['ADMIN', 'EDITOR', 'VIEWER']).default('VIEWER'), isActive: z.boolean().default(true) })
-class TemplateRevisionConflict extends Error {}
 function clean(value: object, input?: object) { return Object.fromEntries(Object.entries(value).filter(([key, v]) => v !== undefined && (!input || Object.hasOwn(input, key)))) }
 export async function workspaceRoutes(app: FastifyInstance, { prisma, modularOperationsEnabled = false }: { prisma: PrismaClient; modularOperationsEnabled?: boolean }) {
   app.get('/api/v1/workspace/activity', async (request, reply) => {
@@ -30,7 +28,6 @@ export async function workspaceRoutes(app: FastifyInstance, { prisma, modularOpe
   const initialize = async () => { if (!initialized) { await ensureWorkspaceCatalog(prisma); initialized = true } }
   const guarded = (handler: (request: any, reply: any) => Promise<unknown>) => async (request: any, reply: any) => {
     try { return await handler(request, reply) } catch (error) {
-      if(error instanceof TemplateRevisionConflict)return reply.code(409).send({message:'Şablon başka bir kullanıcı tarafından değiştirildi. Güncel sürümü açın.'})
       if (error instanceof TemplateContentError) return reply.code(400).send({ message: error.message })
       if (error instanceof z.ZodError) return reply.code(400).send({ message: 'Geçerli alanlar gereklidir.', issues: error.issues })
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -40,18 +37,19 @@ export async function workspaceRoutes(app: FastifyInstance, { prisma, modularOpe
       throw error
     }
   }
-  app.get('/api/v1/templates', guarded(async () => { await initialize(); return { templates: (await prisma.reportTemplate.findMany({ where: templateAccessWhere(), orderBy: { createdAt: 'asc' } })).map(template => ({...template, html: templateHtml})), components: sectionComponents, defaultHtml: templateHtml, defaultSections: semanticDefaultSections } }))
-  app.post('/api/v1/templates', guarded(async (r, reply) => reply.code(201).send(await prisma.reportTemplate.create({ data: { ...templateSchema.parse(r.body), workspaceId:getActorContext()?.workspaceId??null, html: templateHtml, sections: normalizeTemplateSections(templateSchema.parse(r.body).sections) } as Prisma.ReportTemplateCreateInput }))))
+  app.get('/api/v1/sources', guarded(async () => { await ensureWorkspaceCatalog(prisma); return { sources: (await prisma.source.findMany({ orderBy: { createdAt: 'asc' }, include: { endpoints: true, profiles: { select: { status: true } }, credentials: { select: { id: true } } } })).map(s => ({ ...s, credentials: undefined, name: s.name || s.key, scanSupported: scanSupported(s) })) } }))
+  app.post('/api/v1/sources', guarded(async (r, reply) => reply.code(201).send(await prisma.source.create({ data: clean(sourceSchema.parse(r.body)) as Prisma.SourceCreateInput }))))
+  app.patch('/api/v1/sources/:id', guarded(async r => prisma.source.update({ where: { id: r.params.id }, data: clean(sourceSchema.partial().parse(r.body), r.body) as Prisma.SourceUpdateInput })))
+  app.delete('/api/v1/sources/:id', guarded(async (r, reply) => { await prisma.source.update({ where: { id: r.params.id }, data: { isActive: false } }); return reply.code(204).send() }))
+  app.get('/api/v1/templates', guarded(async () => { await initialize(); return { templates: (await prisma.reportTemplate.findMany({ orderBy: { createdAt: 'asc' } })).map(template => ({...template, html: templateHtml})), components: sectionComponents, defaultHtml: templateHtml, defaultSections } }))
+  app.post('/api/v1/templates', guarded(async (r, reply) => reply.code(201).send(await prisma.reportTemplate.create({ data: { ...templateSchema.parse(r.body), html: templateHtml, sections: normalizeTemplateSections(templateSchema.parse(r.body).sections) } as Prisma.ReportTemplateCreateInput }))))
   app.patch('/api/v1/templates/:id', guarded(async r => {
     const data = clean(templateSchema.partial().parse(r.body), r.body)
-    const original = await prisma.reportTemplate.findFirstOrThrow({ where: {id:r.params.id,...templateAccessWhere()} })
-    if(r.body.revision !== undefined && r.body.revision !== original.revision) throw new TemplateRevisionConflict()
+    const original = await prisma.reportTemplate.findUniqueOrThrow({ where: {id:r.params.id} })
     const sections = r.body.sections ? normalizeTemplateSections(templateSchema.parse({...r.body,name:r.body.name ?? original.name,html:templateHtml}).sections, original.sections as unknown as typeof defaultSections) : undefined
-    const result=await prisma.reportTemplate.updateMany({where:{id:r.params.id,revision:original.revision,...templateAccessWhere()},data:{...data,revision:{increment:1},html:templateHtml,...(sections ? {sections} : {})} as Prisma.ReportTemplateUpdateManyMutationInput})
-    if(!result.count)throw new TemplateRevisionConflict()
-    return prisma.reportTemplate.findUniqueOrThrow({where:{id:r.params.id}})
+    return prisma.reportTemplate.update({where:{id:r.params.id},data:{...data,html:templateHtml,...(sections ? {sections} : {})} as Prisma.ReportTemplateUpdateInput})
   }))
-  app.delete('/api/v1/templates/:id', guarded(async (r, reply) => { await prisma.reportTemplate.updateMany({ where: { id: r.params.id,...templateAccessWhere() }, data: { isActive: false,revision:{increment:1} } }); return reply.code(204).send() }))
+  app.delete('/api/v1/templates/:id', guarded(async (r, reply) => { await prisma.reportTemplate.update({ where: { id: r.params.id }, data: { isActive: false } }); return reply.code(204).send() }))
   app.get('/api/v1/background-jobs', async (_request, reply) => {
     try {
       const [queues, jobs] = await Promise.all([rabbitQueue.status(), prisma.backgroundJob.findMany({ where: { status: { not: 'COMPLETED' } }, orderBy: { updatedAt: 'desc' }, take: 50 })])
@@ -92,6 +90,10 @@ export async function workspaceRoutes(app: FastifyInstance, { prisma, modularOpe
       if (data.role !== undefined || data.isActive === false) await tx.authSession.updateMany({ where: { userId: r.params.id, workspaceId: actor.workspaceId, revoked: false }, data: { revoked: true, revokedAt: new Date(), reason: 'MEMBERSHIP_CHANGED', encryptedTokens: null, version: { increment: 1 } } })
       return user
     })
+  }))
+  app.get('/api/v1/usage', guarded(async () => {
+    const [runs, reports, documents, groups, dispatches, sessions, calls, topics, previous, storage, sourceDocuments, sourceReports] = await Promise.all([prisma.scanRun.count(), prisma.topicReport.count(), prisma.collectedDocument.count(), prisma.customerGroup.count(), prisma.emailDispatch.count(), prisma.chatSession.count(), prisma.aiCall.aggregate({ _sum: { inputTokens: true, outputTokens: true } }), prisma.topicAiExecution.aggregate({ _sum: { inputTokens: true, outputTokens: true } }), prisma.previousSourceCall.aggregate({ _sum: { inputTokens: true, outputTokens: true } }), prisma.storedObject.aggregate({ _sum: { byteSize: true } }), prisma.sourceScanDocument.count(), prisma.sourceScanRun.count({ where: { reportHtml: { not: null } } })])
+    return { runs, reports: reports + sourceReports, documents: documents + sourceDocuments, groups, dispatches, sessions, inputTokens: [calls, topics, previous].reduce((sum, c) => sum + (c._sum.inputTokens ?? 0), 0), outputTokens: [calls, topics, previous].reduce((sum, c) => sum + (c._sum.outputTokens ?? 0), 0), storedBytes: (storage._sum.byteSize ?? 0n).toString() }
   }))
   const toAttempt = (row: { id: string; lessonId: string; period: string; score: number }) => {
     const total = row.lessonId === 'weekly' ? 5 : 3

@@ -1,10 +1,9 @@
-import { sourceAccessWhere, sourceProfileAccessWhere } from './source-access'
-import {getActorContext,jobInitiatorFields} from '../../platform/actor-context'
+import {jobInitiatorFields} from '../../platform/actor-context'
 import { captureSourceDocument } from './source-attachments'
 import { createHash } from 'node:crypto'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import { processSourceDocuments, type SourceProcessingDependencies } from './process-source-documents'
-import { builtinProfile, sourceProfileSchema } from './source-profile'
+import { sourceProfileSchema } from './source-profile'
 import { activeSourceProfile } from './source-profile-store'
 import { sourceLogin } from './source-secrets'
 import { openSourceSession, type SourceSession } from './source-session'
@@ -13,7 +12,7 @@ import { initializeSourceStages, recordSourceStage, stopPendingStages, type Sour
 import type { TariffCredentials } from './tariff-auth'
 
 export async function createSourceRun(prisma: PrismaClient, input: { sourceId: string; scanRunId?: string; targetDate: string; requestKey: string; trigger: 'MANUAL' | 'CRON'; scheduleSlot?: string }) {
-  const source = await prisma.source.findFirst({ where: { id: input.sourceId,...sourceAccessWhere() }, include: { endpoints: { where: { status: 'ACTIVE', adapter: { not: null } } } } })
+  const source = await prisma.source.findUnique({ where: { id: input.sourceId }, include: { endpoints: { where: { status: 'ACTIVE', adapter: { not: null } } } } })
   if (!source?.isActive || source.key === 'resmi-gazete') throw new Error('Bu kaynak için etkin tarihli tarama akışı bulunamadı.')
   const existing = await prisma.sourceScanRun.findUnique({ where: { requestKey: input.requestKey } })
   if (existing) return existing
@@ -39,20 +38,11 @@ export async function executeSourceRun(prisma: PrismaClient, runId: string, tari
   const stage = async (name: SourceStage, status: string, total=0, completed=0, error:string|null=null) => { active=name; await recordSourceStage(prisma,runId,name,status,total,completed,error) }
   try {
     await initializeSourceStages(prisma,runId);await stage('ACCESS','RUNNING')
-    if(!await prisma.source.findFirst({where:{id:run.sourceId,...sourceAccessWhere()}}))throw new Error('Kaynağa erişilemiyor.')
-    const parentConfig=run.scanRun?.workspaceConfig as Record<string,unknown>|null
     const saved=run.profileSnapshot as {id:string;version:number;config:unknown}|null
-    const requested=Array.isArray(parentConfig?.sourceProfiles)?(parentConfig.sourceProfiles as Array<{sourceId:string;version:number|null}>).find(p=>p.sourceId===run.sourceId):undefined
-    let profile
-    if(saved)profile={...saved,config:sourceProfileSchema.parse(saved.config)}
-    else if(requested){
-      const selected=requested.version===null?null:await prisma.sourceProfile.findFirst({where:{sourceId:run.sourceId,version:requested.version,status:'VERIFIED',...sourceProfileAccessWhere()}})
-      const config=selected?.config??(requested.version===null?builtinProfile(run.source.key):null)
-      if(!config)throw new Error('Seçilen kaynak profili artık erişilebilir veya doğrulanmış değil.')
-      profile={id:selected?.id??'builtin',version:selected?.version??0,config:sourceProfileSchema.parse(config)}
-    }else profile=await activeSourceProfile(prisma,run.source)
-    const login=await sourceLogin(prisma,run.sourceId,run.source.key) ?? (!getActorContext()&&run.source.key==='tariff'?tariffCredentials:null) ?? null
+    const profile=saved?{...saved,config:sourceProfileSchema.parse(saved.config)}:await activeSourceProfile(prisma,run.source)
+    const login=await sourceLogin(prisma,run.sourceId,run.source.key) ?? (run.source.key==='tariff'?tariffCredentials:null) ?? null
     session=await openSourceSession(profile.config,login)
+    const parentConfig=run.scanRun?.workspaceConfig as Record<string,unknown>|null
     const datePolicy=parentConfig?.datePolicy==='NEW_OR_CHANGED'?'NEW_OR_CHANGED':run.datePolicy
     await prisma.sourceScanRun.update({where:{id:runId},data:{profileSnapshot:profile as unknown as Prisma.InputJsonValue,datePolicy}})
     await stage('ACCESS','COMPLETED');await stage('DISCOVERY','RUNNING')

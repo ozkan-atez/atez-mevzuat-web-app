@@ -1,6 +1,3 @@
-import { recordUsage } from './modules/usage/usage'
-import { meteredAiModel } from './modules/usage/metered-ai-model'
-import { dispatchSourceSetups, executeSourceSetup, sourceSetupQueue } from './modules/managed-sources/source-setup'
 import { createPreviousSourceExecutor } from './modules/operations/previous-source-executor'
 import { runWithActorContext } from './platform/actor-context'
 import { withJobActor, workerServiceActor, WorkerAuthorizationError } from './platform/worker-actor'
@@ -13,6 +10,7 @@ import { operationQueueName } from './platform/rabbitmq'
 import { rabbitQueue, sourceQueueName, refreshQueueName } from './platform/rabbitmq'
 import { ensureWorkspaceCatalog } from './modules/workspace/catalog'
 import { listRunnableSourceKeys } from './modules/managed-sources/runnable-sources'
+import { refreshActiveSources } from './modules/managed-sources/refresh-active-sources'
 import { executeScanCommand } from './modules/scan-runs/application/execute-scan-command'
 import { dispatchSourceRuns, executeSourceCommand } from './modules/managed-sources/source-job'
 import { runSelectedSources } from './modules/managed-sources/run-selected-sources'
@@ -64,8 +62,7 @@ async function startWorker() {
   })
   const tariffCredentials = tariffCredentialsFromEnv()
   const tariffLookup = tariffCredentials ? new SingleWindowTariffLookup(tariffCredentials) : undefined
-  const rawAiModel = createAiModel(env.gemini.apiKey, env.gemini.timeoutMs)
-  const aiModel = meteredAiModel(rawAiModel, input=>recordUsage(prisma,input), 'SCAN_ANALYSIS')
+  const aiModel = createAiModel(env.gemini.apiKey, env.gemini.timeoutMs)
   const previousSourceSearch = new ResmiGazeteSearch(new SourcePolicy(env.sourceHosts), { timeoutMs: env.sourceTimeoutMs })
   const sourceProcessing: SourceProcessingDependencies = {
     aiModel, http, objectStore, previousSourceSearch, model: env.gemini.model,
@@ -78,7 +75,7 @@ async function startWorker() {
     const operations = new OperationService(prisma, {
       scope: 'local-workspace', versions: { ANALYZE: `standalone-v2.1-roles:${env.gemini.model}`, EXTRACT: 'document-extractor-v2', BUILD_REPORT: 'corporate-draft-v1' },
       executors: {
-        ...createOperationExecutors({ prisma, objectStore, aiModel, templateAiModel:rawAiModel, model: env.gemini.model, maxContextBytes: env.gemini.maxContentBytes,
+        ...createOperationExecutors({ prisma, objectStore, aiModel, model: env.gemini.model, maxContextBytes: env.gemini.maxContentBytes,
           ...(tariffLookup ? { tariffLookup } : {}), extract: (id, scope) => extractDocumentVersion({ prisma, objectStore }, id, scope) }),
         ...createSourceOperationExecutors({ prisma, objectStore }),
         PREVIOUS_SOURCES: createPreviousSourceExecutor({ prisma, objectStore, aiModel, model: env.gemini.model, search: previousSourceSearch }),
@@ -132,18 +129,13 @@ async function startWorker() {
     } finally { dispatching = false }
   }
   // Timers only relay durable commands; network/ingestion work is consumed through RabbitMQ.
-  // Drain obsolete refresh messages without reading external sites. Only explicit work may collect content.
-  await rabbitQueue.work(refreshQueueName, async () => {})
-  await rabbitQueue.work(sourceSetupQueue, async jobs => {
-    for (const job of jobs) {
-      const setup = await prisma.sourceSetupJob.findUniqueOrThrow({where:{id:job.data.jobId}})
-      await withJobActor(prisma, setup, 'config.manage', () => executeSourceSetup(prisma, setup.id, rawAiModel, env.gemini.model))
-    }
+  await rabbitQueue.work(refreshQueueName, async () => {
+    const result = await refreshActiveSources(prisma)
+    if (result.failed) throw new Error(`${result.failed} kaynak yenilenemedi.`)
   })
-  let settingUp = false
-  const setupDispatch = async () => { if(settingUp)return; settingUp=true; try{await dispatchSourceSetups(prisma,rabbitQueue)}finally{settingUp=false} }
-  await setupDispatch()
-  setInterval(() => void setupDispatch().catch(() => console.error('Kaynak kurulum kuyruğu gönderilemedi.')),5000)
+  const refresh = () => rabbitQueue.send(refreshQueueName, {}, { singletonKey: `refresh:${Math.floor(Date.now() / (6 * 60 * 60_000))}` })
+  await refresh()
+  setInterval(() => void refresh().catch(error => console.error('Source refresh dispatch failed:', error)), 6 * 60 * 60_000)
   await prisma.sourceScanRun.updateMany({ where: { scanRunId: null, status: 'RUNNING', queueDispatchedAt: null }, data: { status: 'QUEUED' } })
   await rabbitQueue.work(sourceQueueName, async jobs => {
     for (const job of jobs) {

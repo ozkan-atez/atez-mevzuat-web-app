@@ -9,21 +9,17 @@ describe('Persistent workspace catalog', () => {
   it('reads actual sources and persists a new source through the API', async () => {
     const writes: unknown[] = []
     vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, options?: RequestInit) => {
-      if(String(_url).includes('capabilities'))return new Response(JSON.stringify({maxBytes:20971520,extensions:['.pdf','.docx']}))
-      if(String(_url).includes('templates'))return new Response(JSON.stringify({templates:[],components:[]}))
-      if(String(_url).includes('documents'))return new Response(JSON.stringify({documents:[],total:0}))
-      if(String(_url).includes('managed-sources'))return new Response(JSON.stringify({sources:[]}))
       if (options?.method === 'POST') { writes.push(JSON.parse(String(options.body))); return new Response(JSON.stringify({ id: 'new-source' }), { status: 201 }) }
       return new Response(JSON.stringify({ sources: [{ id: 'rg', key: 'resmi-gazete', name: 'Resmî Gazete', baseUrl: 'https://www.resmigazete.gov.tr', authorityType: 'OFFICIAL', isActive: true, scanSupported: true, lastScanned: null }] }))
     }))
     render(<MemoryRouter><SourcesPage /></MemoryRouter>)
     expect(await screen.findByRole('heading', { name: 'Resmî Gazete' })).toBeVisible()
-    await userEvent.click(screen.getAllByRole('button', { name: /Kaynak ekle/ })[0]!)
+    await userEvent.click(screen.getByRole('button', { name: /Kaynak sitesi ekle/ }))
     await userEvent.type(screen.getByLabelText('Kaynak adı'), 'Ticaret Bakanlığı')
-    expect(screen.queryByLabelText('Kısa kod')).not.toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Kısa kod'), 'ticaret-bakanligi')
     await userEvent.type(screen.getByLabelText('Kaynak bağlantısı'), 'https://ticaret.gov.tr')
     await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
-    await waitFor(() => expect(writes).toEqual([expect.objectContaining({ name: 'Ticaret Bakanlığı', kind: 'WEB', baseUrl: 'https://ticaret.gov.tr', authorityType: 'REFERENCE' })]))
+    await waitFor(() => expect(writes).toEqual([expect.objectContaining({ name: 'Ticaret Bakanlığı', key: 'ticaret-bakanligi', baseUrl: 'https://ticaret.gov.tr', authorityType: 'REFERENCE' })]))
   })
 
   it('waits for the catalog before opening a new template with default sections', async () => {

@@ -11,7 +11,7 @@ export interface Conversation {
   /** What the assistant is looking up right now, if anything. */
   activity: string | null
   error: string | null
-  send: (content: string, documentVersionIds?: string[], options?:ChatSendOptions) => Promise<boolean | void>
+  send: (content: string, documentVersionIds?: string[], options?:ChatSendOptions) => Promise<void>
   stop:()=>void
   clearError: () => void
 }
@@ -53,7 +53,6 @@ export function useConversation(sessionId: string | undefined): Conversation {
   const [error, setError] = useState<string | null>(null)
   const [activity, setActivity] = useState<string | null>(null)
   // A ref, not the state: two submits in the same tick would both read `false`.
-  const pendingRequest=useRef<{fingerprint:string;key:string}|null>(null)
   const sending = useRef(false)
   const sendController = useRef<AbortController | null>(null)
   const loadController = useRef<AbortController | null>(null)
@@ -103,22 +102,16 @@ export function useConversation(sessionId: string | undefined): Conversation {
     const controller = new AbortController()
     sendController.current = controller
 
-    let success=false
     try {
-      const fingerprint=JSON.stringify([sessionId,content,documentVersionIds,options.context])
-      if(pendingRequest.current?.fingerprint!==fingerprint)pendingRequest.current={fingerprint,key:crypto.randomUUID()}
-      const response = await streamChatMessage(sessionId, content, controller.signal, documentVersionIds, {...options,requestKey:pendingRequest.current.key})
+      const response = await streamChatMessage(sessionId, content, controller.signal, documentVersionIds, options)
       for await (const event of parseChatEventStream(response)) {
         setMessages((current) => reduceChatEvent(current, event, optimisticId))
-        if(event.type==='complete')success=true
-        if(event.type==='error')success=false
         if (event.type === 'tool') setActivity(event.label)
         // Once words start arriving the lookup is over and the text speaks for itself.
         if (event.type === 'delta') setActivity(null)
         // Stream errors are already rendered as failed messages in the transcript.
       }
     } catch (caught: unknown) {
-      success=false
       if (!controller.signal.aborted) {
         setError(caught instanceof Error ? caught.message : 'Yanıt alınamadı.')
         setMessages((current) => current.filter((message) => message.id !== STREAMING_MESSAGE_ID))
@@ -131,8 +124,6 @@ export function useConversation(sessionId: string | undefined): Conversation {
         sendController.current = null
       }
     }
-    if(success)pendingRequest.current=null
-    return success
   }, [sessionId])
 
   const stop=useCallback(()=>{

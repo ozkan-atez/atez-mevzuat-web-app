@@ -1,5 +1,3 @@
-import { renderSemanticContent } from '../workspace/render-semantic-section'
-import { generateTemplateSections } from '../workspace/generate-template-sections'
 import { resourceOwnership, documentAccessWhere, canonicalDocumentKey } from '../../platform/actor-context'
 import type { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
@@ -25,7 +23,7 @@ export const StandaloneAnalysisSchema = z.object({
   evidence: z.array(z.object({ id: text, documentVersionId: text, excerpt: text.max(3000),locator:z.object({reference:text,characterStart:z.number().int().min(0),characterEnd:z.number().int().positive()}).strict().optional() }).strict()).min(1).max(100),
 }).strict()
 export interface ExecutorDependencies {
-  prisma: PrismaClient; objectStore: ObjectStore; aiModel: AiModelClient; templateAiModel?:AiModelClient; model: string; tariffLookup?: TariffLookup;
+  prisma: PrismaClient; objectStore: ObjectStore; aiModel: AiModelClient; model: string; tariffLookup?: TariffLookup;
   extract: (id: string, scope: string) => Promise<unknown>; maxContextBytes?: number
 }
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g,c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
@@ -145,11 +143,8 @@ export function createOperationExecutors(deps: ExecutorDependencies): OperationE
       if (!inheritedSnapshot && p.templateId && (!template || !template.isActive || (p.templateRevision !== undefined && template.revision !== p.templateRevision))) throw new OperationError('Şablon sürümü değişti veya şablon bulunamadı.',409)
       const rawSections = inheritedSnapshot?.sections ?? template?.sections ?? defaultSections
       const sections = normalizeTemplateSections(rawSections as any[],rawSections as any[])
-      const generatedSections=await generateTemplateSections({...deps,aiModel:deps.templateAiModel??deps.aiModel},sections,{analysis,sourceContext:context??[],sourceBindings:p.executionSnapshot?.sourceBindings??[]},analysis.evidence.map(e=>e.id),c.taskId)
       const values: Record<string,string> = {title:analysis.title,summary:analysis.summary,note:analysis.detailedAnalysis,typeLabel:'Belge analizi',sourceLabel:'Kullanıcı belgesi / doğrulanmamış kaynak'}
-      const cardHtml = sections.filter(section=>section.enabled).map(section=>{
-        if(section.schemaVersion===2){const generated=generatedSections.find(s=>s.id===section.id);return `<section class="block"><h2>${esc(section.heading)}</h2>${renderSemanticContent(section,generated?.content??'Bu bölüm için yeterli kaynak kanıtı bulunamadı.',generated?.evidenceStatus??'MISSING')}</section>`}
-
+      const cardHtml = sections.map(section=>{
         const $ = load(section.html,{},false)
         $('[data-template-content]').each((_,el)=>{
           const path = $(el).attr('data-template-content')!

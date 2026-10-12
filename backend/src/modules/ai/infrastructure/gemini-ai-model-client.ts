@@ -15,9 +15,6 @@ export interface GeminiTransportResponse {
   text?: string
   responseId?: string
   usageMetadata?: {
-    totalTokenCount?:number
-    cachedContentTokenCount?:number
-    thoughtsTokenCount?:number
     promptTokenCount?: number
     candidatesTokenCount?: number
   }
@@ -34,7 +31,6 @@ export class GeminiAiModelClient implements AiModelClient {
   ) {}
 
   async generateStructured(request: StructuredAiRequest): Promise<StructuredAiResult> {
-    let reportedUsage:StructuredAiResult['usage']|undefined
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       const timeout = new Promise<never>((_resolve, reject) => {
@@ -52,7 +48,6 @@ export class GeminiAiModelClient implements AiModelClient {
         }),
         timeout,
       ])
-      reportedUsage={inputTokens:response.usageMetadata?.promptTokenCount??null,outputTokens:response.usageMetadata?.candidatesTokenCount??null,totalTokens:response.usageMetadata?.totalTokenCount??null,cachedTokens:response.usageMetadata?.cachedContentTokenCount??null,reasoningTokens:response.usageMetadata?.thoughtsTokenCount??null}
       if (!response.text) throw new AiProviderError('INVALID_RESPONSE', true, 'Gemini geçerli bir yapılandırılmış yanıt döndürmedi.')
       let json: unknown
       try {
@@ -64,13 +59,12 @@ export class GeminiAiModelClient implements AiModelClient {
         json,
         providerRequestId: response.responseId ?? null,
         usage: {
-          ...reportedUsage,
           inputTokens: response.usageMetadata?.promptTokenCount ?? null,
           outputTokens: response.usageMetadata?.candidatesTokenCount ?? null,
         },
       }
     } catch (error) {
-      throw Object.assign(mapGeminiError(error),reportedUsage?{usage:reportedUsage}:{})
+      throw mapGeminiError(error)
     } finally {
       if (timer) clearTimeout(timer)
     }

@@ -1,4 +1,3 @@
-import { sectionSchema, semanticMarkup, type TemplateSection } from './template-sections'
 import { load } from 'cheerio'
 import { renderCard } from '../topic-analysis/application/render-report-html'
 import { ReportSpecSchema } from '../topic-analysis/domain/report-spec-schemas'
@@ -40,11 +39,8 @@ export const templateHtml = renderPageSkeleton({ topicId:'template',documentTitl
 
 /** Rebuild known blocks from their canonical markup, copying only text content. */
 export class TemplateContentError extends Error {}
-export function normalizeTemplateSections(sections:Array<{id:string;heading:string;html:string;enabled:boolean} & Partial<TemplateSection>>, existing:Array<{id:string;heading:string;html:string;enabled:boolean}> = []) {
-  return sections.map((input, order)=>{
-    const section = sectionSchema.parse({...input,order})
-    if(section.schemaVersion===2) return {...section,html:semanticMarkup}
-
+export function normalizeTemplateSections(sections:Array<{id:string;heading:string;html:string;enabled:boolean}>, existing:Array<{id:string;heading:string;html:string;enabled:boolean}> = []) {
+  return sections.map(section=>{
     const canonical=sectionComponents.find(item=>section.id===item.id || section.id.startsWith(item.id+'-'))
     if(!canonical) {
       const saved=existing.find(item=>item.id===section.id)

@@ -5,7 +5,7 @@ import { sourceScanRunRoutes } from '../../src/modules/managed-sources/source-sc
 const id = 'bbe478d7-ea92-4c6a-8881-4f34142be5bb'
 const document = { id: 'doc', title: 'Mevzuat', url: 'https://ticaret.gov.tr/duyuru', publishedOn: new Date('2026-10-08'), feedUrl: '', contentText: 'Metin', filterDecision: null, filterReason: null, processingStatus: 'PENDING', processingError: null, topicId: null, reportVersion: null }
 async function appFor(run: unknown) {
-  const prisma: any = { sourceScanRun: { findFirst: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, sourceScanDocument: { findMany: vi.fn().mockResolvedValue([]) } }
+  const prisma: any = { sourceScanRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, sourceScanDocument: { findMany: vi.fn().mockResolvedValue([]) } }
   prisma.$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma)
   const app = Fastify()
   await app.register(sourceScanRunRoutes, { prefix: '/api/v1/source-scan-runs', prisma: prisma as unknown as PrismaClient })
@@ -52,7 +52,7 @@ describe('external source report API', () => {
       const result=await app.inject(`/api/v1/source-scan-runs/${id}/documents/${documentId}/files/0`)
       expect(result.statusCode).toBe(200);expect(result.rawPayload).toEqual(bytes)
       expect(result.headers['content-disposition']).toContain('Mevzuat%20eki.pdf')
-      expect(findFirst).toHaveBeenCalledWith({where:{id:documentId,runId:id,run:{workspaceId:null}},select:{capturedFiles:true}})
+      expect(findFirst).toHaveBeenCalledWith({where:{id:documentId,runId:id},select:{capturedFiles:true}})
       expect(getContent).toHaveBeenCalledExactlyOnceWith('source-captures/hash')
       expect((await app.inject(`/api/v1/source-scan-runs/${id}/documents/${documentId}/files/1`)).statusCode).toBe(404)
     }finally{await app.close()}

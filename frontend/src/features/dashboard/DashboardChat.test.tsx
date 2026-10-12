@@ -48,7 +48,7 @@ describe('Dashboard starts a new conversation', () => {
   it('creates one session and sends the prompt once under StrictMode and double clicks', async () => {
     const state = setup()
     await userEvent.type(screen.getByRole('textbox', { name: 'Asistana rapor talimatı' }), '  GTİP nedir?  ')
-    await userEvent.dblClick(screen.getByRole('button', { name: /Sohbete geç/ }))
+    await userEvent.dblClick(screen.getByRole('button', { name: /Başla/ }))
     await waitFor(() => expect(state.sent).toEqual(['GTİP nedir?']))
     expect(state.created()).toBe(1)
     expect(await screen.findByText('Sohbet hazır.')).toBeVisible()
@@ -62,7 +62,7 @@ describe('Dashboard starts a new conversation', () => {
   })
   it('opens a persisted empty session without sending the placeholder as a message', async () => {
     const state = setup()
-    await userEvent.click(screen.getByRole('button', { name: /Sohbete geç/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Başla/ }))
     expect(await screen.findByTestId('location')).toHaveTextContent('/chat/session-1:cleared')
     expect(state.created()).toBe(1); expect(state.sent).toEqual([])
     expect(screen.getByRole('textbox', { name: 'Mesaj' })).toBeVisible()
@@ -70,10 +70,10 @@ describe('Dashboard starts a new conversation', () => {
   it('preserves the prompt on a creation error and lets the user retry', async () => {
     const state = setup(true)
     await userEvent.type(screen.getByRole('textbox', { name: 'Asistana rapor talimatı' }), 'GTİP nedir?')
-    await userEvent.click(screen.getByRole('button', { name: /Sohbete geç/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Başla/ }))
     expect(await screen.findByText('Sohbet servisi geçici olarak kullanılamıyor.')).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Asistana rapor talimatı' })).toHaveValue('GTİP nedir?')
-    await userEvent.click(screen.getByRole('button', { name: /Sohbete geç/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Başla/ }))
     await waitFor(() => expect(state.sent).toEqual(['GTİP nedir?']))
     expect(state.created()).toBe(1)
   })

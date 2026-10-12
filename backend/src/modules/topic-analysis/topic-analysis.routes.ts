@@ -117,8 +117,8 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
       if (!dependencies) return reply
       const key = idempotencyKeySchema.safeParse(request.headers['idempotency-key'])
       const schema = mode === 'workspace'
-        ? z.union([z.object({expectedVersion: versionSchema.optional(),expectedDraftUpdatedAt:z.string().datetime().nullable().optional(), customization: ReportCustomizationSchema.nullable()}).strict(),z.object({expectedVersion: versionSchema.optional(),expectedDraftUpdatedAt:z.string().datetime().nullable().optional(), templateId: z.string().min(1)}).strict()])
-        : z.object({expectedVersion: versionSchema.optional(),expectedDraftUpdatedAt:z.string().datetime().nullable().optional(), source: ReportSourceSchema.omit({id: true}).refine(source => source.kind !== 'URL' || Boolean(source.url))}).strict()
+        ? z.union([z.object({expectedVersion: versionSchema.optional(), customization: ReportCustomizationSchema.nullable()}).strict(),z.object({expectedVersion: versionSchema.optional(), templateId: z.string().min(1)}).strict()])
+        : z.object({expectedVersion: versionSchema.optional(), source: ReportSourceSchema.omit({id: true}).refine(source => source.kind !== 'URL' || Boolean(source.url))}).strict()
       const body = schema.safeParse(request.body)
       if (!key.success || !body.success) return reply.code(400).send({message: 'Geçerli Idempotency-Key ve çalışma alanı bilgileri gereklidir'})
       const {id} = request.params as {id: string}
@@ -144,7 +144,7 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
           if (!template) return reply.code(404).send({message: 'Şablon bulunamadı'})
           value = applyAutomationTemplate({...current.spec,customization: value}, {templateId: value.templateId,template}).customization ?? null
         }
-        const view = await applyReportFieldEdits({topicId: id, patch: {edits: [{path: 'customization', value}]}, ...(body.data.expectedVersion === undefined ? {} : {expectedVersion: body.data.expectedVersion}), ...(body.data.expectedDraftUpdatedAt === undefined ? {} : {expectedDraftUpdatedAt:body.data.expectedDraftUpdatedAt}), requestKey: key.data, source: 'USER', prompt: null, chatMessageId: null, actor: null}, dependencies)
+        const view = await applyReportFieldEdits({topicId: id, patch: {edits: [{path: 'customization', value}]}, ...(body.data.expectedVersion === undefined ? {} : {expectedVersion: body.data.expectedVersion}), requestKey: key.data, source: 'USER', prompt: null, chatMessageId: null, actor: null}, dependencies)
         return reply.send(toDraftPayload(view))
       } catch (error) { return replyDraftError(reply,error) }
     })
@@ -161,7 +161,6 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
       const view = await applyReportFieldEdits({
         topicId: id,
         patch: { edits: body.data.edits },
-        ...(body.data.expectedDraftUpdatedAt === undefined ? {} : {expectedDraftUpdatedAt:body.data.expectedDraftUpdatedAt}),
         ...(body.data.expectedVersion === undefined ? {} : { expectedVersion: body.data.expectedVersion }),
         requestKey: key.data,
         source: 'USER',
@@ -204,7 +203,6 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
     try {
       const stored = await publishReportDraft({
         topicId: id,
-        ...(body.data.expectedDraftUpdatedAt === undefined ? {} : {expectedDraftUpdatedAt:body.data.expectedDraftUpdatedAt}),
         ...(body.data.expectedVersion === undefined ? {} : { expectedVersion: body.data.expectedVersion }),
       }, {
         repository: dependencies.repository,

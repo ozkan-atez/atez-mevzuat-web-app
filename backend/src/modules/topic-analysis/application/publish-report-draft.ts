@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto'
 import { ReportSpecSchema } from '../domain/report-spec-schemas'
 import type { ReportDraftRepository, StoredTopicReport, TopicObjectStore } from './ports'
 import type { CreateTopicReportRevisionInput } from './ports'
-import { ReportDraftConflictError, ReportDraftBusyError, ReportDraftChangedError, ReportNotPublishedError } from './apply-report-field-edits'
+import { ReportDraftConflictError, ReportDraftBusyError, ReportNotPublishedError } from './apply-report-field-edits'
 import { renderReportHtml } from './render-report-html'
 import { validateReportHtml } from './validate-report-html'
 
@@ -24,13 +24,12 @@ interface Dependencies {
  * to the analysis it was rendered from.
  */
 export async function publishReportDraft(
-  input: { topicId: string; expectedVersion?: number; expectedDraftUpdatedAt?: string | null },
+  input: { topicId: string; expectedVersion?: number },
   dependencies: Dependencies,
 ): Promise<StoredTopicReport> {
   if(await dependencies.topicRepository.hasPendingReportRevisionWork?.(input.topicId))throw new ReportDraftBusyError('Rapor düzeltmesi hâlâ hazırlanıyor; tamamlandıktan sonra Kaydet ile sürüm oluşturabilirsiniz.')
   const draft = await dependencies.repository.getOpenDraft(input.topicId)
   if (!draft) throw new ReportNotPublishedError('Yayımlanacak açık taslak yok.')
-  if (input.expectedDraftUpdatedAt !== undefined && input.expectedDraftUpdatedAt !== draft.updatedAt) throw new ReportDraftChangedError('Taslak başka bir ekip üyesi tarafından güncellendi; kaydetmeden önce değişiklikleri inceleyin.')
   if (draft.edits.length === 0) throw new ReportNotPublishedError('Taslakta yayımlanacak değişiklik yok.')
 
   const base = await dependencies.repository.getPublishedBase(input.topicId)

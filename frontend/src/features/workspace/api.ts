@@ -1,12 +1,5 @@
 import { apiFetch } from '../../lib/apiFetch'
 export interface WorkspaceSource {
-  kind?: 'WEB' | 'FILES'
-  setupStatus?: 'PREPARING' | 'READY' | 'AUTH_REQUIRED' | 'FAILED'
-  lastTestAt?: string | null
-  lastTestResult?: string | null
-  documentVersionIds?: string[]
-  documents?: Array<{id:string;title:string;status:string}>
-  bindings?: SourceTemplateBinding[]
   id: string
   key: string
   name: string
@@ -19,9 +12,8 @@ export interface WorkspaceSource {
   endpoints?: Array<{ id: string; title: string; url: string; status: string; adapter: string | null }>
 }
 
-export interface SourceTemplateBinding {templateId:string;sectionId:string;role:'PRIMARY'|'SUPPORTING';required:boolean;instruction:string;datePolicy:string;invalid?:boolean;templateName?:string}
-export interface TemplateSection { id: string; heading: string; html: string; enabled: boolean; description?:string; instruction?:string; order?:number; componentType?:'paragraph'|'list'|'table'|'sources'|'legacy'; required?:boolean; schemaVersion?:number }
-export interface WorkspaceTemplate { revision?:number; id: string; name: string; description: string | null; html: string; sections: TemplateSection[]; isActive: boolean }
+export interface TemplateSection { id: string; heading: string; html: string; enabled: boolean }
+export interface WorkspaceTemplate { id: string; name: string; description: string | null; html: string; sections: TemplateSection[]; isActive: boolean }
 export interface WorkspaceAutomation {
   datePolicy?: string
   id: string; name: string; hour: number; minute: number; times: string[]; weekdays: number[]; timezone: string; isActive: boolean

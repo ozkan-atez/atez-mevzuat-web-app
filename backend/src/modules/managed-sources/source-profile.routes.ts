@@ -1,5 +1,3 @@
-import { enqueueSourceSetup } from './source-setup'
-import { sourceAccessWhere, sourceCredentialWorkspace, sourceProfileAccessWhere } from './source-access'
 import { discoverProfile } from './profile-discovery'
 import { getActorContext } from '../../platform/actor-context'
 import { timingSafeEqual } from 'node:crypto'
@@ -25,42 +23,42 @@ export function sourceAdminAllowed(request:Pick<FastifyRequest,'headers'|'ip'|'m
 export async function sourceProfileRoutes(app:FastifyInstance,{prisma}:{prisma:PrismaClient}) {
   app.addHook('preHandler',async(request,reply)=>{if(!sourceAdminAllowed(request))return reply.code(403).send({message:'Kaynak hesap ve profil yönetimi yalnızca yetkili yöneticiye açıktır.'})})
   app.get('/:id',async(request,reply)=>{
-    const {id}=request.params as {id:string};const source=await prisma.source.findFirst({where:{id,...sourceAccessWhere()}});if(!source)return reply.code(404).send({message:'Kaynak bulunamadı.'})
-    const profiles=await prisma.sourceProfile.findMany({where:{sourceId:id,...sourceProfileAccessWhere()},orderBy:{version:'desc'}})
-    const credential=await prisma.sourceCredential.findUnique({where:{sourceId_workspaceId:{sourceId:id,workspaceId:sourceCredentialWorkspace()}},select:{status:true,testedAt:true,updatedAt:true}})
+    const {id}=request.params as {id:string};const source=await prisma.source.findUnique({where:{id}});if(!source)return reply.code(404).send({message:'Kaynak bulunamadı.'})
+    const profiles=await prisma.sourceProfile.findMany({where:{sourceId:id},orderBy:{version:'desc'}})
+    const credential=await prisma.sourceCredential.findUnique({where:{sourceId_workspaceId:{sourceId:id,workspaceId:'local'}},select:{status:true,testedAt:true,updatedAt:true}})
     return {profiles, suggested:builtinProfile(source.key),credential,observations:await prisma.sourceObservation.findMany({where:{sourceId:id,scope:'inventory',publishedOn:null},select:{title:true,url:true,firstSeenAt:true},take:30,orderBy:{lastSeenAt:'desc'}})}
   })
   app.post('/:id/discover',async(request,reply)=>{
-    const {id}=request.params as {id:string};const source=await prisma.source.findFirst({where:{id,...sourceAccessWhere()}});if(!source)return reply.code(404).send({message:'Kaynak bulunamadı.'})
-    try {const result=await discoverProfile(source);const latest=await prisma.sourceProfile.findFirst({where:{sourceId:id},orderBy:{version:'desc'}});return await prisma.sourceProfile.create({data:{sourceId:id,workspaceId:getActorContext()?.workspaceId??null,version:(latest?.version??0)+1,config:result.config as unknown as Prisma.InputJsonValue,validation:result.evidence as Prisma.InputJsonValue}})}catch(error){return reply.code(422).send({message:error instanceof Error?error.message:'Keşif tamamlanamadı.'})}
+    const {id}=request.params as {id:string};const source=await prisma.source.findUnique({where:{id}});if(!source)return reply.code(404).send({message:'Kaynak bulunamadı.'})
+    try {const result=await discoverProfile(source);const latest=await prisma.sourceProfile.findFirst({where:{sourceId:id},orderBy:{version:'desc'}});return await prisma.sourceProfile.create({data:{sourceId:id,version:(latest?.version??0)+1,config:result.config as unknown as Prisma.InputJsonValue,validation:result.evidence as Prisma.InputJsonValue}})}catch(error){return reply.code(422).send({message:error instanceof Error?error.message:'Keşif tamamlanamadı.'})}
   })
   app.put('/:id/credentials',async(request,reply)=>{
     const {id}=request.params as {id:string};const login=z.object({username:z.string().trim().min(1).max(300),password:z.string().min(1).max(1000)}).safeParse(request.body)
     if(!login.success)return reply.code(400).send({message:'Kullanıcı adı ve parola gerekli.'})
-    if(!await prisma.source.findFirst({where:{id,...sourceAccessWhere()}}))return reply.code(404).send({message:'Kaynak bulunamadı.'})
-    try {const encrypted=encryptLogin(login.data,id,sourceCredentialWorkspace());await prisma.sourceCredential.upsert({where:{sourceId_workspaceId:{sourceId:id,workspaceId:sourceCredentialWorkspace()}},create:{sourceId:id,workspaceId:sourceCredentialWorkspace(),encrypted},update:{encrypted,status:'UNTESTED',testedAt:null}});await enqueueSourceSetup(prisma,id);return {saved:true,status:'UNTESTED'}}catch{return reply.code(503).send({message:'Hesap şifrelenemedi; şifreleme anahtarı kurulmalı.'})}
+    if(!await prisma.source.findUnique({where:{id}}))return reply.code(404).send({message:'Kaynak bulunamadı.'})
+    try {const encrypted=encryptLogin(login.data,id);await prisma.sourceCredential.upsert({where:{sourceId_workspaceId:{sourceId:id,workspaceId:'local'}},create:{sourceId:id,encrypted},update:{encrypted,status:'UNTESTED',testedAt:null}});return {saved:true,status:'UNTESTED'}}catch{return reply.code(503).send({message:'Hesap şifrelenemedi; şifreleme anahtarı kurulmalı.'})}
   })
   app.post('/:id/credentials/test',async(request,reply)=>{
     const {id}=request.params as {id:string};let session:Awaited<ReturnType<typeof openSourceSession>>|undefined
     try {
-      const source=await prisma.source.findFirstOrThrow({where:{id,...sourceAccessWhere()}});const {config}=await activeSourceProfile(prisma,source);const login=await sourceLogin(prisma,id,source.key)
+      const source=await prisma.source.findUniqueOrThrow({where:{id}});const {config}=await activeSourceProfile(prisma,source);const login=await sourceLogin(prisma,id,source.key)
       session=await openSourceSession(config,login)
-      if(config.transport==='TARIFF_API')await collectSource({...config,maxPages:1,maxDocuments:3},new Date().toISOString().slice(0,10),session,login)
+      if(config.transport==='TARIFF_API')await collectSource(config,new Date().toISOString().slice(0,10),session,login)
       else if(config.feeds[0])await session.html(config.feeds[0].url)
-      await prisma.sourceCredential.updateMany({where:{sourceId:id,workspaceId:sourceCredentialWorkspace()},data:{status:'READY',testedAt:new Date()}})
+      await prisma.sourceCredential.updateMany({where:{sourceId:id,workspaceId:'local'},data:{status:'READY',testedAt:new Date()}})
       return {status:'READY',message:'Kaynak bağlantısı doğrulandı.'}
-    }catch(error){await prisma.sourceCredential.updateMany({where:{sourceId:id,workspaceId:sourceCredentialWorkspace()},data:{status:'ATTENTION',testedAt:new Date()}});return reply.code(422).send({message:error instanceof Error?error.message:'Kaynak bağlantısı doğrulanamadı.'})}finally{await session?.close()}
+    }catch(error){await prisma.sourceCredential.updateMany({where:{sourceId:id,workspaceId:'local'},data:{status:'ATTENTION',testedAt:new Date()}});return reply.code(422).send({message:error instanceof Error?error.message:'Kaynak bağlantısı doğrulanamadı.'})}finally{await session?.close()}
   })
   app.post('/:id/profiles',async(request,reply)=>{
     const {id}=request.params as {id:string};const parsed=sourceProfileSchema.safeParse(request.body)
     if(!parsed.success)return reply.code(400).send({message:parsed.error.issues[0]?.message??'Profil geçersiz.'})
-    const source=await prisma.source.findFirst({where:{id,...sourceAccessWhere()}});if(!source)return reply.code(404).send({message:'Kaynak bulunamadı.'})
+    const source=await prisma.source.findUnique({where:{id}});if(!source)return reply.code(404).send({message:'Kaynak bulunamadı.'})
     const latest=await prisma.sourceProfile.findFirst({where:{sourceId:id},orderBy:{version:'desc'}})
-    try{return await prisma.sourceProfile.create({data:{sourceId:id,workspaceId:getActorContext()?.workspaceId??null,version:(latest?.version??0)+1,config:parsed.data as unknown as Prisma.InputJsonValue}})}catch{return reply.code(409).send({message:'Profil eşzamanlı güncellendi; yeniden yükleyin.'})}
+    try{return await prisma.sourceProfile.create({data:{sourceId:id,version:(latest?.version??0)+1,config:parsed.data as unknown as Prisma.InputJsonValue}})}catch{return reply.code(409).send({message:'Profil eşzamanlı güncellendi; yeniden yükleyin.'})}
   })
   app.post('/:id/profiles/:profileId/verify',async(request,reply)=>{
     const {id,profileId}=request.params as {id:string;profileId:string};let session:Awaited<ReturnType<typeof openSourceSession>>|undefined
-    const profile=await prisma.sourceProfile.findFirst({where:{id:profileId,sourceId:id,source:sourceAccessWhere(),...sourceProfileAccessWhere()},include:{source:true}});if(!profile)return reply.code(404).send({message:'Profil bulunamadı.'})
+    const profile=await prisma.sourceProfile.findFirst({where:{id:profileId,sourceId:id},include:{source:true}});if(!profile)return reply.code(404).send({message:'Profil bulunamadı.'})
     try {
       const config=sourceProfileSchema.parse(profile.config);const login=await sourceLogin(prisma,id,profile.source.key);session=await openSourceSession(config,login)
       if(config.transport==='GAZETTE'&&profile.source.key!=='resmi-gazete')throw new Error('Resmî Gazete bağlayıcısı yalnızca kendi kaynağında kullanılabilir.')

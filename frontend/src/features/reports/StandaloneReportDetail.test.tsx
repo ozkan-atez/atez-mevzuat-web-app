@@ -7,7 +7,7 @@ import { ReportsIndex } from './ReportsIndex'
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
 describe('standalone report publication views',()=>{
   it('shows standalone reports alongside scan reports with its own route',async()=>{
-    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({reports:[{id:'standalone1',title:'Yüklenen belgeden rapor',version:2,runId:null,topicId:null,standalone:true,publishedAt:'2026-10-11T10:00:00Z',targetDate:null,origin:'MANUAL',contentType:'DOCUMENT',sources:[],automationId:null,automationName:null,initiatedBy:null}],total:1}))))
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('standalone-reports')?{reports:[{id:'standalone1',title:'Yüklenen belgeden rapor',latestVersion:2,operationTaskId:'root1',createdAt:'2026-10-11T10:00:00Z'}]}:{runs:[]}))))
     render(<MemoryRouter><ReportsIndex /></MemoryRouter>)
     expect(await screen.findByText('Yüklenen belgeden rapor')).toBeVisible()
     expect(screen.getByRole('link',{name:'İncele'})).toHaveAttribute('href','/reports/documents/standalone1')

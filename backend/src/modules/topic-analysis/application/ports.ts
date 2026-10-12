@@ -16,7 +16,6 @@ export interface TopicEvidenceAsset {
 }
 
 export interface TopicEvidenceInput {
-  allowedSourceKeys?: string[]
   sourceOrigin?: {name:string;authority:string;publicationDateKnown?:boolean|undefined}
   managedSources?: Array<{id:string;title:string;sourceUrl:string;description:string|null;contentText:string;fetchedAt:string}>
   topicId: string
@@ -80,7 +79,6 @@ export interface CreateTopicAnalysisRevisionInput {
 }
 
 export interface TopicAnalysisRepository {
-  getRunReportContext?(runId: string): Promise<RunReportContext | null>
   getTopicEvidenceInput(topicId: string): Promise<TopicEvidenceInput | null>
   markTopicAnalyzing(topicId: string): Promise<void>
   saveEvidenceBundle(topicId: string, input: { manifestObjectKey: string; sourceSignature: string }): Promise<void>
@@ -157,10 +155,6 @@ export interface RunTopicAnalysisRepository extends TopicAnalysisRepository {
 }
 
 export interface ReportDraftEditRecord {
-  actorId?: string | null
-  actorName?: string | null
-  requestedBy?: string | null
-  baseVersion?: number | null
   id: string
   sequence: number
   path: string
@@ -212,7 +206,6 @@ export interface ReportDraftRepository {
   setDraftAnalysisRevision(draftId: string, analysisRevisionId: string): Promise<void>
   getPublishedHistory?(topicId:string): Promise<Array<{version:number;createdAt:string;edits:ReportDraftRecord['edits']}>>
   appendEdits(input: {
-    expectedUpdatedAt?: string
     analysisRevisionId?: string
     draftId: string
     spec: unknown

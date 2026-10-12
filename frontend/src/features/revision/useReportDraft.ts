@@ -108,7 +108,6 @@ export function useReportDraft(topicId: string | undefined, editable = true, req
     if (!topicId) return
     const next = await run(() => applyReportEdits(topicId, {
       edits: [{ path, value }],
-      expectedDraftUpdatedAt: view?.draft?.updatedAt ?? null,
       ...(view ? { expectedVersion: view.baseVersion } : {}),
     }))
     if (next && mounted.current) setView(next)
@@ -122,7 +121,7 @@ export function useReportDraft(topicId: string | undefined, editable = true, req
 
   const publish = useCallback(async () => {
     if (!topicId) return null
-    const published = await run(() => publishReportDraft(topicId, view?.baseVersion, view?.draft?.updatedAt ?? null))
+    const published = await run(() => publishReportDraft(topicId, view?.baseVersion))
     if (!published) return null
     await reload()
     return published.version
@@ -177,17 +176,17 @@ export function useReportDraft(topicId: string | undefined, editable = true, req
 
   const applyTemplate = useCallback(async (templateId: string) => {
     if (!topicId) return
-    const next = await run(() => applyReportTemplate(topicId, templateId, view?.baseVersion,view?.draft?.updatedAt ?? null))
+    const next = await run(() => applyReportTemplate(topicId, templateId, view?.baseVersion))
     if (next && mounted.current) setView(next)
   }, [run, topicId, view])
   const saveCustomization = useCallback(async (customization: ReportCustomization) => {
     if (!topicId) return
-    const next = await run(() => saveReportWorkspace(topicId, customization, view?.baseVersion,view?.draft?.updatedAt ?? null))
+    const next = await run(() => saveReportWorkspace(topicId, customization, view?.baseVersion))
     if (next && mounted.current) setView(next)
   }, [run, topicId, view])
   const addSource = useCallback(async (source: ReportSourceInput) => {
     if (!topicId) return
-    const next = await run(() => addReportSource(topicId, source, view?.baseVersion,view?.draft?.updatedAt ?? null))
+    const next = await run(() => addReportSource(topicId, source, view?.baseVersion))
     if (!next) throw new Error('Kaynak eklenemedi')
     if (next && mounted.current) setView(next)
   }, [run, topicId, view])

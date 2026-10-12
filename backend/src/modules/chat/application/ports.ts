@@ -1,10 +1,8 @@
-import type { ChatContext } from './chat-context'
 import type { WebResearch } from './web-grounding'
 export type ChatRole = 'USER' | 'ASSISTANT'
 export type ChatMessageStatus = 'COMPLETED' | 'FAILED'
 
 export interface ChatSessionView {
-  context?: ChatContext
   id: string
   title: string | null
   createdAt: string
@@ -12,7 +10,6 @@ export interface ChatSessionView {
 }
 
 export interface ChatMessageView {
-  context?: ChatContext
   research?: WebResearch
   id: string
   role: ChatRole
@@ -43,8 +40,6 @@ export interface ChatHistoryItem {
 }
 
 export interface AppendChatMessageInput {
-  requestKey?:string
-  context?: ChatContext
   research?: WebResearch
   sessionId: string
   role: ChatRole
@@ -56,8 +51,6 @@ export interface AppendChatMessageInput {
 }
 
 export interface ChatRepository {
-  getContext?(id:string): Promise<ChatContext | null>
-  setContext?(id:string, context:ChatContext): Promise<void>
   createSession(): Promise<ChatSessionView>
   sessionExists(id: string): Promise<boolean>
   getMessages(sessionId: string): Promise<ChatMessageView[]>

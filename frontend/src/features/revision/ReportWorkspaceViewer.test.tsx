@@ -8,7 +8,7 @@ import { useReportDraft } from './useReportDraft'
 const viewer={...testSession,role:'VIEWER' as const,permissions:['workspace.read','report.read','document.read','chat.read']}
 const topic={id:'topic1',runId:'run1',title:'Yayımlanmış rapor',reportVersion:3,reportCard:'K1',thread:{messages:[]}}
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
-function stubReadOnlyApi(){const fetcher=vi.fn(async(url:string,_init?:RequestInit)=>url.includes('/report-workspaces/')?new Response(JSON.stringify(url.endsWith('/conversations')?{conversations:[],nextCursor:null}:url.endsWith('/revisions')?{revisions:[]}:{report:{id:'r1',title:'Rapor',topicId:'topic1'},version:3,baseVersion:3,revision:'published:3',html:'',spec:{},draft:null})):url.endsWith('/html')?new Response('<html><body><h1>Yalnız yayımlanmış içerik</h1></body></html>'):new Response(JSON.stringify(url.endsWith('/delivery')?{sources:[]}:topic)));vi.stubGlobal('fetch',fetcher);return fetcher}
+function stubReadOnlyApi(){const fetcher=vi.fn(async(url:string,_init?:RequestInit)=>url.endsWith('/html')?new Response('<html><body><h1>Yalnız yayımlanmış içerik</h1></body></html>'):new Response(JSON.stringify(url.endsWith('/delivery')?{sources:[]}:topic)));vi.stubGlobal('fetch',fetcher);return fetcher}
 describe('viewer published report access',()=>{
   it('loads a selected published revision without fetching draft or exposing edit controls',async()=>{
     const fetcher=stubReadOnlyApi()

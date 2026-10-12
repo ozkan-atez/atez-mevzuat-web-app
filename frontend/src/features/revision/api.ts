@@ -29,7 +29,6 @@ export async function getReportDraft(topicId: string): Promise<ReportDraftView> 
 export async function applyReportEdits(topicId: string, input: {
   edits: Array<{ path: string; value: string | null }>
   expectedVersion?: number
-  expectedDraftUpdatedAt?: string | null
 }): Promise<ReportDraftView> {
   const response = await apiFetch(`/api/v1/topics/${topicId}/draft/edits`, {
     method: 'POST',
@@ -46,11 +45,11 @@ export async function revertReportEdit(topicId: string, editId: string): Promise
   return response.json() as Promise<ReportDraftView>
 }
 
-export async function publishReportDraft(topicId: string, expectedVersion?: number, expectedDraftUpdatedAt?:string|null): Promise<PublishedRevision> {
+export async function publishReportDraft(topicId: string, expectedVersion?: number): Promise<PublishedRevision> {
   const response = await apiFetch(`/api/v1/topics/${topicId}/draft/publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({expectedVersion,expectedDraftUpdatedAt}),
+    body: JSON.stringify(expectedVersion === undefined ? {} : { expectedVersion }),
   })
   if (!response.ok) await readError(response, 'Revizyon yayımlanamadı')
   return response.json() as Promise<PublishedRevision>
@@ -61,28 +60,28 @@ export async function discardReportDraft(topicId: string): Promise<void> {
   if (!response.ok) await readError(response, 'Taslak iptal edilemedi')
 }
 
-export async function saveReportWorkspace(topicId: string, customization: import('./types').ReportCustomization, expectedVersion?: number, expectedDraftUpdatedAt?:string|null): Promise<ReportDraftView> {
+export async function saveReportWorkspace(topicId: string, customization: import('./types').ReportCustomization, expectedVersion?: number): Promise<ReportDraftView> {
   const response = await apiFetch(`/api/v1/topics/${topicId}/draft/workspace`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-    body: JSON.stringify({ customization, expectedVersion, expectedDraftUpdatedAt }),
+    body: JSON.stringify({ customization, expectedVersion }),
   })
   if (!response.ok) await readError(response, 'Rapor düzeni kaydedilemedi')
   return response.json() as Promise<ReportDraftView>
 }
 
-export async function addReportSource(topicId: string, source: import('./types').ReportSourceInput, expectedVersion?: number, expectedDraftUpdatedAt?:string|null): Promise<ReportDraftView> {
+export async function addReportSource(topicId: string, source: import('./types').ReportSourceInput, expectedVersion?: number): Promise<ReportDraftView> {
   const response = await apiFetch(`/api/v1/topics/${topicId}/draft/sources`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-    body: JSON.stringify({ source, expectedVersion, expectedDraftUpdatedAt }),
+    body: JSON.stringify({ source, expectedVersion }),
   })
   if (!response.ok) await readError(response, 'Kaynak eklenemedi')
   return response.json() as Promise<ReportDraftView>
 }
 
-export async function applyReportTemplate(topicId: string, templateId: string, expectedVersion?: number, expectedDraftUpdatedAt?:string|null): Promise<ReportDraftView> {
+export async function applyReportTemplate(topicId: string, templateId: string, expectedVersion?: number): Promise<ReportDraftView> {
   const response = await apiFetch(`/api/v1/topics/${topicId}/draft/workspace`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-    body: JSON.stringify({ templateId, expectedVersion, expectedDraftUpdatedAt }),
+    body: JSON.stringify({ templateId, expectedVersion }),
   })
   if (!response.ok) await readError(response, 'Şablon uygulanamadı')
   return response.json() as Promise<ReportDraftView>

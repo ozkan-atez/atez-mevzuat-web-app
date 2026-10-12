@@ -1,5 +1,3 @@
-import { renderSemanticContent } from '../../workspace/render-semantic-section'
-import { sectionSchema } from '../../workspace/template-sections'
 import { renderCard } from './render-report-html'
 import { resolveTemplateComponent } from '../../workspace/report-template-catalog'
 import { z } from 'zod'
@@ -7,7 +5,7 @@ import { load } from 'cheerio'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import { sanitizeReportFragment } from '../domain/sanitize-report-fragment'
 
-const snapshotSchema = z.object({templateId: z.string().nullable().optional(), template: z.object({html: z.string().optional(),sections: z.array(sectionSchema)}).nullable().optional()})
+const snapshotSchema = z.object({templateId: z.string().nullable().optional(), template: z.object({html: z.string().optional(),sections: z.array(z.object({id: z.string(),heading: z.string(),html: z.string(),enabled: z.boolean()}))}).nullable().optional()})
 
 /** Resolve the frozen template against actual report content before persisting it. */
 export function applyAutomationTemplate(spec: ReportSpec, snapshot: unknown): ReportSpec {
@@ -24,11 +22,6 @@ export function applyAutomationTemplate(spec: ReportSpec, snapshot: unknown): Re
     sources: `<ul>${[{label:spec.source.label,url:spec.source.url},...config.sources].filter((item,index,list)=>list.findIndex(other=>other.url===item.url)===index).map(item => `<li>${item.url ? `<a href="${escape(item.url)}">${escape(item.label)}</a>` : escape(item.label)}</li>`).join('')}</ul>`,
   }
   const sections = parsed.data.template.sections.filter(section => section.enabled).map(section => {
-    if(section.schemaVersion===2){
-      const generated=config.sections.find(item=>item.id===section.id)
-      if(section.required&&(!generated||generated.title==='MISSING'))throw new Error(`${section.heading}: zorunlu bölüm için yeterli kaynak kanıtı yok.`)
-      return `<section class="block"><h2>${escape(section.heading)}</h2>${generated?renderSemanticContent(section,load(generated.html,{},false)('p').toArray().map(node=>load(generated.html,{},false)(node).text()).join('\n'),generated.title):paragraph('Bu bölüm için yeterli kaynak kanıtı bulunamadı.')}</section>`
-    }
     const resolved = (section.html.includes('data-template-content') || /^sources(?:-|$)/.test(section.id) && section.html.includes('class="source"')) ? resolveTemplateComponent(section,spec) : null
     if (resolved !== null) return sanitizeReportFragment(resolved)
     return sanitizeReportFragment(section.html.replaceAll('{{heading}}',escape(config.headings[section.id] ?? section.heading)).replaceAll('{{content}}', content[section.id.split('-')[0] ?? ''] ?? paragraph(spec.summary)).replace(/\{\{[^}]+\}\}/g,''))

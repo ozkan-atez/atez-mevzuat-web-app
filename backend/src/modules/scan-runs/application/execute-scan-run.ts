@@ -185,7 +185,7 @@ export async function executeScanRun(
         model: dependencies.gemini.model,
         maxAttempts: dependencies.gemini.maxAttempts,
         maxContextBytes: dependencies.gemini.maxContentBytes,
-        ...(dependencies.tariffLookup && run.sourceKeys.includes('tariff') ? {tariffLookup: dependencies.tariffLookup} : {}),
+        ...(dependencies.tariffLookup ? {tariffLookup: dependencies.tariffLookup} : {}),
       }),
       lifecycle: {
         analysisStarted: async (total) => { currentStage = 'ANALYZING_TOPICS'; await repository.startStage(runId, currentStage, total) },

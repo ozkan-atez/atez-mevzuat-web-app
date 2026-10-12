@@ -1,4 +1,3 @@
-import { templateInstructions } from '../../workspace/template-sections'
 import { ZodError } from 'zod'
 import { enrichWithTariff } from './enrich-with-tariff'
 import type { TariffLookup } from '../../tariff/tariff-lookup'
@@ -31,12 +30,10 @@ export async function executeTopicAnalysis(topicId: string, dependencies: Execut
   const topic = await dependencies.repository.getTopicEvidenceInput(topicId)
   if (!topic) throw new Error(`Topic bulunamadı: ${topicId}`)
 
-  const templateContext=await dependencies.repository.getRunReportContext?.(topic.runId)
-  const sectionInstructions=templateInstructions(templateContext?.workspaceConfig)
   await dependencies.repository.markTopicAnalyzing(topicId)
   const baseEvidence = await buildEvidenceBundle(topic, dependencies.objectStore, { maxContextBytes: dependencies.maxContextBytes })
   let evidence = baseEvidence
-  if (dependencies.tariffLookup && (!topic.allowedSourceKeys || topic.allowedSourceKeys.includes('tariff'))) {
+  if (dependencies.tariffLookup) {
     try { evidence = await enrichWithTariff({topic,evidence:baseEvidence,objectStore:dependencies.objectStore,aiModel:dependencies.aiModel,model:dependencies.model,lookup:dependencies.tariffLookup}) }
     catch { evidence = baseEvidence }
   }
@@ -48,7 +45,7 @@ export async function executeTopicAnalysis(topicId: string, dependencies: Execut
   const version = await dependencies.repository.nextAnalysisVersion(topicId)
   const revisionDirectory = `r${String(version).padStart(2, '0')}`
   const inputHash = createHash('sha256')
-    .update(`${evidence.signature}\n${dependencies.model}\n${TOPIC_ANALYSIS_PROMPT_VERSION}\n${sectionInstructions}`)
+    .update(`${evidence.signature}\n${dependencies.model}\n${TOPIC_ANALYSIS_PROMPT_VERSION}`)
     .digest('hex')
   const now = dependencies.now ?? Date.now
 
@@ -68,7 +65,7 @@ export async function executeTopicAnalysis(topicId: string, dependencies: Execut
     try {
       const response = await dependencies.aiModel.generateStructured({
         model: dependencies.model,
-        systemInstruction: buildTopicAnalysisSystemInstruction()+sectionInstructions,
+        systemInstruction: buildTopicAnalysisSystemInstruction(),
         parts: validationFeedback ? [...evidence.aiParts, { text: validationFeedback }] : evidence.aiParts,
         responseJsonSchema: analysisResponseJsonSchema,
       })

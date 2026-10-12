@@ -50,7 +50,7 @@ describe('report changes accumulate until explicit save', () => {
     await waitFor(() => expect(reopened.result.current.view?.draft?.edits).toHaveLength(2))
     expect(reopened.result.current.view?.draft?.id).toBe('same-draft')
     await act(() => reopened.result.current.publish())
-    expect(api.publish).toHaveBeenCalledExactlyOnceWith('topic-1', 2, '2026-10-12T00:00:00Z')
+    expect(api.publish).toHaveBeenCalledExactlyOnceWith('topic-1', 2)
     expect(reopened.result.current.view).toMatchObject({ baseVersion: 3, publishedVersion: 3, draft: null, spec: { title: 'Yeni başlık', summary: 'Yeni özet' } })
   })
 

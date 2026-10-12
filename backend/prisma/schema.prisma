@@ -657,7 +657,6 @@ model TopicReport {
   basename      String
   card          ReportCard
   latestVersion Int              @default(0)
-  conversations ReportConversation[]
   revisions     ReportRevision[]
   drafts        ReportDraft[]
   createdAt     DateTime         @default(now())
@@ -668,10 +667,6 @@ model TopicReport {
 }
 
 model ReportRevision {
-  createdBy String?
-  createdByName String?
-  baseVersion Int?
-  conversationId String?
   id                 String               @id @default(uuid())
   reportId           String
   report             TopicReport          @relation(fields: [reportId], references: [id], onDelete: Cascade)
@@ -772,15 +767,6 @@ model User {
 }
 
 model Source {
-  workspaceId String?
-  kind String @default("WEB")
-  setupStatus String @default("READY")
-  setupRevision Int @default(0)
-  lastTestAt DateTime?
-  lastTestResult String?
-  setupJobs SourceSetupJob[]
-  collectionDocuments SourceDocument[]
-  templateBindings SourceTemplateBinding[]
   id            String    @id @default(uuid())
   name          String?
   description   String?
@@ -845,7 +831,6 @@ model DocumentVersion {
   textObjectKey String?
   fetchedAt DateTime? @default(now())
   imports DocumentImport[]
-  sourceCollections SourceDocument[]
   document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
 
   @@unique([documentId, contentHash])
@@ -877,7 +862,6 @@ enum GeneralChatMessageStatus {
 /// audit record of a report's revisions and must not be deleted or retitled by
 /// ordinary chat.
 model ChatSession {
-  context Json?
   legacyOwnerId String?
   workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
   owner User? @relation(fields:[ownerId],references:[id],onDelete:Restrict)
@@ -892,8 +876,6 @@ model ChatSession {
 }
 
 model GeneralChatMessage {
-  requestKey String? @unique
-  context Json?
   id          String                   @id @default(uuid())
   sessionId   String
   session     ChatSession              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -960,8 +942,6 @@ enum ReportEditSource {
 }
 
 model ReportDraft {
-  revisionCounter Int @default(0)
-  restoredFromVersion Int?
   workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
   ownerUser User? @relation("ReportDraftOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
 
@@ -994,11 +974,6 @@ model ReportDraft {
 }
 
 model ReportFieldEdit {
-  actorId String?
-  actorName String?
-  requestedBy String?
-  baseVersion Int?
-  conversationId String?
   id            String           @id @default(uuid())
   draftId       String
   draft         ReportDraft      @relation(fields: [draftId], references: [id], onDelete: Cascade)
@@ -1020,8 +995,6 @@ model ReportFieldEdit {
 }
 
 model ReportTemplate {
-  workspaceId String?
-  sourceBindings SourceTemplateBinding[]
   revision Int @default(1)
   id        String   @id @default(uuid())
   name      String   @unique
@@ -1166,7 +1139,6 @@ model SourceScanDocument {
 
 /// User-curated external references. These are not official Gazette documents.
 model ManagedSource {
-  workspaceId String?
   id           String   @id @default(uuid())
   url          String   @unique
   title        String
@@ -1203,7 +1175,6 @@ model ManagedSourceSnapshot {
 }
 
 model SourceProfile {
-  workspaceId String?
   id String @id @default(uuid())
   sourceId String
   version Int
@@ -1519,117 +1490,4 @@ model LogoutReplay {
  createdAt DateTime @default(now())
  @@unique([issuer,jtiHash])
  @@index([expiresAt])
-}
-
-/// Report visibility is always inherited through the report relation.
-model ReportConversation {
-  id String @id @default(uuid())
-  reportId String
-  report TopicReport @relation(fields:[reportId],references:[id],onDelete:Cascade)
-  title String
-  createdBy String?
-  createdByName String?
-  archivedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  messages ReportConversationMessage[]
-  @@index([reportId,updatedAt])
-}
-
-model ReportConversationMessage {
-  id String @id @default(uuid())
-  conversationId String
-  conversation ReportConversation @relation(fields:[conversationId],references:[id],onDelete:Cascade)
-  role String
-  content String
-  authorId String?
-  authorName String?
-  requestKey String? @unique
-  status String @default("COMPLETED")
-  proposal Json?
-  baseVersion Int?
-  draftRevision Int?
-  model String?
-  inputTokens Int?
-  outputTokens Int?
-  appliedPaths Json?
-  createdAt DateTime @default(now())
-  @@index([conversationId,createdAt,id])
-}
-
-// Canonical provider usage ledger. Existing analysis tables remain legacy-only;
-// a call migrated to this ledger must not also be aggregated from its old table.
-model AiUsageEvent {
- id String @id @default(uuid())
- callId String @unique
- workspaceId String?
- actorUserId String?
- provider String
- model String
- category String
- status String
- inputTokens Int?
- outputTokens Int?
- totalTokens Int?
- cachedTokens Int?
- reasoningTokens Int?
- sessionId String?
- messageId String?
- reportId String?
- operationId String?
- createdAt DateTime @default(now())
- updatedAt DateTime @updatedAt
- @@index([workspaceId, actorUserId, createdAt])
- @@index([category, createdAt])
-}
-
-model SourceSetupJob {
-  id String @id @default(uuid())
-  sourceId String
-  source Source @relation(fields:[sourceId], references:[id], onDelete:Cascade)
-  workspaceId String?
-  initiatorUserId String?
-  revision Int
-  kind String @default("SETUP")
-  status String @default("QUEUED")
-  dispatchedAt DateTime?
-  result Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@unique([sourceId,revision,kind])
-  @@index([status,dispatchedAt])
-}
-model SourceDocument {
-  sourceId String
-  source Source @relation(fields:[sourceId], references:[id], onDelete:Cascade)
-  documentVersionId String
-  documentVersion DocumentVersion @relation(fields:[documentVersionId], references:[id], onDelete:Restrict)
-  @@id([sourceId,documentVersionId])
-}
-model SourceTemplateBinding {
-  id String @id @default(uuid())
-  sourceId String
-  source Source @relation(fields:[sourceId], references:[id], onDelete:Cascade)
-  templateId String
-  template ReportTemplate @relation(fields:[templateId], references:[id], onDelete:Cascade)
-  sectionId String
-  role String @default("SUPPORTING")
-  required Boolean @default(false)
-  instruction String @default("")
-  datePolicy String @default("PUBLISHED_DATE")
-  @@unique([sourceId,templateId,sectionId])
-}
-model TemplateSuggestion {
-  id String @id @default(uuid())
-  workspaceId String?
-  userId String?
-  requestKey String @unique
-  status String @default("RUNNING")
-  input Json
-  result Json?
-  error String?
-  inputTokens Int?
-  outputTokens Int?
-  providerRequestId String?
-  createdAt DateTime @default(now())
 }

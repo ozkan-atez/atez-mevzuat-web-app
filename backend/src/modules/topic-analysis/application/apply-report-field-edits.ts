@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from 'node:util'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import { applyReportPatch, type ReportPatch } from '../domain/report-patch'
 import type { ReportDraftRecord, ReportDraftRepository, TopicObjectStore } from './ports'
@@ -20,7 +19,6 @@ export interface ApplyReportFieldEditsInput {
   patch: ReportPatch
   /** The revision the caller was looking at; a mismatch means the report moved on. */
   expectedVersion?: number
-  expectedDraftUpdatedAt?: string | null
   requestKey: string | null
   source: 'USER' | 'AI'
   prompt: string | null
@@ -57,7 +55,6 @@ export async function applyReportFieldEdits(
     const replayed = await dependencies.repository.findDraftByRequestKey(input.requestKey)
     // A retried request must not append the same edits twice.
     if (replayed) {
-      if (replayed.topicId !== input.topicId) throw new ReportDraftConflictError(replayed.baseVersion, 'İstek anahtarı başka raporda kullanılmış.')
       const published = await dependencies.repository.getPublishedBase(input.topicId)
       return toView({
         draft: replayed, baseVersion: replayed.baseVersion,
@@ -72,8 +69,6 @@ export async function applyReportFieldEdits(
     throw new ReportDraftConflictError(current.baseVersion, 'Rapor bu arada güncellendi; taslağı güncel sürüm üzerinden sürdürün.')
   }
 
-  if (input.expectedDraftUpdatedAt !== undefined && input.expectedDraftUpdatedAt !== (current.draft?.updatedAt ?? null)) throw new ReportDraftChangedError('Taslak başka bir ekip üyesi tarafından güncellendi; güncel taslağı açın.')
-
   // Applied before anything is written, so a rejected patch cannot leave an empty
   // draft — and therefore cannot block the report with a draft nobody asked for.
   const { spec, applied } = applyReportPatch(current.spec, input.patch)
@@ -86,9 +81,7 @@ export async function applyReportFieldEdits(
     createdBy: input.actor,
   })
 
-  if (!current.draft && !isDeepStrictEqual(ReportSpecSchema.parse(draft.spec), current.spec)) throw new ReportDraftChangedError('Taslak başka bir ekip üyesi tarafından açıldı; güncel taslağı açın.')
   const updated = await dependencies.repository.appendEdits({
-    expectedUpdatedAt: draft.updatedAt,
     draftId: draft.id,
     spec,
     requestKey: input.requestKey,
@@ -113,15 +106,12 @@ export async function revertReportFieldEdit(
   if (!target) throw new ReportNotPublishedError('Geri alınacak değişiklik bulunamadı.')
   if (target.revertedByEditId) return toView({ draft, baseVersion: draft.baseVersion, publishedVersion, spec: ReportSpecSchema.parse(draft.spec) })
 
-  const currentValue = target.path.split('.').reduce<unknown>((value, key) => value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : null, draft.spec)
-  if (JSON.stringify(currentValue ?? null) !== JSON.stringify(target.nextValue ?? null)) throw new ReportDraftChangedError('Bu alan daha sonra değiştirildi; güncel değeri inceleyerek düzenleyin.')
   const { spec, applied } = applyReportPatch(ReportSpecSchema.parse(draft.spec), {
     edits: [{ path: target.path, value: target.previousValue as string | string[] | null }],
   })
   if (applied.length === 0) return toView({ draft, baseVersion: draft.baseVersion, publishedVersion, spec: ReportSpecSchema.parse(draft.spec) })
 
   const updated = await dependencies.repository.appendEdits({
-    expectedUpdatedAt: draft.updatedAt,
     draftId: draft.id,
     spec,
     requestKey: null,

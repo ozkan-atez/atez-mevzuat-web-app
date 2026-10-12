@@ -3,14 +3,12 @@ import { cleanup, render, screen, waitFor } from '../../test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConversationComposer } from './ConversationComposer'
-import { listSources, listTemplates } from '../workspace/api'
 import { listDocuments, uploadDocument } from '../documents/api'
 
-vi.mock('../workspace/api',()=>({listSources:vi.fn(),listTemplates:vi.fn()}))
 vi.mock('../documents/api',()=>({listDocuments:vi.fn(),uploadDocument:vi.fn()}))
 const document={id:'archive1',title:'Arşiv belgesi',origin:'SOURCE',publishedOn:null,latestVersion:{id:'version1',mimeType:'text/plain',extractionStatus:'READY',originalFilename:null,createdAt:''},versions:[]}
 function setup(){const send=vi.fn();render(<ConfigProvider theme={{token:{motion:false}}}><ConversationComposer isSending={false} onSend={send}/></ConfigProvider>);return send}
-beforeEach(()=>{vi.resetAllMocks();vi.mocked(listSources).mockResolvedValue({sources:[]});vi.mocked(listTemplates).mockResolvedValue({templates:[],components:[]});vi.mocked(listDocuments).mockResolvedValue({documents:[document],total:1})})
+beforeEach(()=>{vi.resetAllMocks();vi.mocked(listDocuments).mockResolvedValue({documents:[document],total:1})})
 afterEach(cleanup)
 describe('composer inline attachment menu',()=>{
   it('puts the selected tool beside plus and switches exclusively to browser research',async()=>{
@@ -22,14 +20,14 @@ describe('composer inline attachment menu',()=>{
     await userEvent.click(screen.getByRole('button',{name:'Tarayıcı ajanı'}))
     expect(screen.getByText('Tarayıcı ajanı').closest('.atez-chat-composer-tools')).not.toBeNull()
     await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Sayfayı incele{Enter}')
-    expect(send).toHaveBeenCalledWith('Sayfayı incele',[],{browserAgent:true,context:{mode:'BROWSER',sourceIds:[],documentVersionIds:[]}})
+    expect(send).toHaveBeenCalledWith('Sayfayı incele',[],{browserAgent:true})
   })
   it('sends the selected Web search mode with the message',async()=>{
     const send=setup()
     await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
     await userEvent.click(screen.getByRole('button',{name:'Web’de ara'}))
     await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Güncel duyuruları bul{Enter}')
-    expect(send).toHaveBeenCalledWith('Güncel duyuruları bul',[],{webSearch:true,context:{mode:'WEB',sourceIds:[],documentVersionIds:[]}})
+    expect(send).toHaveBeenCalledWith('Güncel duyuruları bul',[],{webSearch:true})
   })
   it('selects and removes an archive document inside the plus menu without a dialog',async()=>{
     const send=setup()
@@ -46,8 +44,8 @@ describe('composer inline attachment menu',()=>{
     await userEvent.click(screen.getByRole('checkbox',{name:'Arşiv belgesi'}))
     await userEvent.click(screen.getByRole('textbox',{name:'Mesaj'}))
     await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Bu belgeyi incele{Enter}')
-    expect(send).toHaveBeenCalledWith('Bu belgeyi incele',['version1'],{context:{mode:'SELECTED',sourceIds:[],documentVersionIds:['version1']}})
-    expect(screen.getByRole('button',{name:'Arşiv belgesi belgesini kaldır'})).toBeInTheDocument()
+    expect(send).toHaveBeenCalledWith('Bu belgeyi incele',['version1'])
+    expect(screen.queryByRole('button',{name:'Arşiv belgesi belgesini kaldır'})).not.toBeInTheDocument()
   })
   it('keeps searches inside the panel from submitting a drafted message and closes with Escape',async()=>{
     const send=setup()
@@ -69,7 +67,7 @@ describe('composer inline attachment menu',()=>{
     expect(uploadDocument).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Karşılaştır{Enter}')
-    expect(send).toHaveBeenCalledWith('Karşılaştır',['version-a.txt','version-b.txt'],{context:{mode:'SELECTED',sourceIds:[],documentVersionIds:['version-a.txt','version-b.txt']}})
+    expect(send).toHaveBeenCalledWith('Karşılaştır',['version-a.txt','version-b.txt'])
   })
   it('keeps the message and successful attachments when another file fails to upload',async()=>{
     vi.mocked(uploadDocument).mockImplementation(async file=>{if(file.name==='bad.txt')throw new Error('Dosya yüklenemedi');return {document:{...document,title:file.name},version:{...document.latestVersion,id:'good-version'}}})
@@ -93,7 +91,7 @@ describe('composer inline attachment menu',()=>{
     finish({document,version:document.latestVersion})
     await waitFor(()=>expect(screen.getByRole('button',{name:'Gönder'})).toBeEnabled())
     await userEvent.click(screen.getByRole('button',{name:'Gönder'}))
-    expect(send).toHaveBeenCalledWith('Belgeyi incele',['version1'],{context:{mode:'SELECTED',sourceIds:[],documentVersionIds:['version1']}})
+    expect(send).toHaveBeenCalledWith('Belgeyi incele',['version1'])
   })
   it('rejects more than ten files without starting any upload',async()=>{
     setup()
@@ -101,19 +99,4 @@ describe('composer inline attachment menu',()=>{
     expect(await screen.findByText('Bir mesaja en fazla 10 belge ekleyebilirsiniz.')).toBeInTheDocument()
     expect(uploadDocument).not.toHaveBeenCalled()
   })
-})
-
-it('preserves instruction and selections after a failed send',async()=>{
- const send=vi.fn().mockResolvedValue(false)
- render(<ConversationComposer isSending={false} onSend={send} initialContext={{mode:'SELECTED',sourceIds:[],documentVersionIds:['version1']}}/>)
- await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Tekrar denenecek{Enter}')
- expect(screen.getByRole('textbox',{name:'Mesaj'})).toHaveValue('Tekrar denenecek')
- expect(screen.getByRole('button',{name:'Seçili belge belgesini kaldır'})).toBeInTheDocument()
-})
-it('requires source selection for a scan and keeps the draft',async()=>{
- const send=setup()
- await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Bugün tarama başlat{Enter}')
- expect(await screen.findByRole('dialog')).toBeInTheDocument()
- expect(send).not.toHaveBeenCalled()
- expect(screen.getByRole('textbox',{name:'Mesaj'})).toHaveValue('Bugün tarama başlat')
 })

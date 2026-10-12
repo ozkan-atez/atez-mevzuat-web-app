@@ -91,7 +91,7 @@ export async function processSourceDocuments(prisma: PrismaClient, sourceRunId: 
   await dependencies.onStage?.('FILTER','COMPLETED',filterDocuments,filterDocuments)
   const datedIds=run.documents.filter(d=>d.publishedOn).map(d=>d.id)
   const datedDocuments=await prisma.collectedDocument.findMany({where:{edition:{scanRunId:pipeline.id},externalSourceDocumentId:{in:datedIds}},select:{id:true}})
-  if(dependencies.previousSourceSearch && parent.sourceKeys.includes('resmi-gazete') && datedDocuments.length) {
+  if(dependencies.previousSourceSearch && datedDocuments.length) {
     await dependencies.onStage?.('PREVIOUS_SOURCES','RUNNING',datedDocuments.length,0)
     await executePreviousSourceDiscovery(pipeline.id,{repository:scanRepository,aiModel:dependencies.aiModel,search:dependencies.previousSourceSearch,http:dependencies.http,objectStore:dependencies.objectStore,model:dependencies.model,maxAttempts:dependencies.maxAttempts,concurrency:2,maxRunBytes:dependencies.maxRunBytes,documentIds:datedDocuments.map(d=>d.id)})
     await dependencies.onStage?.('PREVIOUS_SOURCES','COMPLETED',datedDocuments.length,datedDocuments.length)
@@ -117,7 +117,7 @@ export async function processSourceDocuments(prisma: PrismaClient, sourceRunId: 
       if (existing?.status === 'COMPLETED' && existing.latestAnalysis?.status === 'PASS_NO_RELEVANT_CONTENT') {
         await prisma.sourceScanDocument.update({where:{id:documentId},data:{processingStatus:'EXCLUDED',filterReason:'AI analizi raporlanabilir değişiklik bulamadı.'}});continue
       }
-      const topicDependencies={repository:topicRepository,objectStore:dependencies.objectStore,aiModel:dependencies.aiModel,model:dependencies.model,maxAttempts:dependencies.maxAttempts,maxContextBytes:dependencies.maxContentBytes,...(dependencies.tariffLookup && parent.sourceKeys.includes('tariff')?{tariffLookup:dependencies.tariffLookup}:{})}
+      const topicDependencies={repository:topicRepository,objectStore:dependencies.objectStore,aiModel:dependencies.aiModel,model:dependencies.model,maxAttempts:dependencies.maxAttempts,maxContextBytes:dependencies.maxContentBytes,...(dependencies.tariffLookup?{tariffLookup:dependencies.tariffLookup}:{})}
       const output=existing ? await recoverAnalysisForRetry(existing,topicDependencies) : await executeTopicAnalysis(topic.id,topicDependencies)
       if(output.analysis.status!=='PASS') {
         await topicRepository.markTopicCompleted(topic.id)

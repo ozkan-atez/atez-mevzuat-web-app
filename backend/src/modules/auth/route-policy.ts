@@ -1,6 +1,4 @@
 const read:Record<string,string>={
- '/api/v1/sources/capabilities':'workspace.read',
- '/api/v1/reports':'report.read',
  '/api/v1/workspace/activity':'workspace.read',
  '/api/v1/chat/reports':'report.read','/api/v1/chat/sessions':'chat.read','/api/v1/chat/sessions/:id/messages':'chat.read',
  '/api/v1/documents':'document.read','/api/v1/documents/:id':'document.read','/api/v1/document-versions/:id/content':'document.read','/api/v1/document-imports/:id':'document.read',
@@ -32,12 +30,6 @@ for(const method of ['POST','PUT','PATCH','DELETE'])for(const path of [
  '/api/v1/source-profiles/:id/discover','/api/v1/source-profiles/:id/credentials','/api/v1/source-profiles/:id/credentials/test','/api/v1/source-profiles/:id/profiles','/api/v1/source-profiles/:id/profiles/:profileId/verify',
  '/api/v1/managed-sources','/api/v1/managed-sources/:id','/api/v1/managed-sources/:id/refresh',
 ])mutations[`${method} ${path}`]='config.manage'
-for (const path of ['', '/:id', '/:id/conversations', '/:id/conversations/:conversationId/messages', '/:id/revisions', '/:id/revisions/:version', '/:id/compare']) read[`/api/v1/report-workspaces${path}`] = 'report.read'
-for (const path of ['/:id/conversations', '/:id/conversations/:conversationId/messages', '/:id/conversations/:conversationId/archive', '/:id/draft/apply']) mutations[`POST /api/v1/report-workspaces${path}`] = 'report.edit'
-mutations['POST /api/v1/report-workspaces/:id/draft/restore'] = 'report.edit'
-mutations['POST /api/v1/report-workspaces/:id/draft/publish'] = 'report.publish'
-mutations['POST /api/v1/templates/suggest'] = 'config.manage'
-mutations['POST /api/v1/sources/:id/test'] = 'config.manage'
 export const publicAuthRoutes=new Set(['GET /api/health','HEAD /api/health','GET /api/auth/login','GET /api/auth/callback','POST /api/auth/backchannel-logout'])
 export function requiredPermission(method:string,route:string):string|null|undefined {
  let path=route!=='/'?route.replace(/\/$/,''):route

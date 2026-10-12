@@ -13,9 +13,6 @@ export interface StructuredAiResult {
   json: unknown
   providerRequestId: string | null
   usage: {
-    totalTokens?: number | null
-    cachedTokens?: number | null
-    reasoningTokens?: number | null
     inputTokens: number | null
     outputTokens: number | null
   }

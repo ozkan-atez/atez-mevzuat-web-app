@@ -1,5 +1,3 @@
-import { sourceCredentialWorkspace } from './source-access'
-import { getActorContext } from '../../platform/actor-context'
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import type { PrismaClient } from '@prisma/client'
@@ -22,6 +20,6 @@ export function decryptLogin(value: string, sourceId: string, workspace = 'local
   return JSON.parse(Buffer.concat([decipher.update(Buffer.from(data,'base64')),decipher.final()]).toString())
 }
 export async function sourceLogin(prisma: PrismaClient, sourceId: string, sourceKey: string): Promise<SourceLogin | null> {
-  const saved=await prisma.sourceCredential.findUnique({where:{sourceId_workspaceId:{sourceId,workspaceId:sourceCredentialWorkspace()}}})
-  return saved ? decryptLogin(saved.encrypted,sourceId,sourceCredentialWorkspace()) : sourceKey==='tariff' && !getActorContext() ? tariffCredentialsFromEnv() : null
+  const saved=await prisma.sourceCredential.findUnique({where:{sourceId_workspaceId:{sourceId,workspaceId:'local'}}})
+  return saved ? decryptLogin(saved.encrypted,sourceId) : sourceKey==='tariff' ? tariffCredentialsFromEnv() : null
 }

@@ -1,4 +1,4 @@
-import { getActorContext, privateActorScope, resourceOwnership, reportAccessWhere } from '../../platform/actor-context'
+import { getActorContext, privateActorScope, resourceOwnership } from '../../platform/actor-context'
 import { installLocalWorkspaceBoundary } from '../../platform/local-workspace-access'
 import { createHash } from 'node:crypto'
 import { Prisma,type PrismaClient } from '@prisma/client'
@@ -11,9 +11,9 @@ import { OperationError } from './operation-service'
 export class StandaloneReportsService {
  constructor(readonly prisma:PrismaClient,readonly objectStore:Pick<ObjectStore,'putRunFile'|'getContent'>,readonly defaultScope='local-workspace') {}
  get scope():string{return getActorContext()?privateActorScope():this.defaultScope}
- async list() {return {reports:await this.prisma.topicReport.findMany({where:{...(getActorContext()?reportAccessWhere():{actorScope:this.scope}),operationTaskId:{not:null},latestVersion:{gt:0}},orderBy:{updatedAt:'desc'},select:{id:true,title:true,latestVersion:true,operationTaskId:true,createdAt:true,updatedAt:true}})}}
+ async list() {return {reports:await this.prisma.topicReport.findMany({where:{actorScope:this.scope,operationTaskId:{not:null},latestVersion:{gt:0}},orderBy:{updatedAt:'desc'},select:{id:true,title:true,latestVersion:true,operationTaskId:true,createdAt:true,updatedAt:true}})}}
  async get(id:string) {
-  const report=await this.prisma.topicReport.findFirst({where:{id,...(getActorContext()?reportAccessWhere():{actorScope:this.scope}),operationTaskId:{not:null}},include:{revisions:{where:{status:'VALIDATED'},orderBy:{version:'desc'},include:{draft:{select:{operationTaskId:true,operationTask:{select:{requestId:true}}}}}}}})
+  const report=await this.prisma.topicReport.findFirst({where:{id,actorScope:this.scope,operationTaskId:{not:null}},include:{revisions:{where:{status:'VALIDATED'},orderBy:{version:'desc'},include:{draft:{select:{operationTaskId:true,operationTask:{select:{requestId:true}}}}}}}})
   if(!report) throw new OperationError('Rapor bulunamadı.',404)
   return {...report,revisions:report.revisions.map(r=>({...r,operationTaskId:r.draft?.operationTaskId ?? null,operationRequestId:r.draft?.operationTask?.requestId ?? null}))}
  }
@@ -75,8 +75,7 @@ export class StandaloneReportsService {
    if((report?.latestVersion ?? 0)!==expectedVersion)throw new OperationError('Rapor sürümü değişti; güncel sürümü kontrol edin.',409,'VERSION_CONFLICT')
    if(!report)report=await tx.topicReport.create({data:{...resourceOwnership(),operationTaskId:rootId,actorScope:this.scope,title:String(data.title),basename:`belge-raporu-${rootId}`,card:'K5'}})
    const version=report.latestVersion+1
-   const actor=getActorContext(),user=actor && !actor.serviceActor?await tx.user.findUnique({where:{id:actor.userId},select:{name:true,email:true}}):null
-   await tx.reportRevision.create({data:{reportId:report.id,createdBy:user?actor!.userId:null,createdByName:user?.name ?? user?.email ?? null,baseVersion:report.latestVersion || null,version,status:'VALIDATED',card:'K5',specObjectKey,htmlObjectKey,draftId:draft.id}})
+   await tx.reportRevision.create({data:{reportId:report.id,version,status:'VALIDATED',card:'K5',specObjectKey,htmlObjectKey,draftId:draft.id}})
    await tx.topicReport.update({where:{id:report.id},data:{title:String(data.title),latestVersion:version}})
    await tx.reportDraft.update({where:{id:draft.id},data:{status:'PUBLISHED',closedAt:new Date()}})
    return {reportId:report.id,version,operationTaskId:taskId}

@@ -1,5 +1,3 @@
-import { snapshotTemplateBindings } from './template-bindings'
-import { sourceAccessWhere, templateAccessWhere } from '../managed-sources/source-access'
 import { DateTime } from 'luxon'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import type { PgBoss } from 'pg-boss'
@@ -7,10 +5,10 @@ import { scanSupported } from './catalog'
 
 export const workspaceAutomationQueue = 'atez-workspace-daily-automation'
 export async function validateAutomation(prisma: PrismaClient, data: { sourceIds: string[]; groupIds: string[]; templateId: string | null }) {
-  const sources = await prisma.source.findMany({ where: { id: { in: data.sourceIds }, isActive: true,...sourceAccessWhere() }, include: { endpoints: true, profiles: { select: { status: true } }, credentials: { select: { id: true } } } })
+  const sources = await prisma.source.findMany({ where: { id: { in: data.sourceIds }, isActive: true }, include: { endpoints: true, profiles: { select: { status: true } }, credentials: { select: { id: true } } } })
   if (!sources.length || sources.length !== new Set(data.sourceIds).size || sources.some(source => !scanSupported(source))) throw new Error('Seçilen kaynağın etkin tarama bağlayıcısı veya gerekli hesap yapılandırması bulunamadı.')
   if (await prisma.customerGroup.count({ where: { id: { in: data.groupIds }, isActive: true } }) !== new Set(data.groupIds).size) throw new Error('Seçilen dağıtım gruplarından biri bulunamadı veya etkin değil.')
-  if (data.templateId && !await prisma.reportTemplate.findFirst({ where: { id: data.templateId, isActive: true,...templateAccessWhere() } })) throw new Error('Rapor şablonu bulunamadı veya etkin değil.')
+  if (data.templateId && !await prisma.reportTemplate.findFirst({ where: { id: data.templateId, isActive: true } })) throw new Error('Rapor şablonu bulunamadı veya etkin değil.')
 }
 export async function runAutomation(prisma: PrismaClient, id: string, requestKey?: string, scheduledAt?: string, expectedVersion?: number) {
   const automation = await prisma.workspaceAutomation.findUniqueOrThrow({ where: { id } })
@@ -21,7 +19,6 @@ export async function runAutomation(prisma: PrismaClient, id: string, requestKey
   const key = requestKey ? `automation:${id}:manual:${requestKey}` : `automation:${id}:${now.toUTC().startOf('minute').toISO()}`
   const sourceKeys = (await prisma.source.findMany({ where: { id: { in: automation.sourceIds } }, select: { key: true } })).map(source => source.key)
   const template = automation.templateId ? await prisma.reportTemplate.findUnique({ where: { id: automation.templateId } }) : null
-  const sourceBindings=template?await snapshotTemplateBindings(prisma,template.id,template.sections,automation.sourceIds):[]
   const result = await prisma.$transaction(async tx => {
     if (expectedVersion !== undefined) {
       // The update locks the configuration until run + outbox creation commits.
@@ -34,7 +31,7 @@ export async function runAutomation(prisma: PrismaClient, id: string, requestKey
       ...jobInitiatorFields(),
       requestKey: key, sourceKeys, automationId: id, trigger: requestKey ? 'MANUAL' : 'CRON', timezone: automation.timezone,
       targetDate: new Date(`${targetDate}T00:00:00Z`),
-      workspaceConfig: { automationName: automation.name, datePolicy: automation.datePolicy, sourceIds: automation.sourceIds, groupIds: automation.groupIds, templateId: automation.templateId, sourceBindings, template: template ? { id:template.id, revision:template.revision, html: template.html, sections: template.sections } : null, deliveryMode: 'MANUAL_APPROVAL' } as Prisma.InputJsonValue,
+      workspaceConfig: { automationName: automation.name, datePolicy: automation.datePolicy, sourceIds: automation.sourceIds, groupIds: automation.groupIds, templateId: automation.templateId, template: template ? { html: template.html, sections: template.sections } : null, deliveryMode: 'MANUAL_APPROVAL' } as Prisma.InputJsonValue,
       outbox: { create: { requestKey: key, ...jobInitiatorFields() } },
     } })
     await tx.workspaceAutomation.update({ where: { id }, data: { lastRunId: run.id, lastRunAt: new Date(), lastError: null } })
