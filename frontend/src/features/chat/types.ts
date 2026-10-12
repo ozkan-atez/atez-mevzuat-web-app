@@ -1,3 +1,4 @@
+export interface ChatContext {mode:'SELECTED'|'WEB'|'BROWSER';sourceIds:string[];documentVersionIds:string[];templateId?:string;templateRevision?:number}
 export interface WebResearch {
   mode?:'browser'
   completed?:boolean
@@ -6,11 +7,12 @@ export interface WebResearch {
   queries:string[]
   searchSuggestions:string|null
 }
-export interface ChatSendOptions {webSearch?:boolean;browserAgent?:boolean}
+export interface ChatSendOptions {requestKey?:string;context?:ChatContext;webSearch?:boolean;browserAgent?:boolean}
 export type ChatRole = 'USER' | 'ASSISTANT'
 export type ChatMessageStatus = 'COMPLETED' | 'FAILED'
 
 export interface ChatMessage {
+  context?:ChatContext
   research?:WebResearch
   id: string
   role: ChatRole

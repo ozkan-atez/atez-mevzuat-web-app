@@ -2,18 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Empty, Input, Pagination, Spin } from 'antd'
 import { DesktopOutlined, GlobalOutlined, PaperClipOutlined, PlusOutlined } from '@ant-design/icons'
 import { useCan } from '../auth/AuthProvider'
-import { listDocuments, uploadDocument, type ArchiveDocument } from '../documents/api'
+import { listDocuments, uploadDocument, importDocument, type ArchiveDocument } from '../documents/api'
 import type { DocumentAttachment } from '../documents/AttachmentList'
 
 const MAX_ATTACHMENTS = 10
 
-export function ComposerAttachments({items,disabled,onAdd,onRemove,onBusyChange,onError,webSearch,onWebSearchChange,browserAgent,onBrowserAgentChange}: {
+export function ComposerAttachments({onSelectSources,hasSources,items,disabled,onAdd,onRemove,onBusyChange,onError,webSearch,onWebSearchChange,browserAgent,onBrowserAgentChange}: {
+  onSelectSources?:()=>void;hasSources?:boolean;
   browserAgent?:boolean;onBrowserAgentChange?:(enabled:boolean)=>void;
   webSearch?:boolean;onWebSearchChange?:(enabled:boolean)=>void;
   items:DocumentAttachment[];disabled:boolean;onAdd:(item:DocumentAttachment)=>void;onRemove:(id:string)=>void;
   onBusyChange:(busy:boolean)=>void;onError:(message:string|null)=>void;
 }) {
   const canUpload = useCan('document.upload')
+  const [link,setLink]=useState('')
+  const [showLink,setShowLink]=useState(false)
   const [open,setOpen] = useState(false)
   const [query,setQuery] = useState('')
   const [page,setPage] = useState(1)
@@ -65,9 +68,12 @@ export function ComposerAttachments({items,disabled,onAdd,onRemove,onBusyChange,
   }
 
   const panel = <div className="atez-composer-attachment-panel" id="chat-attachment-panel" onKeyDown={event=>{if(event.key==='Enter' && event.target instanceof HTMLInputElement)event.preventDefault()}}>
+      {onSelectSources&&<Button type="text" onClick={()=>{setOpen(false);onSelectSources()}}>Kaynak seç</Button>}
+      {canUpload&&<Button type="text" disabled={disabled||webSearch||browserAgent} onClick={()=>setShowLink(value=>!value)}>Bağlantı ekle</Button>}
+      {showLink&&<div><Input aria-label="Belge bağlantısı" placeholder="https://…" value={link} onChange={e=>setLink(e.target.value)}/><Button disabled={disabled||!link||webSearch||browserAgent||items.length>=MAX_ATTACHMENTS} onClick={async()=>{onBusyChange(true);try{const result=await importDocument({kind:'URL',url:link});onAdd({id:result.version.id,title:result.document.title});setLink('');setShowLink(false)}catch(error){onError(error instanceof Error?error.message:'Bağlantı eklenemedi.')}finally{onBusyChange(false)}}}>Bağlantıyı ekle</Button></div>}
       {canUpload && <Button type="text" aria-label="Bilgisayardan dosya ekle" icon={<PaperClipOutlined aria-hidden />} disabled={disabled || webSearch || browserAgent || items.length>=MAX_ATTACHMENTS} onClick={()=>{setOpen(false);input.current?.click()}}>Bilgisayardan dosya ekle</Button>}
-      {onWebSearchChange && <Button type="text" aria-label="Web’de ara" icon={<GlobalOutlined aria-hidden />} disabled={disabled || items.length>0} onClick={()=>{onWebSearchChange(!webSearch);setOpen(false)}}>Web’de ara{webSearch ? ' · Açık' : ''}</Button>}
-      {onBrowserAgentChange && <Button type="text" aria-label="Tarayıcı ajanı" icon={<DesktopOutlined aria-hidden />} disabled={disabled || items.length>0} onClick={()=>{onBrowserAgentChange(!browserAgent);setOpen(false)}}>Tarayıcı ajanı{browserAgent?' · Açık':''}</Button>}
+      {onWebSearchChange && <Button type="text" aria-label="Web’de ara" icon={<GlobalOutlined aria-hidden />} disabled={disabled || items.length>0 || hasSources} onClick={()=>{onWebSearchChange(!webSearch);setOpen(false)}}>Web’de ara{webSearch ? ' · Açık' : ''}</Button>}
+      {onBrowserAgentChange && <Button type="text" aria-label="Tarayıcı ajanı" icon={<DesktopOutlined aria-hidden />} disabled={disabled || items.length>0 || hasSources} onClick={()=>{onBrowserAgentChange(!browserAgent);setOpen(false)}}>Tarayıcı ajanı{browserAgent?' · Açık':''}</Button>}
       <div className="atez-composer-search-section">
         <div className="atez-composer-archive-heading"><span>Dosyalar</span>{items.length>0 && <span>{items.length}/10</span>}</div>
         <Input aria-label="Arşivde belge ara" placeholder="Dosya aramak için yazın…" value={query} variant="borderless" allowClear onChange={event=>{setQuery(event.target.value);setPage(1);setDocuments([]);setError(null)}} />

@@ -1,0 +1,8 @@
+import { apiFetch } from '../../lib/apiFetch'
+export interface WorkspaceChange {path:string;previousValue:unknown;nextValue:unknown;revertible?:boolean}
+export interface WorkspaceMessage {id:string;role:string;content:string;authorName:string|null;authorId:string|null;createdAt:string;status:string;proposal:WorkspaceChange[]|null;appliedPaths:string[]|null}
+export interface WorkspaceState {report:{id:string;title:string;topicId:string|null};baseVersion:number;version:number;revision:string;html:string;spec:unknown;draft:null|{edits:Array<WorkspaceChange & {id:string;source:string;actorName:string|null;createdAt:string}>}}
+export interface WorkspaceConversation {id:string;title:string;createdByName:string|null}
+export interface WorkspaceVersion {id:string;version:number;createdAt:string;createdByName:string|null;draft?:{edits:Array<WorkspaceChange & {id:string;actorName:string|null;source:string;createdAt:string}>}|null}
+export class WorkspaceApiError extends Error {readonly status:number;readonly conflicts:WorkspaceChange[];constructor(message:string,status:number,conflicts:WorkspaceChange[]=[]){super(message);this.status=status;this.conflicts=conflicts}}
+export async function workspaceRequest<T>(id:string,path='',body?:unknown):Promise<T>{const response=await apiFetch(`/api/v1/report-workspaces/${id}${path}`,{...(body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify(body)})});const data=await response.json();if(!response.ok)throw new WorkspaceApiError(data.message ?? 'Rapor işlemi tamamlanamadı.',response.status,data.conflicts ?? []);return data as T}

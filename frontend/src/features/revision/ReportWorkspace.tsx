@@ -12,7 +12,7 @@ import { EmailDispatchModal } from '../delivery/EmailDispatchModal'
 import type { DeliverySource } from '../delivery/types'
 import type { TopicDetail } from '../analysis/types'
 import { useReportDraft } from '../revision/useReportDraft'
-import { ConversationComposer } from '../chat/ConversationComposer'
+import { ReportConversationPanel } from './ReportConversationPanel'
 import { ConversationMessages } from '../chat/ConversationMessages'
 import { WorkspaceCustomization } from './WorkspaceCustomization'
 import { EditableReportPreview } from '../revision/EditableReportPreview'
@@ -40,7 +40,6 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
   const [historyLoaded,setHistoryLoaded] = useState(false)
   const [historyLoading,setHistoryLoading] = useState(false)
   const [historyError,setHistoryError] = useState<string|null>(null)
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [zoom, setZoom] = useState(80)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -146,7 +145,7 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
           </div>
         </Card>)
   const correctionPanel = (<div className="atez-report-changes">
-          {pendingCount > 0 && <Collapse items={[{ key: 'changes', label: `Bu taslaktaki değişiklikler (${pendingCount})`, children: <ChangeList edits={edits} isBusy={draft.isBusy || draft.isPrompting} onRevert={(editId) => void draft.revert(editId)} /> }]} />}
+          {pendingCount > 0 && <Collapse items={[{ key: 'changes', label: `Bu taslaktaki değişiklikler (${pendingCount})`, children: <ChangeList edits={edits} readOnly={!canEdit} isBusy={draft.isBusy || draft.isPrompting} onRevert={(editId) => void draft.revert(editId)} /> }]} />}
       {canPublish && <PublishDraftBar
         pendingCount={pendingCount}
         isBusy={draft.isBusy}
@@ -159,7 +158,7 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
         onReload={() => { void draft.reload(); void loadTopic() }}
       />}
 
-          <Collapse className="atez-report-correction-history" onChange={keys => { if (keys.includes('history') && !historyLoaded && !historyLoading) void loadSavedHistory() }} items={[{ key: 'history', label: 'Kaydedilmiş revizyonlar ve düzeltme geçmişi', children: (<Space orientation="vertical" style={{width:'100%'}}>{historyLoading && <Typography.Text type="secondary">Geçmiş yükleniyor…</Typography.Text>}{historyError && <Alert type="warning" showIcon title={historyError} action={<Button size="small" onClick={()=>void loadSavedHistory()}>Yeniden dene</Button>} />}{savedHistory.map(revision=><Card size="small" key={revision.version} title={<Space wrap><Tag>Kaydedildi · r{String(revision.version).padStart(2,'0')}</Tag><Typography.Text type="secondary">{new Date(revision.createdAt).toLocaleString('tr-TR')}</Typography.Text></Space>}>{revision.edits.length ? <ChangeList edits={revision.edits} isBusy={false} readOnly onRevert={()=>{}} /> : <Typography.Text type="secondary">Bu sürümde kayıtlı alan değişikliği yok.</Typography.Text>}</Card>)}<ConversationMessages messages={[...topic.thread.messages, ...(pendingPrompt ? [{ id: 'pending-report-prompt', role: 'USER' as const, content: pendingPrompt, createdAt: new Date().toISOString() }] : [])].filter((message) => message.role !== 'SYSTEM').map((message) => ({ ...message, role: message.role as 'USER' | 'ASSISTANT', status: 'COMPLETED' as const, errorDetail: null }))} isSending={draft.isPrompting} activity={draft.isPrompting ? 'Rapor düzenleniyor' : null} /></Space>) }]} />
+          <Collapse className="atez-report-correction-history" onChange={keys => { if (keys.includes('history') && !historyLoaded && !historyLoading) void loadSavedHistory() }} items={[{ key: 'history', label: 'Kaydedilmiş revizyonlar ve düzeltme geçmişi', children: (<Space orientation="vertical" style={{width:'100%'}}>{historyLoading && <Typography.Text type="secondary">Geçmiş yükleniyor…</Typography.Text>}{historyError && <Alert type="warning" showIcon title={historyError} action={<Button size="small" onClick={()=>void loadSavedHistory()}>Yeniden dene</Button>} />}{savedHistory.map(revision=><Card size="small" key={revision.version} title={<Space wrap><Tag>Kaydedildi · r{String(revision.version).padStart(2,'0')}</Tag><Typography.Text type="secondary">{new Date(revision.createdAt).toLocaleString('tr-TR')}</Typography.Text></Space>}>{revision.edits.length ? <ChangeList edits={revision.edits} isBusy={false} readOnly onRevert={()=>{}} /> : <Typography.Text type="secondary">Bu sürümde kayıtlı alan değişikliği yok.</Typography.Text>}</Card>)}<ConversationMessages messages={topic.thread.messages.filter((message) => message.role !== 'SYSTEM').map((message) => ({ ...message, role: message.role as 'USER' | 'ASSISTANT', status: 'COMPLETED' as const, errorDetail: null }))} isSending={draft.isPrompting} activity={draft.isPrompting ? 'Rapor düzenleniyor' : null} /></Space>) }]} />
         </div>)
   const customizationPanel = (<WorkspaceCustomization view={draft.view} isBusy={draft.isBusy || draft.isPrompting || draft.view.isStale || draft.conflictVersion !== null} onApplyTemplate={draft.applyTemplate} onSave={draft.saveCustomization} onAddSource={draft.addSource} />)
 
@@ -190,20 +189,13 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
       </Card>
 
 
-      <div className="atez-report-workspace atez-report-workspace-stacked">{previewPanel}{canEdit && correctionPanel}</div>
+      <div className="atez-report-workspace atez-report-workspace-team"><ReportConversationPanel reportId={id} onChanged={() => { void draft.reload(); void loadTopic(); void loadSavedHistory(); onRevisionSaved?.() }} />{previewPanel}</div>
+      {correctionPanel}
 
       {canEdit && <Collapse className="atez-report-tools" items={[{ key: 'tools', label: 'Düzen ve kaynak ekleme araçları', children: customizationPanel }]} />}
 
       </div>
-      {canEdit && <footer className="atez-report-composer-footer">
-        <ConversationComposer
-          attachmentsEnabled={false}
-          placeholder="Raporu nasıl değiştirelim?"
-          autoFocus={false}
-          isSending={draft.isPrompting || draft.isBusy || draft.view.isStale || draft.conflictVersion !== null}
-          onSend={(content) => { setPendingPrompt(content); void draft.submitPrompt(content).then(() => loadTopic()).finally(() => setPendingPrompt(null)) }}
-        />
-      </footer>}
+
 
       {isDispatchOpen && (
         <EmailDispatchModal

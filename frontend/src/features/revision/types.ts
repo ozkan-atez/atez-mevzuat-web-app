@@ -6,6 +6,10 @@ export interface ReportFieldEditRecord {
   path: string
   previousValue: unknown
   nextValue: unknown
+  actorId?: string | null
+  actorName?: string | null
+  requestedBy?: string | null
+  baseVersion?: number | null
   source: ReportEditSource
   prompt: string | null
   chatMessageId: string | null

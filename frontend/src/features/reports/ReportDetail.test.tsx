@@ -42,6 +42,7 @@ function staleDraftPayload() {
 
 function stubFetch(handlers: { draft?: unknown } = {}) {
   const fetchMock = vi.fn().mockImplementation((url: string) => {
+    if (url.includes('/report-workspaces/')) return Promise.resolve(new Response(JSON.stringify(url.endsWith('/conversations')?{conversations:[],nextCursor:null}:url.endsWith('/revisions')?{revisions:[]}:{report:{id:'report-1',title:topic.title,topicId:topic.id},version:2,baseVersion:2,revision:'published:2',spec:{},html:previewHtml,draft:null})))
     const body = url.endsWith('/draft')
       ? handlers.draft ?? draftPayload()
       : url.endsWith('/delivery') ? delivery : topic
@@ -173,14 +174,14 @@ describe('ReportDetail route compatibility', () => {
     render(<MemoryRouter initialEntries={['/reports/topic-1?revision=2']}><Routes><Route path="/reports/:id" element={<ReportDetail />} /><Route path="/chat" element={<LocationProbe />} /></Routes></MemoryRouter>)
     expect(await screen.findByText('/chat?revision=2&topic=topic-1')).toBeVisible()
   })
-  it('opens the report directly above the correction field without a preview tab', async () => {
+  it('opens the prominent AI correction field before the report preview', async () => {
     stubFetch()
     render(<MemoryRouter><ReportWorkspace topicId="topic-1" popup /></MemoryRouter>)
     const frame = await screen.findByTitle('Bülten Önizleme')
-    const composer = screen.getByRole('textbox', { name: 'Mesaj' })
+    const composer = await screen.findByRole('textbox', { name: 'Raporda yapılacak değişiklik' })
     expect(frame).toBeVisible()
     expect(composer).toBeVisible()
-    expect(frame.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(composer.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'Bülten önizleme' })).not.toBeInTheDocument()
   })
 

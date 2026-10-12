@@ -8,8 +8,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 export function listDocuments(query = '', options: { page?:number; limit?:number; from?:string; to?:string } = {}) { const params = new URLSearchParams({query,...Object.fromEntries(Object.entries(options).filter(([,value])=>value!==undefined&&value!=='').map(([key,value])=>[key,String(value)]))}); return request<{ documents: ArchiveDocument[]; total: number }>(`documents?${params}`) }
-export async function uploadDocument(file: File) {
-  const data = new FormData(); data.append('file', file)
+export async function uploadDocument(file: File, documentId?:string) {
+  const data = new FormData(); data.append('file', file); if(documentId)data.append('documentId',documentId)
   return request<{ document: ArchiveDocument; version: DocumentVersion }>('documents/uploads', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: data })
 }
 export function importDocument(body: { kind: 'TEXT'; title: string; text: string } | { kind: 'URL'; title?: string; url: string }) {

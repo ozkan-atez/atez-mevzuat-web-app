@@ -77,6 +77,7 @@ export function ChangeList({ edits, onRevert, isBusy, readOnly = false }: Props)
 
             {isOpen && (
               <Card size="small" className="atez-change-detail">
+                <p className="text-xs text-[var(--atez-muted)]">{edit.actorName ?? 'Kullanıcı bilgisi bulunmuyor'} · {new Date(edit.createdAt).toLocaleString('tr-TR')}{edit.baseVersion ? ` · Başlangıç sürümü ${edit.baseVersion}` : ''}</p>
                 <div>
                   <span className="font-semibold text-[var(--atez-muted)]">Önceki:</span>
                   <p className="mt-0.5 break-words text-[var(--atez-muted)]">{asText(edit.previousValue)}</p>

@@ -46,7 +46,7 @@ export async function streamChatMessage(sessionId: string, content: string, sign
   return apiFetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, ...(options.webSearch ? {webSearch:true}:{}), ...(options.browserAgent ? {browserAgent:true}:{}), ...(documentVersionIds.length ? { documentVersionIds } : {}) }),
+    body: JSON.stringify({ content, ...(options.requestKey?{requestKey:options.requestKey}:{}), ...(options.context?{context:options.context}:{}), ...(options.webSearch ? {webSearch:true}:{}), ...(options.browserAgent ? {browserAgent:true}:{}), ...(documentVersionIds.length ? { documentVersionIds } : {}) }),
     signal,
   })
 }

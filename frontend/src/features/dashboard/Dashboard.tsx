@@ -3,7 +3,6 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, Button, Card, Input } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
-import { StartScanAction } from '../scans/StartScanAction'
 import { RecentScanRuns } from './RecentScanRuns'
 import { DayActivity } from './DayActivity'
 import { useScanSchedule } from './useScanSchedule'
@@ -49,12 +48,12 @@ export function Dashboard() {
 
 
   return <div className="atez-dashboard" data-purpose="dashboard">
-    <div className="atez-page-heading"><div><h1>Çalışma alanı</h1><p>Mevzuat gündeminiz, tek bir yerde.</p></div><StartScanAction /></div>
+    <div className="atez-page-heading"><div><h1>Çalışma alanı</h1><p>Mevzuat gündeminiz, tek bir yerde.</p></div></div>
     <section className="atez-ai-hero" aria-label="Mevzuat Radar AI">
       <div className="atez-hero-grid" aria-hidden="true" />
       <div className="atez-ai-orb" aria-hidden="true"><span /></div>
       <div className="atez-ai-hero-copy"><div className="atez-eyebrow">MEVZUAT RADAR AI</div><h2>Mevzuatı takip edin.<br /><span>Bir adım önde kalın.</span></h2><p>Araştırın, analiz edin ve raporlayın. Asistanınız hazır.</p></div>
-      <Can permission="chat.write"><form className="atez-ai-command" onSubmit={(event) => { event.preventDefault(); void submitPrompt() }}><Input aria-label="Asistana rapor talimatı" value={prompt} maxLength={MAX_MESSAGE_LENGTH} disabled={isStartingChat} onChange={(event) => setPrompt(event.target.value)} placeholder="Bugünün gümrük düzenlemelerini analiz et…" variant="borderless" /><Button htmlType="submit" type="primary" loading={isStartingChat}>Başla <ArrowRightOutlined /></Button></form></Can>
+      <Can permission="chat.write"><form className="atez-ai-command" onSubmit={(event) => { event.preventDefault(); void submitPrompt() }}><Input aria-label="Asistana rapor talimatı" value={prompt} maxLength={MAX_MESSAGE_LENGTH} disabled={isStartingChat} onChange={(event) => setPrompt(event.target.value)} placeholder="Bugünün gümrük düzenlemelerini analiz et…" variant="borderless" /><Button htmlType="submit" type="primary" loading={isStartingChat}>Sohbete geç <ArrowRightOutlined /></Button></form></Can>
       {chatError && <Alert type="error" showIcon title={chatError} style={{ marginTop: 12 }} />}
     </section>
     <section className="atez-metric-grid" aria-label="Tarama özeti">{metrics.map((metric) => <Card key={metric.label} className={`atez-metric ${metric.featured ? 'featured' : ''}`}><div className="atez-metric-label">{metric.label}</div><strong>{String(metric.value).padStart(2, '0')}</strong><small>{metric.sub}</small></Card>)}</section>
