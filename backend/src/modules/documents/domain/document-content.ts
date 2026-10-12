@@ -8,7 +8,7 @@ export class DocumentError extends Error {
   constructor(message: string, readonly statusCode = 422) { super(message) }
 }
 const supported = new Set(['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'image/png', 'image/jpeg', 'image/webp', 'text/plain', 'text/csv', 'text/html'])
-const extensions: Record<string, string> = { '.pdf': 'application/pdf', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.txt': 'text/plain', '.csv': 'text/csv', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
+export const extensions: Record<string, string> = { '.pdf': 'application/pdf', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.txt': 'text/plain', '.csv': 'text/csv', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
 export async function validateDocumentContent(bytes: Buffer, filename: string, declaredType = '', allowHtml = false): Promise<string> {
   if (!bytes.length) throw new DocumentError('Boş belge eklenemez.')
   if (bytes.length > DOCUMENT_MAX_BYTES) throw new DocumentError('Dosya 20 MB sınırını aşıyor.', 413)

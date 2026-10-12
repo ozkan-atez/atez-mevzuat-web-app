@@ -1,6 +1,7 @@
 import { getActorContext, resourceOwnership, reportAccessWhere } from '../../../platform/actor-context'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import type { PublishedReportBase, ReportDraftRecord, ReportDraftRepository } from '../application/ports'
+import { ReportDraftChangedError } from '../application/apply-report-field-edits'
 import { matchEditablePattern } from '../domain/report-patch'
 
 export class DraftConflictError extends Error {}
@@ -96,6 +97,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
    * never carry a spec that does not match its recorded history.
    */
   async appendEdits(input: {
+    expectedUpdatedAt?: string
     analysisRevisionId?: string
     draftId: string
     spec: unknown
@@ -105,14 +107,18 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
     chatMessageId: string | null
     edits: Array<{ path: string; previousValue: unknown; nextValue: unknown; revertsEditId: string | null }>
   }): Promise<ReportDraftRecord> {
+    const actor = getActorContext()
+    const actorName = actor ? await this.prisma.user.findUnique({where:{id:actor.userId},select:{name:true,email:true}}).then(user=>user?.name ?? user?.email ?? null) : null
     const draft = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "ReportDraft" WHERE id = ${input.draftId} FOR UPDATE`
       const current = await tx.reportDraft.findUnique({
         where: { id: input.draftId,...reportAccessWhere() },
-        select: { status: true, edits: { orderBy: { sequence: 'desc' }, take: 1, select: { sequence: true } } },
+        select: { status: true, baseVersion:true, updatedAt:true, edits: { orderBy: { sequence: 'desc' }, take: 1, select: { sequence: true } } },
       })
       if (!current) throw new DraftConflictError('Taslak bulunamadı.')
       if (current.status !== 'OPEN') throw new DraftConflictError('Taslak kapanmış; düzenleme eklenemez.')
 
+      if(input.expectedUpdatedAt && current.updatedAt.toISOString() !== input.expectedUpdatedAt) throw new ReportDraftChangedError('Taslak başka bir ekip üyesi tarafından güncellendi.')
       const firstSequence = (current.edits[0]?.sequence ?? 0) + 1
       for (const [index, edit] of input.edits.entries()) {
         await tx.reportFieldEdit.create({
@@ -123,6 +129,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
             previousValue: toJson(edit.previousValue),
             nextValue: toJson(edit.nextValue),
             source: input.source,
+            actorId: actor?.userId ?? null, actorName, requestedBy: actor?.userId ?? null, baseVersion:current.baseVersion,
             prompt: input.prompt,
             chatMessageId: input.chatMessageId,
             // Only the first row of a patch carries the key; one key must not be
@@ -135,7 +142,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
 
       return tx.reportDraft.update({
         where: { id: input.draftId,...reportAccessWhere() },
-        data: { specJson: input.spec as Prisma.InputJsonValue,...(input.analysisRevisionId?{analysisRevisionId:input.analysisRevisionId}:{}) },
+        data: { revisionCounter: {increment:1}, specJson: input.spec as Prisma.InputJsonValue,...(input.analysisRevisionId?{analysisRevisionId:input.analysisRevisionId}:{}) },
         include: { edits: { orderBy: { sequence: 'asc' } } },
       })
     })
@@ -171,6 +178,10 @@ function mapDraft(draft: {
     previousValue: Prisma.JsonValue | null
     nextValue: Prisma.JsonValue | null
     source: 'USER' | 'AI'
+    actorId?: string | null
+    actorName?: string | null
+    requestedBy?: string | null
+    baseVersion?: number | null
     prompt: string | null
     chatMessageId: string | null
     revertsEditId: string | null
@@ -195,6 +206,7 @@ function mapDraft(draft: {
       previousValue: edit.previousValue,
       nextValue: edit.nextValue,
       source: edit.source,
+      actorId:edit.actorId ?? null, actorName:edit.actorName ?? null, requestedBy:edit.requestedBy ?? null, baseVersion:edit.baseVersion ?? null,
       prompt: edit.prompt,
       chatMessageId: edit.chatMessageId,
       revertsEditId: edit.revertsEditId,

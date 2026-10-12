@@ -1,4 +1,15 @@
+import { meteredAiModel } from './modules/usage/metered-ai-model'
+import { sourceAccessWhere, templateAccessWhere } from './modules/managed-sources/source-access'
+import type { ChatScopeResolver } from './modules/chat/application/chat-context'
+import type { UsageRecorder } from './modules/usage/metered-chat-model'
 import type { BrowserResearch } from './modules/chat/application/browser-research'
+import { reportsRoutes } from './modules/reports/reports.routes'
+import { reportWorkspaceRoutes } from './modules/report-workspace/report-workspace.routes'
+import { sourceWorkflowRoutes } from './modules/managed-sources/source-workflow.routes'
+import { templateSuggestionRoutes } from './modules/workspace/template-suggestion.routes'
+import { usageRoutes } from './modules/usage/usage.routes'
+import { recordUsage } from './modules/usage/usage'
+import { PrismaChatScopeResolver } from './modules/chat/infrastructure/prisma-chat-scope'
 import type { AiModelClient } from './modules/ai/application/ai-model-client'
 import { StandaloneReportsService, standaloneReportRoutes } from './modules/operations/standalone-reports'
 import type { DocumentStore } from './modules/documents/application/import-document'
@@ -56,6 +67,8 @@ interface BuildAppOptions {
   mailSender?: MailSender
   mailSenderIdentity?: { address: string | undefined; name: string }
   timezone?: string
+  chatScopeResolver?:ChatScopeResolver
+  chatRecordUsage?:UsageRecorder
   chatRepository?: ChatRepository
   browserResearch?:BrowserResearch
   chatModel?: ChatModelClient
@@ -113,6 +126,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   })
 
   // Register Modules
+  app.register(reportsRoutes, { prefix: '/api/v1', prisma })
+  app.register(sourceWorkflowRoutes, { prisma })
+  app.register(usageRoutes, { prisma })
+  app.register(templateSuggestionRoutes, { prisma, aiModel: options.revisionModel ?? { generateStructured: async () => { throw new Error('AI hizmeti yapılandırılmamış.') } }, model: options.chatModelName ?? 'gemini-3.7-flash' })
+  app.register(reportWorkspaceRoutes, { prefix: '/api/v1/report-workspaces', prisma,
+    ...(options.objectStore?.putRunFile ? { objectStore: { getContent: (key: string) => options.objectStore!.getContent(key), putRunFile: (key: string, body: Buffer, type: string) => options.objectStore!.putRunFile!(key, body, type) } } : {}),
+    ...(options.revisionModel ? { aiModel: options.revisionModel } : {}),
+    ...(options.chatModelName ? { model: options.chatModelName } : {}),
+  })
   if (authentication) app.register(authRoutes, { prefix: '/api/auth', runtime: authentication })
   const modularOperationsEnabled = options.modularOperationsEnabled ?? process.env.MODULAR_OPERATIONS_ENABLED === 'true'
   const availableExecutor: OperationExecutor = async () => { throw new Error('İşlemler worker tarafından yürütülür.') }
@@ -123,20 +145,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   if (modularOperationsEnabled && options.documentStore?.putRunFile) app.register(standaloneReportRoutes, { prefix: '/api/v1', service: new StandaloneReportsService(prisma, { getContent: key => options.documentStore!.getContent(key), putRunFile: (key, body, type) => options.documentStore!.putRunFile!(key, body, type) }) })
   const scanRepository = options.scanRepository ?? new PrismaScanRepository(prisma)
   const chatModel = options.chatModel ?? new UnavailableChatModelClient('Gemini API anahtarı yapılandırılmamış.')
+  const chatKnowledge = options.chatKnowledge ?? new PrismaAssistantKnowledge(prisma, {
+    getContent: async (key: string) => { if (!options.objectStore) throw new Error('Nesne deposu yapılandırılmamış.'); return options.objectStore.getContent(key) },
+  })
   app.register(chatRoutes, {
     prefix: '/api/v1/chat',
     repository: options.chatRepository ?? new PrismaChatRepository(prisma),
     model: chatModel,
+    ...(options.chatScopeResolver?{scopeResolver:options.chatScopeResolver}:process.env.NODE_ENV==='test'&&options.chatRepository?{}:{scopeResolver:new PrismaChatScopeResolver(prisma,chatKnowledge)}),
+    ...(options.chatRecordUsage?{recordUsage:options.chatRecordUsage}:process.env.NODE_ENV==='test'&&options.chatRepository?{}:{recordUsage:(input:Parameters<UsageRecorder>[0])=>recordUsage(prisma,input)}),
     ...(options.browserResearch?{browserResearch:options.browserResearch}:{}),
     ...(operations ? { operations } : {}),
     tariffLookup: options.tariffLookup,
     modelName: options.chatModelName ?? 'gemini-3.6-flash',
-    knowledge: options.chatKnowledge ?? new PrismaAssistantKnowledge(prisma, {
-      getContent: async (objectKey: string) => {
-        if (!options.objectStore) throw new Error('Nesne deposu yapılandırılmamış.')
-        return options.objectStore.getContent(objectKey)
-      },
-    }),
+    knowledge: chatKnowledge,
     scanStarter: options.chatScanStarter ?? {
       startScan: (input) => scanRepository.createManualRun(input),
     },
@@ -144,7 +166,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const topicRepository = options.topicRepository ?? new PrismaTopicAnalysisRepository(prisma)
   app.register(scanRunsRoutes, {
     prefix: '/api/v1/scan-runs',
-    validateSourceKeys: async (keys: string[]) => { const sources=await prisma.source.findMany({where:{key:{in:keys},isActive:true},include:{profiles:{select:{status:true}},credentials:{select:{id:true}}}});if(sources.length!==new Set(keys).size||sources.some(s=>!scanSupported(s)))throw new Error('Seçilen kaynak için doğrulanmış profil ve gerekli hesap bağlantısı olmalı.') },
+    validateSourceKeys: async (keys: string[]) => { const sources=await prisma.source.findMany({where:{AND:[sourceAccessWhere()],key:{in:keys},isActive:true},include:{profiles:{select:{status:true}},credentials:{select:{id:true}}}});if(sources.length!==new Set(keys).size||sources.some(s=>!scanSupported(s)))throw new Error('Seçilen kaynak için doğrulanmış profil ve gerekli hesap bağlantısı olmalı.') },
     ...(options.timezone ? { timezone: options.timezone } : {}),
     repository: scanRepository,
     topicRepository,
@@ -152,11 +174,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   })
   app.register(topicAnalysisRoutes, {
     prefix: '/api/v1/topics',
-    ...(options.revisionModel ? { revisionModel: options.revisionModel } : {}),
+    ...(options.revisionModel ? { revisionModel: meteredAiModel(options.revisionModel, input => recordUsage(prisma, input), 'REPORT_REVISION') } : {}),
     ...(options.chatModelName ? { revisionModelName: options.chatModelName } : {}),
     repository: topicRepository,
     draftRepository: options.draftRepository ?? new PrismaReportDraftRepository(prisma),
-    loadTemplate: (id: string) => prisma.reportTemplate.findUnique({ where: { id } }),
+    loadTemplate: (id: string) => prisma.reportTemplate.findFirst({ where: { id, AND: [templateAccessWhere()] } }),
     ...(modularOperationsEnabled ? { loadDocumentVersion: async (id: string) => {
       const version = await prisma.documentVersion.findFirst({ where: { id, document: documentAccessWhere() }, include: { document: true } })
       return version ? { id: version.id, title: version.document.title, url: version.document.canonicalUrl, text: version.extractedText, filename: version.originalFilename, visibility: version.document.visibility } : null

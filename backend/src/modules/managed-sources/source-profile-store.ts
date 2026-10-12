@@ -1,7 +1,8 @@
+import { sourceProfileAccessWhere } from './source-access'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import { builtinProfile, sourceProfileSchema } from './source-profile'
 export async function activeSourceProfile(prisma:PrismaClient,source:{id:string;key:string}) {
-  const saved=await prisma.sourceProfile.findFirst({where:{sourceId:source.id,status:'VERIFIED'},orderBy:{version:'desc'}})
+  const saved=await prisma.sourceProfile.findFirst({where:{sourceId:source.id,status:'VERIFIED',...sourceProfileAccessWhere()},orderBy:{version:'desc'}})
   if(saved)return {id:saved.id,version:saved.version,config:sourceProfileSchema.parse(saved.config)}
   const config=builtinProfile(source.key)
   if(!config)throw new Error('PROFILE_REQUIRED: Bu kaynak için doğrulanmış tarama profili gerekli.')

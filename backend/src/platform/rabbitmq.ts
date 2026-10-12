@@ -6,8 +6,9 @@ import { manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName } f
 export const operationQueueName = 'atez-operation-task'
 export const automationQueueName = 'atez-workspace-daily-automation'
 export const sourceQueueName = 'atez-source-scan'
+export const sourceSetupQueueName = 'atez-source-setup'
 export const refreshQueueName = 'atez-source-refresh'
-export const backgroundQueues = [manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName, automationQueueName, sourceQueueName, refreshQueueName, operationQueueName]
+export const backgroundQueues = [manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName, automationQueueName, sourceQueueName, refreshQueueName, operationQueueName, sourceSetupQueueName]
 export interface BackgroundCommand { id: string; data: any; retryCount: number }
 export class RabbitQueue {
   private connection: ChannelModel | undefined

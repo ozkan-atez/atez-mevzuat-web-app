@@ -6,7 +6,7 @@ import { createScanRunSchema } from '../../scan-runs/scan-runs.schemas'
 import { normalizeGtip, type TariffLookup } from '../../tariff/tariff-lookup'
 
 export interface ChatScanStarter {
-  startScan(input: { targetDate: string; requestKey: string }): Promise<{ id: string; status: string; targetDate: string }>
+  startScan(input: { targetDate: string; requestKey: string; sourceIds?:string[]; sourceKeys?:string[];templateId?:string;templateRevision?:number;sourceProfiles?:Array<{sourceId:string;version:number|null}> }): Promise<{ id: string; status: string; targetDate: string }>
 }
 
 export interface ChatToolDeclaration {

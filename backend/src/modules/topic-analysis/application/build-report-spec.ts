@@ -1,3 +1,4 @@
+import { renderSemanticContent } from '../../workspace/render-semantic-section'
 import type { AnalysisResult } from '../domain/analysis-schemas'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 
@@ -21,7 +22,7 @@ export function buildReportSpec(analysis: AnalysisResult, options: { sequence: n
     dates: analysis.effectiveDates.slice(0, 3).map((item) => `${displayDate(item.date, false)}: ${item.description}`),
     note: analysis.change.operationalImpact ?? null,
     customization: {
-      headings: {}, order: [], sections: [], templateId: null, customHtml: null,
+      headings: {}, order: [], sections: (analysis.templateSections??[]).map(section=>({id:section.id,title:section.evidenceStatus,html:renderSemanticContent({componentType:'paragraph'},section.content,section.evidenceStatus)})), templateId: null, customHtml: null,
       sources: [...analysis.officialSources, ...analysis.supportingSources].filter((item,index,list) => list.findIndex(other => other.url === item.url) === index).map((item,index) => ({id: `analysis-source-${index}`, label: item.label, url: item.url, content: `Analizde kullanılan kaynak: ${item.label} (${item.url})`, kind: 'URL' as const})),
     },
     source: { label: options.sourceOrigin?.name ?? analysis.officialSources[0]?.label ?? 'T.C. Resmî Gazete', url: options.sourceOrigin ? analysis.document.sourceUrl : analysis.officialSources[0]?.url ?? analysis.document.sourceUrl },

@@ -1,3 +1,5 @@
+import { snapshotTemplateBindings } from '../workspace/template-bindings'
+import { templateAccessWhere, sourceAccessWhere } from '../managed-sources/source-access'
 import { getActorContext, privateActorScope, resourceOwnership, documentAccessWhere } from '../../platform/actor-context'
 import { createHash, randomUUID } from 'node:crypto'
 import { Prisma, type PrismaClient } from '@prisma/client'
@@ -95,15 +97,17 @@ export class OperationService {
     const tasks: Array<{ operation: OperationInput['operation']; inputSignature: string; parameters: OperationParameters; dependencyIds: string[]; status: string; reused: boolean; cachedTaskId?: string; existingArtifacts?: ArtifactOutput[]; signatureDependencies?: string[] }> = []
     let semantic: Record<string, unknown> = { ...input, mode: undefined, sourceRunId:undefined, automationId:undefined, documentVersionIds: [...input.documentVersionIds].sort(), versions: this.versions, documentSnapshots: versions.map(v=>({id:v.id,contentHash:v.contentHash,extractionContract:this.versions.EXTRACT})).sort((a,b)=>a.id.localeCompare(b.id)) }
     if (input.templateId) {
-      const template = await this.prisma.reportTemplate.findUnique({ where: { id: input.templateId } })
+      const template = await this.prisma.reportTemplate.findFirst({ where: { id: input.templateId,...templateAccessWhere() } })
       if (!template || !template.isActive) throw new OperationError('Şablon bulunamadı.', 404)
       if(input.templateRevision!==undefined && input.templateRevision!==template.revision)throw new OperationError('Şablon sürümü değişti.',409,'TEMPLATE_CHANGED')
       input.templateRevision = template.revision
-      executionSnapshot.template={id:template.id,revision:template.revision,html:template.html,sections:template.sections}
-      semantic = { ...semantic, templateRevision: template.revision, templateSnapshot: { html: template.html, sections: template.sections } }
+      const sourceBindings=await snapshotTemplateBindings(this.prisma,template.id,template.sections,input.sourceId?[input.sourceId]:undefined)
+      executionSnapshot.sourceBindings=sourceBindings
+      executionSnapshot.template={id:template.id,revision:template.revision,html:template.html,sections:template.sections,sourceBindings}
+      semantic = { ...semantic, templateRevision: template.revision, templateSnapshot: { html: template.html, sections: template.sections, sourceBindings } }
     }
     if(input.sourceId) {
-      const source = await this.prisma.source.findFirst({where:{id:input.sourceId,isActive:true}})
+      const source = await this.prisma.source.findFirst({where:{id:input.sourceId,isActive:true,...sourceAccessWhere()}})
       if(!source) throw new OperationError('Etkin kaynak bulunamadı.',404)
       const profile = await this.prisma.sourceProfile.findFirst({where:{sourceId:source.id,status:'VERIFIED'},orderBy:{version:'desc'}})
       const builtin=!profile?builtinProfile(source.key):null

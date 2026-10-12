@@ -1,3 +1,7 @@
+import { getActorContext, reportAccessWhere } from '../../platform/actor-context'
+import { sourceAccessWhere } from './source-access'
+import type { Prisma } from '@prisma/client'
+function runAccessWhere(): Prisma.SourceScanRunWhereInput { const actor=getActorContext(); return actor ? { workspaceId: actor.workspaceId, OR: [{ initiatorUserId: actor.userId }, { scanRun: { topicReports: { some: reportAccessWhere() } } }] } : { workspaceId: null } }
 import {privateResourceWhere,jobInitiatorFields} from '../../platform/actor-context'
 import { enforceLocalWorkspace, isLocalWorkspaceRequest } from '../../platform/local-workspace-access'
 import { OperationError, type OperationService } from '../operations/operation-service'
@@ -20,7 +24,7 @@ const idInput = z.object({ id: z.string().uuid() })
 export async function sourceScanRunRoutes(app: FastifyInstance, options: { prisma: PrismaClient; operations?: OperationService; tariffCredentials?: TariffCredentials | null; objectStore?: {getContent(key:string):Promise<Buffer>} }) {
   const { prisma } = options
   app.get('/sources', async () => {
-    const sources = await prisma.source.findMany({ where: { isActive: true }, select: {
+    const sources = await prisma.source.findMany({ where: { AND: [sourceAccessWhere()], isActive: true }, select: {
       id: true, key: true, name: true, authorityType: true,
       endpoints: { where: { status: 'ACTIVE', adapter: { not: null } }, select: { id: true } },
     }, orderBy: { createdAt: 'asc' } })
@@ -32,6 +36,7 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
 
   app.get('/', async () => {
     const runs = await prisma.sourceScanRun.findMany({
+      where: runAccessWhere(),
       select: { id: true, scanRunId: true, targetDate: true, status: true, trigger: true, createdAt: true, source: { select: { id: true, name: true, key: true } }, _count: { select: { documents: true } }, documents: { select: decisionFields } },
       orderBy: { createdAt: 'desc' }, take: 50,
     })
@@ -41,13 +46,13 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
   app.post('/', async (request, reply) => {
     const parsed = createInput.safeParse(request.body)
     if (!parsed.success) return reply.code(400).send({ message: 'Geçerli kaynak ve tarih seçin.' })
-    const source = await prisma.source.findUnique({ where: { id: parsed.data.sourceId } })
+    const source = await prisma.source.findFirst({ where: { id: parsed.data.sourceId, AND: [sourceAccessWhere()] } })
     if (!source || source.key === 'resmi-gazete') return reply.code(400).send({ message: 'Resmî Gazete için mevcut tarama akışını kullanın.' })
     if (source.key === 'tariff' && !options.tariffCredentials) return reply.code(422).send({ message: 'TARIFF hesabı etkinleştirilmeyi bekliyor.' })
     const key = request.headers['idempotency-key']
     if (typeof key !== 'string' || !z.string().uuid().safeParse(key).success) return reply.code(400).send({ message: 'Geçerli Idempotency-Key gerekli.' })
     try {
-      const run = await createSourceRun(prisma, { ...parsed.data, requestKey: `manual:${key}`, trigger: 'MANUAL' })
+      const run = await createSourceRun(prisma, { ...parsed.data, requestKey: `manual:${getActorContext()?.workspaceId ?? 'local'}:${getActorContext()?.userId ?? 'local'}:${key}`, trigger: 'MANUAL' })
       return reply.code(202).send({ runId: run.id, status: run.status, targetDate: parsed.data.targetDate })
     } catch (error) { return reply.code(422).send({ message: error instanceof Error ? error.message : 'Kaynak taraması başlatılamadı.' }) }
   })
@@ -55,7 +60,7 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
   app.get('/:id', async (request, reply) => {
     const parsed = idInput.safeParse(request.params)
     if (!parsed.success) return reply.code(400).send({ message: 'Geçersiz tarama kimliği.' })
-    const run = await prisma.sourceScanRun.findUnique({ where: { id: parsed.data.id }, select: {
+    const run = await prisma.sourceScanRun.findFirst({ where: { id: parsed.data.id, AND: [runAccessWhere()] }, select: {
       id: true, targetDate: true, status: true, errorSummary: true, createdAt: true, startedAt: true, completedAt: true,
       ...(options.operations && isLocalWorkspaceRequest(request) ? {operations:{where:privateResourceWhere(),select:{id:true,status:true,operation:true,createdAt:true,tasks:{select:{id:true,status:true,operation:true,errorCategory:true,errorMessage:true}}}}}:{}),
       scanRunId: true, processingScanRunId: true, stages: true, coverage: true, datePolicy: true,
@@ -70,7 +75,7 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
   app.get('/:id/documents/:documentId/files/:index', async (request, reply) => {
     const input = z.object({id:z.string().uuid(),documentId:z.string().uuid(),index:z.coerce.number().int().min(0).max(40)}).safeParse(request.params)
     if(!input.success) return reply.code(400).send({message:'Geçersiz dosya bağlantısı.'})
-    const document=await prisma.sourceScanDocument.findFirst({where:{id:input.data.documentId,runId:input.data.id},select:{capturedFiles:true}})
+    const document=await prisma.sourceScanDocument.findFirst({where:{id:input.data.documentId,runId:input.data.id,run:runAccessWhere()},select:{capturedFiles:true}})
     const file = (Array.isArray(document?.capturedFiles) ? document.capturedFiles : []) as unknown as CapturedSourceFile[]
     const selected = file[input.data.index]
     if(!selected || selected.status!=='STORED' || !selected.objectKey) return reply.code(404).send({message:'Arşivlenmiş dosya bulunamadı.'})
@@ -84,14 +89,14 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
   app.get('/:id/report', async (request, reply) => {
     const parsed = idInput.safeParse(request.params)
     if (!parsed.success) return reply.code(400).send({ message: 'Geçersiz tarama kimliği.' })
-    const documents = await prisma.sourceScanDocument.findMany({ where: { runId: parsed.data.id, filterDecision: 'IN', processingStatus: 'COMPLETED', topicId: { not: null }, reportVersion: { not: null } }, select: { topicId: true, reportVersion: true } })
+    const documents = await prisma.sourceScanDocument.findMany({ where: { runId: parsed.data.id, run: runAccessWhere(), filterDecision: 'IN', processingStatus: 'COMPLETED', topicId: { not: null }, reportVersion: { not: null } }, select: { topicId: true, reportVersion: true } })
     if (!documents.length) return reply.code(404).send({ message: 'AI tarafından doğrulanmış rapor bulunamadı.' })
     if (documents.length > 1) return reply.code(409).send({ message: 'Bu taramada birden fazla rapor var. Belge listesinden raporu seçin.' })
     return reply.redirect(`/api/v1/topics/${documents[0]!.topicId}/reports/${documents[0]!.reportVersion}/html`)
   })
 
   const enqueueParent = async (id:string) => prisma.$transaction(async tx => {
-    const child=await tx.sourceScanRun.findUnique({where:{id},select:{scanRunId:true,status:true}})
+    const child=await tx.sourceScanRun.findFirst({where:{id,AND:[runAccessWhere()]},select:{scanRunId:true,status:true}})
     if(!child?.scanRunId)return null
     const parent=await tx.scanRun.updateMany({where:{id:child.scanRunId,status:{in:['FAILED','PARTIAL','COMPLETED','AWAITING_RETRY']}},data:{status:'QUEUED',completedAt:null,errorSummary:null}})
     if(!parent.count)return false
@@ -112,7 +117,7 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
     const parentQueued=await enqueueParent(parsed.data.id)
     if(parentQueued!==null)return reply.code(parentQueued?202:409).send(parentQueued?{runId:parsed.data.id,status:'QUEUED'}:{message:'Ana tarama zaten çalışıyor.'})
     const updated = await prisma.sourceScanRun.updateMany({ where: {
-      id: parsed.data.id, OR: [{ status: { in: ['FAILED', 'PARTIAL'] } }, { status: 'COMPLETED', documents: { some: { processingStatus: 'PENDING' } } }],
+      id: parsed.data.id, AND: [runAccessWhere()], OR: [{ status: { in: ['FAILED', 'PARTIAL'] } }, { status: 'COMPLETED', documents: { some: { processingStatus: 'PENDING' } } }],
     }, data: { ...jobInitiatorFields(),status: 'QUEUED', reportHtml: null, completedAt: null, errorSummary: null, queueDispatchedAt: null, queueVersion: { increment: 1 } } })
     if (!updated.count) return reply.code(409).send({ message: 'Bu tarama zaten değerlendirildi veya işlem sürüyor.' })
     return reply.code(202).send({ runId: parsed.data.id, status: 'QUEUED' })
@@ -121,11 +126,11 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
   app.post('/:id/retry', async (request, reply) => {
     const parsed = idInput.safeParse(request.params)
     if (!parsed.success) return reply.code(400).send({ message: 'Geçersiz tarama kimliği.' })
-    const current=await prisma.sourceScanRun.findUnique({where:{id:parsed.data.id},select:{status:true}})
+    const current=await prisma.sourceScanRun.findFirst({where:{id:parsed.data.id,AND:[runAccessWhere()]},select:{status:true}})
     if(!current||!['FAILED','PARTIAL'].includes(current.status))return reply.code(409).send({message:'Yalnızca başarısız veya kısmi tarama yeniden denenebilir.'})
     const parentQueued=await enqueueParent(parsed.data.id)
     if(parentQueued!==null)return reply.code(parentQueued?202:409).send(parentQueued?{runId:parsed.data.id,status:'QUEUED'}:{message:'Ana tarama zaten çalışıyor.'})
-    const result = await prisma.sourceScanRun.updateMany({ where: { id: parsed.data.id, status: { in: ['FAILED', 'PARTIAL'] } }, data: { status: 'QUEUED', completedAt: null, errorSummary: null, queueDispatchedAt: null, queueVersion: { increment: 1 } } })
+    const result = await prisma.sourceScanRun.updateMany({ where: { id: parsed.data.id, AND: [runAccessWhere()], status: { in: ['FAILED', 'PARTIAL'] } }, data: { status: 'QUEUED', completedAt: null, errorSummary: null, queueDispatchedAt: null, queueVersion: { increment: 1 } } })
     if (!result.count) return reply.code(409).send({ message: 'Yalnızca başarısız veya kısmi tarama yeniden denenebilir.' })
     return reply.code(202).send({ runId: parsed.data.id, status: 'QUEUED' })
   })

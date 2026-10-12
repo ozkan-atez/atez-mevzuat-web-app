@@ -29,6 +29,7 @@ export type ChatTurn =
   | { role: 'tool-results'; results: Array<{ name: string; response: unknown }> }
 
 export type ChatModelChunk =
+  | { type:'usage'; usage:{inputTokens:number|null;outputTokens:number|null;totalTokens:number|null;cachedTokens:number|null;reasoningTokens:number|null} }
   | { type: 'text'; text: string }
   | { type: 'tool-call'; call: ToolCall }
   | { type: 'grounding'; research: WebResearch }

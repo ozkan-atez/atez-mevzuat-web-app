@@ -85,6 +85,7 @@ export const UnresolvedReferenceSchema = z.object({
 }).strict()
 
 export const AnalysisResultSchema = z.object({
+  templateSections: z.array(z.object({id:z.string().regex(/^[a-zA-Z0-9-]+$/).max(80),content:z.string().max(10000),evidenceStatus:z.enum(['SUPPORTED','MISSING']),evidenceIds:z.array(z.string()).max(50)}).strict()).max(30).optional(),
   schemaVersion: z.literal(1),
   topicId: z.string().uuid(),
   status: z.enum(['PASS', 'PASS_NO_RELEVANT_CONTENT']),
@@ -104,6 +105,7 @@ export const AnalysisResultSchema = z.object({
   if(!analysis.officialSources.length&&!analysis.supportingSources.length)context.addIssue({code:'custom',path:['officialSources'],message:'En az bir kaynak gerekli.'})
   const evidenceIds = new Set(analysis.evidence.map((item) => item.id))
   const referencedIds = [
+    ...(analysis.templateSections??[]).flatMap(item=>item.evidenceIds),
     ...analysis.affectedParties.flatMap((item) => item.evidenceIds),
     ...analysis.effectiveDates.flatMap((item) => item.evidenceIds),
     ...analysis.comparisons.flatMap((item) => item.evidenceIds),
@@ -115,6 +117,7 @@ export const AnalysisResultSchema = z.object({
   if (missing.length > 0) {
     context.addIssue({ code: 'custom', path: ['evidence'], message: `Tanımsız kanıt referansı: ${[...new Set(missing)].join(', ')}` })
   }
+  for(const section of analysis.templateSections??[]) if(section.evidenceStatus==='SUPPORTED'&&!section.evidenceIds.length)context.addIssue({code:'custom',path:['templateSections'],message:'Bölüm içeriği kanıt referansı taşımalı.'})
   if (analysis.status === 'PASS_NO_RELEVANT_CONTENT' && analysis.change.type !== 'NO_CHANGE') {
     context.addIssue({ code: 'custom', path: ['change', 'type'], message: 'İçerik yok durumunda değişiklik türü NO_CHANGE olmalıdır' })
   }

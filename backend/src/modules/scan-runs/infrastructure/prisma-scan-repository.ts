@@ -1,3 +1,5 @@
+import { snapshotTemplateBindings } from '../../workspace/template-bindings'
+import { templateAccessWhere, sourceAccessWhere } from '../../managed-sources/source-access'
 import {getActorContext,privateActorScope,jobInitiatorFields,reportAccessWhere,topicAccessWhere} from '../../../platform/actor-context'
 import {createHash} from 'node:crypto'
 import { Prisma, type PrismaClient } from '@prisma/client'
@@ -32,7 +34,7 @@ import type {
 export class PrismaScanRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async createManualRun(input: { requestKey: string; targetDate: string; sourceKeys?: string[]; datePolicy?: string }): Promise<{
+  async createManualRun(input: { requestKey: string; targetDate: string; sourceKeys?: string[]; datePolicy?: string; templateId?:string; templateRevision?:number; sourceIds?:string[]; sourceProfiles?:Array<{sourceId:string;version:number|null}> }): Promise<{
     id: string
     status: ScanRunStatus
     targetDate: string
@@ -42,6 +44,10 @@ export class PrismaScanRepository {
       const existing = await tx.scanRun.findUnique({ where: { requestKey: input.requestKey } })
       if (existing) return existing
 
+      const template=input.templateId?await tx.reportTemplate.findFirst({where:{id:input.templateId,isActive:true,...templateAccessWhere()}}):null
+      if(input.templateId&&(!template||input.templateRevision!==undefined&&template.revision!==input.templateRevision))throw new Error('Şablon değişti veya erişilemiyor. Güncel şablonu seçin.')
+      const selectedSources=input.sourceIds??(template?(await tx.source.findMany({where:{key:{in:input.sourceKeys??['resmi-gazete']},...sourceAccessWhere()},select:{id:true}})).map(source=>source.id):[])
+      const sourceBindings=template?await snapshotTemplateBindings(tx as PrismaClient,template.id,template.sections,selectedSources):[]
       return tx.scanRun.create({
         data: {
           ...(getActorContext()?{workspaceId:getActorContext()!.workspaceId,initiatorUserId:getActorContext()!.serviceActor?null:getActorContext()!.userId}:{}),
@@ -49,7 +55,7 @@ export class PrismaScanRepository {
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
           timezone: 'Europe/Istanbul',
           sourceKeys: input.sourceKeys ?? ['resmi-gazete'],
-          workspaceConfig: {datePolicy:input.datePolicy??'PUBLISHED_DATE'},
+          workspaceConfig: {datePolicy:input.datePolicy??'PUBLISHED_DATE',sourceIds:selectedSources,sourceProfiles:input.sourceProfiles??[],templateId:template?.id??null,template:template?{id:template.id,revision:template.revision,html:template.html,sections:template.sections}:null,sourceBindings} as Prisma.InputJsonValue,
           outbox: { create: { ...jobInitiatorFields(),requestKey: input.requestKey } },
         },
       })
@@ -175,12 +181,13 @@ export class PrismaScanRepository {
     })
   }
 
-  async getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint; indexObjectKey: string | null; indexSourceUrl: string | null } | null> {
+  async getExecutionRun(runId: string): Promise<{ id: string; sourceKeys: string[]; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint; indexObjectKey: string | null; indexSourceUrl: string | null } | null> {
     const run = await this.prisma.scanRun.findUnique({ where: { id: runId } })
     return run ? {
       id: run.id,
       status: run.status,
       targetDate: run.targetDate.toISOString().slice(0, 10),
+      sourceKeys: run.sourceKeys,
       downloadedBytes: run.downloadedBytes,
       indexObjectKey: run.indexObjectKey,
       indexSourceUrl: run.indexSourceUrl,

@@ -18,5 +18,6 @@ export function parseScanIntent(prompt: string, now = DateTime.now().setZone('Eu
 
   const resolved = resolveTurkishDate(prompt, now)
   if (resolved && 'error' in resolved) return { error: 'Geçerli bir tarama tarihi belirtin.' }
-  return { targetDate: resolved?.date ?? now.toFormat('yyyy-MM-dd') }
+  if(!resolved)return {error:`Taramayı hangi tarih için başlatalım? Bugün (${now.toFormat('yyyy-MM-dd')}) için “bugün tarama başlat” yazabilirsiniz.`}
+  return { targetDate: resolved.date }
 }

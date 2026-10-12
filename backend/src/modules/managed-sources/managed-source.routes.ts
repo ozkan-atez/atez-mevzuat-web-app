@@ -1,3 +1,4 @@
+import { managedSourceAccessWhere } from './source-access'
 import type { FastifyInstance } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
 import { Prisma } from '@prisma/client'
@@ -37,7 +38,7 @@ async function readSource(url: string) {
 
 export async function managedSourceRoutes(app: FastifyInstance, options: { prisma: PrismaClient }) {
   app.get('/', async () => ({
-    sources: await options.prisma.managedSource.findMany({ select: summary, orderBy: { updatedAt: 'desc' }, take: 200 }),
+    sources: await options.prisma.managedSource.findMany({ where:managedSourceAccessWhere(), select: summary, orderBy: { updatedAt: 'desc' }, take: 200 }),
   }))
 
   app.post('/', async (request, reply) => {
@@ -48,7 +49,7 @@ export async function managedSourceRoutes(app: FastifyInstance, options: { prism
     catch (error) { return reply.code(400).send({ message: error instanceof Error ? error.message : 'Geçersiz bağlantı.' }) }
     const fetched = await readSource(url)
     try {
-      const source = await options.prisma.managedSource.create({ data: { ...parsed.data, url, ...fetched }, select: summary })
+      const source = await options.prisma.managedSource.create({ data: { ...parsed.data, ...managedSourceAccessWhere(), url, ...fetched }, select: summary })
       await recordSourceSnapshot(options.prisma, source.id, { url: source.url, ...fetched })
       return reply.code(201).send(source)
     } catch (error) {
@@ -61,7 +62,7 @@ export async function managedSourceRoutes(app: FastifyInstance, options: { prism
     const parsed = inputSchema.safeParse(request.body)
     if (!parsed.success) return reply.code(400).send({ message: 'Geçerli kaynak alanları gereklidir.' })
     const { id } = request.params as { id: string }
-    const existing = await options.prisma.managedSource.findUnique({ where: { id }, select: { url: true } })
+    const existing = await options.prisma.managedSource.findFirst({ where: { id,...managedSourceAccessWhere() }, select: { url: true } })
     if (!existing) return reply.code(404).send({ message: 'Kaynak bulunamadı.' })
     let url: string
     try { url = normalizeManagedSourceUrl(parsed.data.url) }
@@ -80,7 +81,7 @@ export async function managedSourceRoutes(app: FastifyInstance, options: { prism
 
   app.post('/:id/refresh', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const existing = await options.prisma.managedSource.findUnique({ where: { id }, select: { url: true } })
+    const existing = await options.prisma.managedSource.findFirst({ where: { id,...managedSourceAccessWhere() }, select: { url: true } })
     if (!existing) return reply.code(404).send({ message: 'Kaynak bulunamadı.' })
     const source = await options.prisma.managedSource.update({ where: { id }, data: await readSource(existing.url), select: summary })
     await recordSourceSnapshot(options.prisma, source.id, { url: source.url, contentText: source.contentText, contentType: source.contentType, fetchedAt: source.fetchedAt })
@@ -89,7 +90,7 @@ export async function managedSourceRoutes(app: FastifyInstance, options: { prism
 
   app.delete('/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const result = await options.prisma.managedSource.updateMany({ where: { id }, data: { isActive: false, useInChat: false, useInRuns: false } })
+    const result = await options.prisma.managedSource.updateMany({ where: { id,...managedSourceAccessWhere() }, data: { isActive: false, useInChat: false, useInRuns: false } })
     return result.count ? reply.code(204).send() : reply.code(404).send({ message: 'Kaynak bulunamadı.' })
   })
 }

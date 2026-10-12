@@ -22,6 +22,7 @@ export interface GeminiChatTransportRequest {
 }
 
 export interface GeminiChatChunk {
+  usageMetadata?: {promptTokenCount?:number;candidatesTokenCount?:number;totalTokenCount?:number;cachedContentTokenCount?:number;thoughtsTokenCount?:number}
   text?: string
   functionCalls?: Array<{ name?: string; args?: Record<string, unknown> }>
   /** The raw parts, which carry the thought signature the getter above drops. */
@@ -65,6 +66,7 @@ export class GeminiChatModelClient implements ChatModelClient {
       })
       for await (const chunk of stream) {
         if (timedOut) throw new AiProviderError('TIMEOUT', true, 'Gemini isteği zaman aşımına uğradı.')
+        if(chunk.usageMetadata) { const u=chunk.usageMetadata; yield {type:'usage',usage:{inputTokens:u.promptTokenCount??null,outputTokens:u.candidatesTokenCount??null,totalTokens:u.totalTokenCount??null,cachedTokens:u.cachedContentTokenCount??null,reasoningTokens:u.thoughtsTokenCount??null}} }
         if (chunk.text) yield { type: 'text', text: chunk.text }
         const grounding=chunk.candidates?.[0]?.groundingMetadata
         if(grounding)yield {type:'grounding',research:normalizeGrounding(grounding)}

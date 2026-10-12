@@ -1,3 +1,4 @@
+import type { ChatContext } from '../application/chat-context'
 import type { WebResearch } from '../application/web-grounding'
 import { getActorContext, privateActorScope, resourceOwnership, chatAccessWhere } from '../../../platform/actor-context'
 import { Prisma, type PrismaClient } from '@prisma/client'
@@ -16,6 +17,13 @@ const PREVIEW_LENGTH = 120
 export class PrismaChatRepository implements ChatRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
+  async getContext(id:string):Promise<ChatContext|null> {
+    const row=await this.prisma.chatSession.findFirst({where:{id,...chatAccessWhere()},select:{context:true}})
+    return row?.context as unknown as ChatContext|null
+  }
+  async setContext(id:string,context:ChatContext):Promise<void> {
+    await this.prisma.chatSession.update({where:{id,...chatAccessWhere()},data:{context:context as unknown as Prisma.InputJsonValue}})
+  }
   async createSession(): Promise<ChatSessionView> {
     const session = await this.prisma.chatSession.create({ data: {...(getActorContext()?{workspaceId:getActorContext()!.workspaceId,ownerId:getActorContext()!.userId,visibility:'PRIVATE'}:{})} })
     return {
@@ -47,9 +55,14 @@ export class PrismaChatRepository implements ChatRepository {
     return this.prisma.$transaction(async (tx) => {
       const session = await tx.chatSession.findFirst({ where: { id: input.sessionId,...chatAccessWhere() } })
       if (!session) throw new ChatSessionNotFoundError('Sohbet bulunamadı.')
+      const requestKey=input.requestKey?`${input.sessionId}:${input.requestKey}`:null
+      if(requestKey)await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestKey}))`
+      if(requestKey){const existing=await tx.generalChatMessage.findUnique({where:{requestKey}});if(existing)return toMessageView(existing)}
       const message = await tx.generalChatMessage.create({
         data: {
           ...(input.research ? {research:input.research as unknown as Prisma.InputJsonValue} : {}),
+          ...(input.context ? { context:input.context as unknown as Prisma.InputJsonValue } : {}),
+          requestKey,
           sessionId: input.sessionId,
           role: input.role,
           content: input.content,
@@ -112,6 +125,7 @@ export class PrismaChatRepository implements ChatRepository {
 }
 
 function toMessageView(message: {
+  context?: Prisma.JsonValue | null
   research?: Prisma.JsonValue | null
   id: string
   role: 'USER' | 'ASSISTANT'
@@ -124,6 +138,7 @@ function toMessageView(message: {
 }): ChatMessageView {
   return {
     ...(message.research ? {research:message.research as unknown as WebResearch} : {}),
+    ...(message.context ? {context:message.context as unknown as ChatContext} : {}),
     id: message.id,
     role: message.role,
     content: message.content,

@@ -25,7 +25,7 @@ describe('GeminiAiModelClient', () => {
     await expect(client.generateStructured(request)).resolves.toEqual({
       json: { decisions: [] },
       providerRequestId: 'response-1',
-      usage: { inputTokens: 12, outputTokens: 4 },
+      usage: { inputTokens: 12, outputTokens: 4, totalTokens:null, cachedTokens:null, reasoningTokens:null },
     })
   })
 

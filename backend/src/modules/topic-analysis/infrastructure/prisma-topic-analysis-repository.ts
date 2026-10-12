@@ -102,9 +102,10 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     if (!topic?.document.storedObject) return null
 
     const previousJob = topic.document.previousSourceJob
-    const previous = previousJob?.outcome === 'VERIFIED' ? previousJob.source : null
+    const previous = topic.scanRun.sourceKeys.includes('resmi-gazete') && previousJob?.outcome === 'VERIFIED' ? previousJob.source : null
+    const selectedEndpoints = await this.prisma.sourceEndpoint.findMany({where:{source:{key:{in:topic.scanRun.sourceKeys}},status:'ACTIVE',managedSourceId:{not:null}},select:{managedSourceId:true}})
     const curated = await this.prisma.managedSource.findMany({
-      where: { isActive: true, useInRuns: true, contentText: { not: null } },
+      where: { id:{in:selectedEndpoints.flatMap(row=>row.managedSourceId?[row.managedSourceId]:[])}, isActive: true, useInRuns: true, contentText: { not: null } },
       select: { id: true, title: true, url: true, description: true, keywords: true, contentText: true, fetchedAt: true },
       orderBy: { updatedAt: 'desc' }, take: 200,
     })
@@ -120,6 +121,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     }] : [])
     return {
       managedSources,
+      allowedSourceKeys: topic.scanRun.sourceKeys,
       ...(topic.document.sourceAuthority ? {sourceOrigin:{name:topic.document.sourceName ?? 'Harici kaynak',authority:topic.document.sourceAuthority,...(topic.document.edition.indexUrl.endsWith('#publication=unknown')?{publicationDateKnown:false}:{})}} : {}),
       topicId: topic.id,
       runId: topic.scanRunId,
@@ -276,6 +278,9 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
   }
 
   async createReportRevision(input: CreateTopicReportRevisionInput) {
+    const actor=getActorContext()
+    const authorId=actor && !actor.serviceActor ? actor.userId : null
+    const authorName=authorId ? await this.prisma.user.findUnique({where:{id:authorId},select:{name:true,email:true}}).then(user=>user?.name ?? user?.email ?? null) : null
     return this.serializable(async (tx) => {
       if(input.draftId) {
         const previous=await tx.reportRevision.findUnique({where:{draftId:input.draftId,report:reportAccessWhere()},include:{report:true}})
@@ -302,6 +307,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
       const revision = await tx.reportRevision.create({
         data: {
           reportId: report.id,
+          createdBy:authorId,createdByName:authorName,baseVersion:report.latestVersion || null,
           analysisRevisionId: input.analysisRevisionId,
           version: input.version,
           status: 'VALIDATED',
