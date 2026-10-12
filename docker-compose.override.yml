@@ -8,6 +8,16 @@
 #
 #   docker compose -f docker-compose.yml up -d --build web
 services:
+  rabbitmq:
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+  gotenberg:
+    ports:
+      - "127.0.0.1:3002:3000"
+  backend:
+    ports:
+      - "127.0.0.1:3001:3001"
   web:
     # The base service bakes `npm run build` into an image; in dev there is no
     # image to build, only a node runtime over the mounted sources.

@@ -1,4 +1,21 @@
+name: resmi-gazete-manual-ingestion
+
 services:
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-atez}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-atezpassword}
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+      - ./deploy/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   db:
     image: postgres:15-alpine
     environment:
@@ -35,12 +52,30 @@ services:
     restart: unless-stopped
 
   backend:
+    image: atez-mevzuat-backend:local
     build:
       context: ./backend
     command: ["sh", "-c", "npm run prisma:migrate && npm run start:api"]
     environment: &backend-environment
+      AUTH_PROFILE: ${AUTH_PROFILE:-}
+      APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:-}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      OIDC_POST_LOGOUT_REDIRECT_URI: ${OIDC_POST_LOGOUT_REDIRECT_URI:-}
+      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:-}
+      SESSION_ENCRYPTION_KEY_ID: ${SESSION_ENCRYPTION_KEY_ID:-v1}
+      SESSION_IDLE_TTL_SECONDS: ${SESSION_IDLE_TTL_SECONDS:-1800}
+      SESSION_ABSOLUTE_TTL_SECONDS: ${SESSION_ABSOLUTE_TTL_SECONDS:-28800}
+      AUTH_WORKSPACE_KEY: ${AUTH_WORKSPACE_KEY:-atez}
+      OIDC_CA_FILE: ${OIDC_CA_FILE:-}
+      AUTH_API_ALLOWED_HOSTS: ${AUTH_API_ALLOWED_HOSTS:-}
+      WORKER_ACTOR_USER_ID: ${WORKER_ACTOR_USER_ID:-}
+      MODULAR_OPERATIONS_ENABLED: ${MODULAR_OPERATIONS_ENABLED:-false}
       DATABASE_URL: postgresql://atez:atezpassword@db:5432/atez_db?schema=public
       PORT: "3001"
+      RABBITMQ_URL: ${RABBITMQ_DOCKER_URL:-amqp://${RABBITMQ_USER:-atez}:${RABBITMQ_PASSWORD:-atezpassword}@rabbitmq:5672}
       GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
       GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
       GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
@@ -62,6 +97,9 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-atez-local-secret-change-me}
       S3_FORCE_PATH_STYLE: "true"
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TARIFF_ENABLED: ${TARIFF_ENABLED:-false}
+      TARIFF_USERNAME: ${TARIFF_USERNAME:-}
+      TARIFF_PASSWORD: ${TARIFF_PASSWORD:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-30000}
       GEMINI_MAX_ATTEMPTS: ${GEMINI_MAX_ATTEMPTS:-3}
@@ -69,6 +107,8 @@ services:
       PREVIOUS_SOURCE_CONCURRENCY: ${PREVIOUS_SOURCE_CONCURRENCY:-3}
       TOPIC_ANALYSIS_CONCURRENCY: ${TOPIC_ANALYSIS_CONCURRENCY:-3}
     depends_on:
+      rabbitmq:
+        condition: service_healthy
       db:
         condition: service_healthy
       object-storage:
@@ -81,11 +121,14 @@ services:
     restart: unless-stopped
 
   worker:
+    image: atez-mevzuat-backend:local
     build:
       context: ./backend
     command: ["npm", "run", "start:worker"]
     environment: *backend-environment
     depends_on:
+      rabbitmq:
+        condition: service_healthy
       db:
         condition: service_healthy
       object-storage:
@@ -105,3 +148,4 @@ services:
 volumes:
   pgdata:
   miniodata:
+  rabbitmqdata:
