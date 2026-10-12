@@ -1,0 +1,46 @@
+.atez-report-page { display: grid; gap: 16px; padding-bottom: 40px; color: var(--atez-text); }
+.atez-published-report-frame { display: block; width: 100%; height: max(520px, calc(100dvh - 210px)); min-width: 0; border: 1px solid var(--atez-border); border-radius: 12px; background: #fff; }
+@media (max-width: 600px) { .atez-published-report-frame { height: 75dvh; min-height: 420px; } }
+.atez-report-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; background: var(--atez-surface); border: 1px solid var(--atez-border); border-radius: 12px; }
+.atez-report-header h1 { color: var(--atez-text); font-size: 19px; font-weight: 750; line-height: 1.3; margin: 0; overflow-wrap: anywhere; }
+.atez-report-header p { color: var(--atez-muted); }
+.atez-report-card { background: var(--atez-surface); border-color: var(--atez-border); color: var(--atez-text); }
+.atez-report-card .ant-card-head { border-color: var(--atez-border); }
+.atez-report-card .ant-card-head-title { color: var(--atez-text); }
+.atez-report-source { display: inline-flex; text-decoration: none; }
+.atez-report-source .ant-tag { margin: 0; display: inline-flex; align-items: center; gap: 4px; }
+.atez-report-workspace { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,320px); gap: 16px; align-items: start; }
+.atez-report-preview-card .ant-card-body { padding: 0; overflow: hidden; }
+.atez-report-preview-card .ant-alert { border-radius: 0; }
+.atez-report-changes .ant-card-body { display: grid; gap: 10px; }
+.atez-change-button { display: flex; align-items: center; text-align: left; height: auto; min-height: 38px; padding: 7px 9px; }
+.atez-change-button span { min-width: 0; }
+.atez-change-detail { margin: 5px 0 10px; background: var(--atez-surface); border-color: var(--atez-border); }
+.atez-change-detail .ant-card-body { display: grid; gap: 8px; font-size: 12px; }
+@media (max-width: 1100px) { .atez-report-workspace { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .atez-report-preview-card .ant-card-head { display: block; padding: 12px; } .atez-report-preview-card .ant-card-head-wrapper { flex-wrap: wrap; gap: 10px; } .atez-report-header { padding: 14px; } }
+
+.atez-report-workspace-stacked { grid-template-columns: minmax(0, 1fr); }
+.atez-report-changes .atez-chat-composer { padding: 0; width: 100%; }
+.atez-report-changes .atez-chat-composer-box { max-width: none; }
+.atez-report-changes .atez-chat-composer-note { margin-bottom: 0; }
+.atez-report-correction-history .atez-chat-messages { max-height: 320px; overflow-y: auto; padding: 0; }
+.atez-report-tools { border-color: var(--atez-border); background: var(--atez-surface); }
+.atez-report-workspace-stacked .atez-report-preview-card iframe { height: clamp(260px, 42vh, 600px); min-height: 0; }
+.atez-report-popup .atez-report-preview-card iframe { height: clamp(240px, 38vh, 480px); }
+
+/* Keep the shared composer outside the report's scrolling content. */
+.atez-report-scroll { display: grid; gap: 10px; min-width: 0; }
+.atez-report-changes { display: grid; gap: 8px; }
+.atez-report-composer-footer { position: sticky; bottom: 0; z-index: 2; background: var(--atez-bg); border-top: 1px solid var(--atez-border); padding-top: 8px; }
+.atez-report-composer-footer .atez-chat-composer { width: 100%; padding: 0 0 8px; }
+.atez-report-sources .ant-card-body { padding: 10px 14px; }
+.atez-report-popup { display: flex; flex-direction: column; min-height: 0; flex: 1; gap: 0; overflow: hidden; }
+.atez-report-popup .atez-report-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; align-content: start; padding-bottom: 12px; scrollbar-gutter: stable; }
+.atez-report-popup .atez-report-composer-footer { flex-shrink: 0; position: static; }
+.atez-report-popup .atez-report-header { padding: 8px 12px; }
+.atez-report-popup .atez-report-header h1 { font-size: 14px; }
+.atez-report-popup .atez-report-preview-card .ant-card-head { min-height: 48px; }
+.atez-report-popup .atez-report-preview-card .ant-card-head-title { font-size: 14px; }
+.atez-report-popup .atez-report-preview-card .ant-btn { font-size: 12px; }
+.atez-report-popup .atez-report-preview-card iframe { height: clamp(240px, 45dvh, 680px); }

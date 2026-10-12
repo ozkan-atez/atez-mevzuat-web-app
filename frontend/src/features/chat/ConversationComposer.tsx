@@ -1,76 +1,91 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, LoaderCircle } from 'lucide-react'
-import { MAX_MESSAGE_LENGTH } from './types'
+import { Alert, Button, Input, Tag, Typography } from 'antd'
+import { ArrowUpOutlined, GlobalOutlined, DesktopOutlined, StopOutlined } from '@ant-design/icons'
+import type { TextAreaRef } from 'antd/es/input/TextArea'
+import { ComposerAttachments } from './ComposerAttachments'
+import { AttachmentList, type DocumentAttachment } from '../documents/AttachmentList'
+import { MAX_MESSAGE_LENGTH, type ChatSendOptions } from './types'
 
 interface Props {
+  onStop?:()=>void
   isSending: boolean
-  onSend: (content: string) => void
+  onSend: (content: string, documentVersionIds?: string[], options?:ChatSendOptions) => void
   autoFocus?: boolean
+  attachmentsEnabled?: boolean
+  placeholder?: string
 }
 
-export function ConversationComposer({ isSending, onSend, autoFocus = true }: Props) {
+export function ConversationComposer({ isSending, onSend, autoFocus = true, attachmentsEnabled = true, placeholder = "Mevzuatla ilgili bir soru sorun…", onStop }: Props) {
+  const [browserAgent,setBrowserAgent] = useState(false)
+  const [webSearch,setWebSearch] = useState(false)
   const [value, setValue] = useState('')
-  const field = useRef<HTMLTextAreaElement>(null)
+  const [attachments, setAttachments] = useState<DocumentAttachment[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [attachmentError, setAttachmentError] = useState<string|null>(null)
+  const field = useRef<TextAreaRef>(null)
 
   useEffect(() => { if (autoFocus) field.current?.focus() }, [autoFocus])
 
-  // Grows with the text instead of scrolling inside a two-line box. Measured from
-  // zero height, and again after the first paint: on mount the stylesheet may not
-  // have applied yet and the box would freeze at its unstyled size.
-  useEffect(() => {
-    const resize = () => {
-      const element = field.current
-      if (!element) return
-      element.style.height = '0px'
-      element.style.height = `${Math.min(element.scrollHeight, 200)}px`
-    }
-    resize()
-    const frame = requestAnimationFrame(resize)
-    return () => cancelAnimationFrame(frame)
-  }, [value])
-
   const submit = () => {
     const content = value.trim()
-    if (!content || isSending || content.length > MAX_MESSAGE_LENGTH) return
+    if (!content || isSending || uploading || content.length > MAX_MESSAGE_LENGTH) return
+    setAttachmentError(null)
     setValue('')
-    onSend(content)
+    if(browserAgent)onSend(content,[],{browserAgent:true})
+    else if(webSearch)onSend(content,[],{webSearch:true})
+    else onSend(content, attachments.map(item => item.id))
+    setAttachments([])
   }
 
   return (
     <form
       onSubmit={(event) => { event.preventDefault(); submit() }}
-      className="mx-auto w-full max-w-3xl px-4 pb-5 sm:px-6"
+      className="atez-chat-composer"
     >
-      <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg shadow-slate-900/5 focus-within:border-blue-400">
-        <textarea
+      <div className="atez-chat-composer-box">
+        {attachments.length>0 && <AttachmentList items={attachments} onRemove={id => setAttachments(current => current.filter(item => item.id !== id))} />}
+        {attachmentError && <Alert type="error" title={attachmentError} closable onClose={()=>setAttachmentError(null)} />}
+        {uploading && <Typography.Text type="secondary" role="status">Belgeler yükleniyor…</Typography.Text>}
+        <Input.TextArea
           ref={field}
           aria-label="Mesaj"
           value={value}
-          rows={1}
+          autoSize={{ minRows: 1, maxRows: 7 }}
           maxLength={MAX_MESSAGE_LENGTH}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
             // Enter sends; Shift+Enter is how you write a second line.
-            if (event.key === 'Enter' && !event.shiftKey) {
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault()
               submit()
             }
           }}
-          placeholder="Mevzuatla ilgili bir soru sorun…"
-          className="max-h-52 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
+          placeholder={placeholder}
+          variant="borderless"
         />
-        <button
-          type="submit"
+        <div className="atez-chat-composer-toolbar">
+          <div className="atez-chat-composer-tools">
+          {attachmentsEnabled && <ComposerAttachments items={attachments} disabled={isSending || uploading} webSearch={webSearch} browserAgent={browserAgent} onBrowserAgentChange={enabled=>{setBrowserAgent(enabled);if(enabled)setWebSearch(false)}} onWebSearchChange={enabled=>{if(enabled && attachments.length){setAttachmentError('Web araması için ekli belgeleri kaldırın.');return}setWebSearch(enabled);if(enabled)setBrowserAgent(false)}}
+            onAdd={item=>setAttachments(current=>current.some(value=>value.id===item.id) ? current : [...current,item])}
+            onRemove={id=>setAttachments(current=>current.filter(item=>item.id!==id))}
+            onBusyChange={setUploading} onError={setAttachmentError} />}
+          {(webSearch||browserAgent) && <Tag className="atez-chat-tool-chip" icon={browserAgent?<DesktopOutlined />:<GlobalOutlined />} closable onClose={()=>{setWebSearch(false);setBrowserAgent(false)}}>{browserAgent?'Tarayıcı ajanı':'Web’de ara'}</Tag>}
+          </div>
+        {isSending && onStop ? <Button type="primary" shape="circle" aria-label="Yanıtı durdur" icon={<StopOutlined />} className="atez-chat-send" onClick={onStop}/> : <Button
+          htmlType="submit"
+          type="primary"
           aria-label="Gönder"
-          disabled={isSending || value.trim().length === 0}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-700 disabled:opacity-40"
-        >
-          {isSending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-        </button>
+          disabled={isSending || uploading || value.trim().length === 0}
+          loading={isSending}
+          icon={<ArrowUpOutlined />}
+          shape="circle"
+          className="atez-chat-send"
+        />}
+        </div>
       </div>
-      <p className="mt-2 text-center text-[11px] text-slate-400">
+      <Typography.Text type="secondary" className="atez-chat-composer-note">
         Enter ile gönderin, Shift+Enter ile satır ekleyin. Yanıtlar yapay zekâ tarafından üretilir; kritik kararlar için kaynağı doğrulayın.
-      </p>
+      </Typography.Text>
     </form>
   )
 }

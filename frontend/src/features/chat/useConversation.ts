@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getChatMessages, parseChatEventStream, streamChatMessage } from './api'
-import { MAX_MESSAGE_LENGTH, type ChatMessage, type ChatStreamEvent } from './types'
+import { MAX_MESSAGE_LENGTH, type ChatMessage, type ChatStreamEvent, type ChatSendOptions } from './types'
 
 export const STREAMING_MESSAGE_ID = 'streaming-assistant'
 
@@ -11,7 +11,8 @@ export interface Conversation {
   /** What the assistant is looking up right now, if anything. */
   activity: string | null
   error: string | null
-  send: (content: string) => Promise<void>
+  send: (content: string, documentVersionIds?: string[], options?:ChatSendOptions) => Promise<void>
+  stop:()=>void
   clearError: () => void
 }
 
@@ -57,7 +58,15 @@ export function useConversation(sessionId: string | undefined): Conversation {
   const loadController = useRef<AbortController | null>(null)
 
   useEffect(() => {
+    sendController.current?.abort()
+    sending.current = false
+    setIsSending(false)
+    setMessages([])
+    setError(null)
+    setActivity(null)
     if (!sessionId) {
+      setIsLoading(false)
+      loadController.current = null
       setMessages([])
       return
     }
@@ -78,7 +87,7 @@ export function useConversation(sessionId: string | undefined): Conversation {
   // into a transcript nobody is looking at.
   useEffect(() => () => sendController.current?.abort(), [])
 
-  const send = useCallback(async (raw: string) => {
+  const send = useCallback(async (raw: string, documentVersionIds: string[] = [], options:ChatSendOptions = {}) => {
     const content = raw.trim()
     if (!sessionId || sending.current || content.length === 0 || content.length > MAX_MESSAGE_LENGTH) return
     sending.current = true
@@ -94,13 +103,13 @@ export function useConversation(sessionId: string | undefined): Conversation {
     sendController.current = controller
 
     try {
-      const response = await streamChatMessage(sessionId, content, controller.signal)
+      const response = await streamChatMessage(sessionId, content, controller.signal, documentVersionIds, options)
       for await (const event of parseChatEventStream(response)) {
         setMessages((current) => reduceChatEvent(current, event, optimisticId))
         if (event.type === 'tool') setActivity(event.label)
         // Once words start arriving the lookup is over and the text speaks for itself.
         if (event.type === 'delta') setActivity(null)
-        if (event.type === 'error') setError(event.message)
+        // Stream errors are already rendered as failed messages in the transcript.
       }
     } catch (caught: unknown) {
       if (!controller.signal.aborted) {
@@ -108,14 +117,22 @@ export function useConversation(sessionId: string | undefined): Conversation {
         setMessages((current) => current.filter((message) => message.id !== STREAMING_MESSAGE_ID))
       }
     } finally {
-      sending.current = false
-      setActivity(null)
-      if (!controller.signal.aborted) setIsSending(false)
-      sendController.current = null
+      if (sendController.current === controller) {
+        sending.current = false
+        setActivity(null)
+        if (!controller.signal.aborted) setIsSending(false)
+        sendController.current = null
+      }
     }
   }, [sessionId])
 
+  const stop=useCallback(()=>{
+    sendController.current?.abort()
+    sending.current=false
+    setIsSending(false);setActivity(null)
+    setMessages(current=>current.map(message=>message.id===STREAMING_MESSAGE_ID?{...message,id:`stopped-${crypto.randomUUID()}`,content:message.content ? message.content+'\n\nYanıt durduruldu.' : 'Araştırma durduruldu.'}:message))
+  },[])
   const clearError = useCallback(() => setError(null), [])
 
-  return { messages, isLoading, isSending, activity, error, send, clearError }
+  return { messages, isLoading, isSending, activity, error, send, stop, clearError }
 }

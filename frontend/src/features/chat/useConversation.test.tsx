@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '../../test/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useConversation } from './useConversation'
 
@@ -123,7 +123,7 @@ describe('useConversation', () => {
     expect(sent).toEqual([])
   })
 
-  it('marks the answer failed and exposes a readable error', async () => {
+  it('keeps a stream error in the transcript without a duplicate banner', async () => {
     stubFetch({ stream: [
       frame({ type: 'message', message: message('u1', 'USER', 'Sor') }, 'message'),
       frame({ type: 'error', message: 'Yapay zekâ yanıtı tamamlanamadı. Lütfen yeniden deneyin.' }, 'error'),
@@ -133,7 +133,7 @@ describe('useConversation', () => {
 
     await act(() => result.current.send('Sor'))
 
-    expect(result.current.error).toBe('Yapay zekâ yanıtı tamamlanamadı. Lütfen yeniden deneyin.')
-    expect(result.current.messages.at(-1)).toMatchObject({ role: 'ASSISTANT', status: 'FAILED' })
+    expect(result.current.error).toBeNull()
+    expect(result.current.messages.at(-1)).toMatchObject({ role: 'ASSISTANT', status: 'FAILED', errorDetail: 'Yapay zekâ yanıtı tamamlanamadı. Lütfen yeniden deneyin.' })
   })
 })

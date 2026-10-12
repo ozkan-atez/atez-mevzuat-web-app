@@ -1,0 +1,102 @@
+import { ConfigProvider } from 'antd'
+import { cleanup, render, screen, waitFor } from '../../test/test-utils'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ConversationComposer } from './ConversationComposer'
+import { listDocuments, uploadDocument } from '../documents/api'
+
+vi.mock('../documents/api',()=>({listDocuments:vi.fn(),uploadDocument:vi.fn()}))
+const document={id:'archive1',title:'Arşiv belgesi',origin:'SOURCE',publishedOn:null,latestVersion:{id:'version1',mimeType:'text/plain',extractionStatus:'READY',originalFilename:null,createdAt:''},versions:[]}
+function setup(){const send=vi.fn();render(<ConfigProvider theme={{token:{motion:false}}}><ConversationComposer isSending={false} onSend={send}/></ConfigProvider>);return send}
+beforeEach(()=>{vi.resetAllMocks();vi.mocked(listDocuments).mockResolvedValue({documents:[document],total:1})})
+afterEach(cleanup)
+describe('composer inline attachment menu',()=>{
+  it('puts the selected tool beside plus and switches exclusively to browser research',async()=>{
+    const send=setup()
+    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
+    await userEvent.click(screen.getByRole('button',{name:'Web’de ara'}))
+    expect(screen.getByText('Web’de ara').closest('.atez-chat-composer-tools')).not.toBeNull()
+    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
+    await userEvent.click(screen.getByRole('button',{name:'Tarayıcı ajanı'}))
+    expect(screen.getByText('Tarayıcı ajanı').closest('.atez-chat-composer-tools')).not.toBeNull()
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Sayfayı incele{Enter}')
+    expect(send).toHaveBeenCalledWith('Sayfayı incele',[],{browserAgent:true})
+  })
+  it('sends the selected Web search mode with the message',async()=>{
+    const send=setup()
+    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
+    await userEvent.click(screen.getByRole('button',{name:'Web’de ara'}))
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Güncel duyuruları bul{Enter}')
+    expect(send).toHaveBeenCalledWith('Güncel duyuruları bul',[],{webSearch:true})
+  })
+  it('selects and removes an archive document inside the plus menu without a dialog',async()=>{
+    const send=setup()
+    expect(listDocuments).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
+    expect(screen.queryByRole('button',{name:'Arşivden belge seç'})).not.toBeInTheDocument()
+    await userEvent.type(screen.getByRole('textbox',{name:'Arşivde belge ara'}),'Arşiv')
+    await waitFor(()=>expect(listDocuments).toHaveBeenLastCalledWith('Arşiv',{page:1,limit:10}))
+    await userEvent.click(await screen.findByRole('checkbox',{name:'Arşiv belgesi'}))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'Arşiv belgesi belgesini kaldır'})).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('checkbox',{name:'Arşiv belgesi'}))
+    expect(screen.queryByRole('button',{name:'Arşiv belgesi belgesini kaldır'})).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('checkbox',{name:'Arşiv belgesi'}))
+    await userEvent.click(screen.getByRole('textbox',{name:'Mesaj'}))
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Bu belgeyi incele{Enter}')
+    expect(send).toHaveBeenCalledWith('Bu belgeyi incele',['version1'])
+    expect(screen.queryByRole('button',{name:'Arşiv belgesi belgesini kaldır'})).not.toBeInTheDocument()
+  })
+  it('keeps searches inside the panel from submitting a drafted message and closes with Escape',async()=>{
+    const send=setup()
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Taslak mesaj')
+    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
+    await userEvent.type(screen.getByRole('textbox',{name:'Arşivde belge ara'}),'Arşiv{Enter}')
+    expect(send).not.toHaveBeenCalled()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('textbox',{name:'Arşivde belge ara'})).not.toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'Belge ekle'})).toHaveFocus()
+  })
+  it('attaches multiple uploaded files directly and sends their immutable version IDs',async()=>{
+    vi.mocked(uploadDocument).mockImplementation(async file=>({document:{...document,title:file.name},version:{...document.latestVersion,id:`version-${file.name}`}}))
+    const send=setup()
+    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Bilgisayardan dosya ekle'})).toBeVisible())
+    await userEvent.upload(screen.getByLabelText('Sohbete dosya yükle'),[new File(['a'],'a.txt'),new File(['b'],'b.txt')])
+    await waitFor(()=>expect(screen.getByRole('button',{name:'b.txt belgesini kaldır'})).toBeInTheDocument())
+    expect(uploadDocument).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Karşılaştır{Enter}')
+    expect(send).toHaveBeenCalledWith('Karşılaştır',['version-a.txt','version-b.txt'])
+  })
+  it('keeps the message and successful attachments when another file fails to upload',async()=>{
+    vi.mocked(uploadDocument).mockImplementation(async file=>{if(file.name==='bad.txt')throw new Error('Dosya yüklenemedi');return {document:{...document,title:file.name},version:{...document.latestVersion,id:'good-version'}}})
+    const send=setup()
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Taslak mesaj')
+    await userEvent.upload(screen.getByLabelText('Sohbete dosya yükle'),[new File(['a'],'good.txt'),new File(['b'],'bad.txt')])
+    expect(await screen.findByText('bad.txt: Dosya yüklenemedi')).toBeInTheDocument()
+    expect(screen.getByRole('textbox',{name:'Mesaj'})).toHaveValue('Taslak mesaj')
+    expect(screen.getByRole('button',{name:'good.txt belgesini kaldır'})).toBeInTheDocument()
+    expect(send).not.toHaveBeenCalled()
+  })
+  it('blocks sending until an upload finishes so the message cannot lose its attachment',async()=>{
+    let finish!:(value:Awaited<ReturnType<typeof uploadDocument>>)=>void
+    vi.mocked(uploadDocument).mockReturnValue(new Promise(resolve=>{finish=resolve}))
+    const send=setup()
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Belgeyi incele')
+    await userEvent.upload(screen.getByLabelText('Sohbete dosya yükle'),new File(['x'],'pending.txt'))
+    expect(screen.getByRole('button',{name:'Gönder'})).toBeDisabled()
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'{Enter}')
+    expect(send).not.toHaveBeenCalled()
+    finish({document,version:document.latestVersion})
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Gönder'})).toBeEnabled())
+    await userEvent.click(screen.getByRole('button',{name:'Gönder'}))
+    expect(send).toHaveBeenCalledWith('Belgeyi incele',['version1'])
+  })
+  it('rejects more than ten files without starting any upload',async()=>{
+    setup()
+    await userEvent.upload(screen.getByLabelText('Sohbete dosya yükle'),Array.from({length:11},(_,i)=>new File(['x'],`${i}.txt`)))
+    expect(await screen.findByText('Bir mesaja en fazla 10 belge ekleyebilirsiniz.')).toBeInTheDocument()
+    expect(uploadDocument).not.toHaveBeenCalled()
+  })
+})

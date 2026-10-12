@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup } from '../../test/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { renderMarkdown } from './renderMarkdown'
 
@@ -26,4 +26,15 @@ describe('renderMarkdown', () => {
     expect(container.querySelector('b')).toBeNull()
     expect(container.textContent).toContain('<img src=x onerror="alert(1)">')
   })
+
+  it('links only internal run paths from a scan response', () => {
+    render(<>{renderMarkdown('Taramayı izle: /runs/scan-28')}</>)
+    expect(screen.getByRole('link', { name: '/runs/scan-28' })).toHaveAttribute('href', '/runs/scan-28')
+  })
+  it('links published report paths without enabling external or script links', () => {
+    render(<>{renderMarkdown('[Bülteni aç](/reports/topic-1?revision=2) [Kötü](javascript:alert(1))')}</>)
+    expect(screen.getByRole('link', { name: 'Bülteni aç' })).toHaveAttribute('href', '/reports/topic-1?revision=2')
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+  })
+
 })

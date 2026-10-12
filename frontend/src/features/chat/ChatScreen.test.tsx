@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '../../test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChatScreen } from './ChatScreen'
@@ -11,7 +11,7 @@ let createdSessions = 0
 
 function LocationProbe() {
   const location = useLocation()
-  return <span data-testid="location">{location.pathname}</span>
+  return <span data-testid="location">{location.pathname}{location.search}</span>
 }
 
 function message(id: string, role: 'USER' | 'ASSISTANT', content: string) {
@@ -25,14 +25,17 @@ function historyItem(overrides: Partial<ChatHistoryItem>): ChatHistoryItem {
   }
 }
 
-function stubFetch(options: { history?: ChatHistoryItem[]; messages?: unknown[] } = {}) {
+function stubFetch(options: { history?: ChatHistoryItem[]; messages?: unknown[]; streamError?: string; networkError?: string } = {}) {
   sent.length = 0
   createdSessions = 0
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (init?.method === 'POST' && url.endsWith('/messages')) {
+      if (options.networkError) throw new Error(options.networkError)
       sent.push(JSON.parse(String(init.body)).content)
-      const frames = [
+      const frames = options.streamError ? [
+        `event: error\ndata: ${JSON.stringify({ type: 'error', message: options.streamError })}\n\n`,
+      ] : [
         `event: message\ndata: ${JSON.stringify({ type: 'message', message: message('u1', 'USER', sent.at(-1)!) })}\n\n`,
         `event: delta\ndata: ${JSON.stringify({ type: 'delta', content: 'Yanıt' })}\n\n`,
         `event: complete\ndata: ${JSON.stringify({ type: 'complete', message: message('a1', 'ASSISTANT', 'Yanıt') })}\n\n`,
@@ -47,7 +50,7 @@ function stubFetch(options: { history?: ChatHistoryItem[]; messages?: unknown[] 
     }
     if (init?.method === 'POST') {
       createdSessions += 1
-      return new Response(JSON.stringify({ id: 'session-1', title: null, createdAt: '', updatedAt: '' }), { status: 201 })
+      return new Response(JSON.stringify({ id: `session-${createdSessions}`, title: null, createdAt: '', updatedAt: '' }), { status: 201 })
     }
     if (init?.method === 'DELETE') return new Response(null, { status: 204 })
     if (url.endsWith('/messages')) return new Response(JSON.stringify({ messages: options.messages ?? [] }), { status: 200 })
@@ -72,17 +75,32 @@ beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true) })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('ChatScreen', () => {
-  it('renders unified history and routes a report thread to its report', async () => {
-    stubFetch({ history: [
-      historyItem({}),
-      historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/reports/topic-1' }),
-    ] })
+  it('keeps automatic report threads out of the conversation list', async () => {
+    stubFetch({ history: [historyItem({}), historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/reports/topic-1' })] })
     renderChat('/chat/general-1')
-
     expect(await screen.findByRole('navigation', { name: 'Sohbet geçmişi' })).toBeVisible()
-    await userEvent.click(await screen.findByRole('link', { name: /PET revizyonu/ }))
+    await waitFor(() => expect(screen.getByRole('link', { name: /GTİP sorusu/ })).toBeVisible())
+    expect(screen.queryByRole('link', { name: /PET revizyonu/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('GTİP nedir?')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Rapor düzelt/ })).toBeVisible()
+  })
 
-    expect(screen.getByTestId('location')).toHaveTextContent('/reports/topic-1')
+  it('shows a streamed failure only once inside the conversation', async () => {
+    const failure = 'Yapay zekâ hizmetine erişim reddedildi.'
+    stubFetch({ streamError: failure })
+    renderChat('/chat/general-1')
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Mesaj' }), 'Sor{Enter}')
+    await waitFor(() => expect(screen.getAllByText(failure)).toHaveLength(1))
+    expect(screen.getByRole('alert')).toHaveClass('ant-alert-error')
+  })
+
+  it('still shows a network failure when there is no failed message', async () => {
+    const failure = 'Bağlantı kesildi.'
+    stubFetch({ networkError: failure })
+    renderChat('/chat/general-1')
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Mesaj' }), 'Sor{Enter}')
+    expect(await screen.findByText(failure)).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveClass('atez-chat-error')
   })
 
   it('restores a stored transcript for an existing conversation', async () => {
@@ -112,6 +130,15 @@ describe('ChatScreen', () => {
     await waitFor(() => expect(createdSessions).toBe(1))
     await waitFor(() => expect(sent).toEqual(['GTİP nedir?']))
     expect(screen.getByTestId('location')).toHaveTextContent('/chat/session-1')
+  })
+
+  it('preserves immutable document versions through the first-session handoff', async () => {
+    stubFetch()
+    renderChat('/chat', { initialMessage: 'Ekli belgeyi analiz et', documentVersionIds: ['immutable-v1'] }, { strict: true })
+    await waitFor(() => expect(sent).toEqual(['Ekli belgeyi analiz et']))
+    const calls = vi.mocked(fetch).mock.calls.filter(call => String(call[0]).endsWith('/messages') && call[1]?.method === 'POST')
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(String(calls[0]![1]!.body)).documentVersionIds).toEqual(['immutable-v1'])
   })
 
   it('starts a conversation when the first message is typed on the empty state', async () => {
@@ -150,4 +177,23 @@ describe('ChatScreen', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Geçmişi kapat' })[0]!)
     await waitFor(() => expect(screen.getAllByRole('navigation', { name: 'Sohbet geçmişi' })).toHaveLength(1))
   })
+  it('can start another new conversation without retaining the old transcript', async () => {
+    stubFetch()
+    renderChat('/chat', { initialMessage: 'İlk soru' }, { strict: true })
+    await waitFor(() => expect(sent).toEqual(['İlk soru']))
+    await userEvent.click(screen.getByRole('link', { name: /Yeni sohbet/ }))
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Mesaj' }), 'İkinci soru{Enter}')
+    await waitFor(() => expect(sent).toEqual(['İlk soru', 'İkinci soru']))
+    expect(createdSessions).toBe(2)
+    expect(screen.getByTestId('location')).toHaveTextContent('/chat/session-2')
+    expect(screen.queryByText('İlk soru')).not.toBeInTheDocument()
+  })
+
+  it('renders a readable message for a previously saved model failure', async () => {
+    stubFetch({ messages: [{ ...message('f1', 'ASSISTANT', ''), status: 'FAILED', errorDetail: 'MODEL_GENERATION_FAILED' }] })
+    renderChat('/chat/general-1')
+    expect(await screen.findByText('Yapay zekâ yanıtı tamamlanamadı. Rapor sorgunuzu yeniden gönderebilirsiniz.')).toBeVisible()
+    expect(screen.queryByText('MODEL_GENERATION_FAILED')).not.toBeInTheDocument()
+  })
+
 })

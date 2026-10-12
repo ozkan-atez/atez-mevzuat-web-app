@@ -1,0 +1,10 @@
+.atez-delivery-modal .ant-modal-content { background: var(--atez-surface); color: var(--atez-text); border: 1px solid var(--atez-border); }
+.atez-delivery-modal .ant-modal-header { background: transparent; }
+.atez-delivery-modal .ant-modal-title { color: var(--atez-text); font-size: 17px; }
+.atez-delivery-subtitle { display: block; margin: -10px 0 18px; }
+.atez-delivery-modal label { color: var(--atez-text); }
+.atez-delivery-modal .ant-tag-checkable { border: 1px solid var(--atez-border); border-radius: 6px; padding: 3px 8px; }
+.atez-delivery-modal .text-slate-900, .atez-delivery-modal .text-slate-800, .atez-delivery-modal .text-slate-700, .atez-delivery-modal .text-blue-950 { color: var(--atez-text); }
+.atez-delivery-modal .text-slate-600, .atez-delivery-modal .text-slate-500, .atez-delivery-modal .text-slate-400 { color: var(--atez-muted); }
+.atez-delivery-modal .bg-slate-50, .atez-delivery-modal .bg-blue-50\/60 { background: var(--atez-bg); }
+.atez-delivery-modal .border-slate-200, .atez-delivery-modal .border-slate-100, .atez-delivery-modal .border-blue-200\/80 { border-color: var(--atez-border); }

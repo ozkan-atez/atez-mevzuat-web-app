@@ -15,6 +15,8 @@ export type ScanStage =
 export type StageExecutionStatus = 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'FAILED'
 
 export interface ScanRunDetail {
+  sourceKeys?: string[]
+  sourceRuns?: Array<{ notes?:string[]; stages?: Array<{stage:string;status:string;totalItems:number;completedItems:number;error:string|null}>; id: string; status: string; source: { name: string; key: string }; documentCount: number; errorSummary: string | null }>
   id: string
   status: ScanRunStatus
   currentStage: ScanStage | null
@@ -46,6 +48,7 @@ export interface ScanRunDetail {
     basename: string
     card: import('../analysis/types').ReportCard
     version: number
+    publishedAt?: string
     htmlObjectKey: string
   }>
   counts: {
@@ -65,7 +68,7 @@ export interface ScanRunDetail {
   }>
   editions: Array<{
     id: string
-    type: 'MAIN' | 'SUPPLEMENT'
+    type: 'MAIN' | 'SUPPLEMENT' | 'EXTERNAL'
     supplementNo: number | null
     documents: Array<{
       id: string
@@ -93,6 +96,8 @@ export interface ScanRunDetail {
 }
 
 export interface ScanRunSummary {
+  automationName?: string | null
+  scheduleLabel?: string | null
   id: string
   trigger: 'MANUAL' | 'CRON'
   status: ScanRunStatus

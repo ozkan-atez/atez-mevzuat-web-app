@@ -1,4 +1,5 @@
-import type { ChatHistoryItem, ChatMessage, ChatSession, ChatStreamEvent } from './types'
+import { apiFetch } from '../../lib/apiFetch'
+import type { ChatHistoryItem, ChatMessage, ChatSession, ChatStreamEvent, ChatSendOptions } from './types'
 
 export class ChatApiError extends Error {
   readonly status: number
@@ -19,33 +20,33 @@ export class ChatApiError extends Error {
 }
 
 export async function listChatHistory(signal?: AbortSignal): Promise<ChatHistoryItem[]> {
-  const response = await fetch('/api/v1/chat/sessions', signal ? { signal } : {})
+  const response = await apiFetch('/api/v1/chat/sessions', signal ? { signal } : {})
   if (!response.ok) throw await ChatApiError.from(response, 'Sohbet geçmişi alınamadı.')
   return ((await response.json()) as { sessions: ChatHistoryItem[] }).sessions
 }
 
 export async function createChatSession(): Promise<ChatSession> {
-  const response = await fetch('/api/v1/chat/sessions', { method: 'POST' })
+  const response = await apiFetch('/api/v1/chat/sessions', { method: 'POST' })
   if (!response.ok) throw await ChatApiError.from(response, 'Sohbet başlatılamadı.')
   return response.json() as Promise<ChatSession>
 }
 
 export async function getChatMessages(sessionId: string, signal?: AbortSignal): Promise<ChatMessage[]> {
-  const response = await fetch(`/api/v1/chat/sessions/${sessionId}/messages`, signal ? { signal } : {})
+  const response = await apiFetch(`/api/v1/chat/sessions/${sessionId}/messages`, signal ? { signal } : {})
   if (!response.ok) throw await ChatApiError.from(response, 'Mesajlar alınamadı.')
   return ((await response.json()) as { messages: ChatMessage[] }).messages
 }
 
 export async function deleteChatSession(sessionId: string): Promise<void> {
-  const response = await fetch(`/api/v1/chat/sessions/${sessionId}`, { method: 'DELETE' })
+  const response = await apiFetch(`/api/v1/chat/sessions/${sessionId}`, { method: 'DELETE' })
   if (!response.ok) throw await ChatApiError.from(response, 'Sohbet silinemedi.')
 }
 
-export async function streamChatMessage(sessionId: string, content: string, signal: AbortSignal): Promise<Response> {
-  return fetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
+export async function streamChatMessage(sessionId: string, content: string, signal: AbortSignal, documentVersionIds: string[] = [], options:ChatSendOptions = {}): Promise<Response> {
+  return apiFetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, ...(options.webSearch ? {webSearch:true}:{}), ...(options.browserAgent ? {browserAgent:true}:{}), ...(documentVersionIds.length ? { documentVersionIds } : {}) }),
     signal,
   })
 }
@@ -78,4 +79,11 @@ export async function* parseChatEventStream(response: Response): AsyncGenerator<
   } finally {
     reader.releaseLock()
   }
+}
+
+export interface ChatReportOption { topicId: string; title: string; version: number; gazetteDate: string }
+export async function listChatReports(): Promise<ChatReportOption[]> {
+  const response = await apiFetch('/api/v1/chat/reports')
+  if (!response.ok) throw await ChatApiError.from(response, 'Düzeltilebilecek raporlar alınamadı.')
+  return ((await response.json()) as { reports: ChatReportOption[] }).reports
 }

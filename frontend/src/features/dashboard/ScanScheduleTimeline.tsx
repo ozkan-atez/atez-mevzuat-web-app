@@ -35,13 +35,13 @@ export function ScanScheduleStatus({ schedule }: { schedule: ScheduleView | null
 
   return (
     <div className="flex flex-wrap items-center gap-3" data-purpose="live-cron-status">
-      <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border-2 shrink-0 ${active ? 'border-indigo-400/30 text-indigo-400' : 'border-slate-700 text-slate-500'}`}>
+      <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border-2 shrink-0 ${active ? 'border-[var(--atez-accent)]/30 text-[var(--atez-accent)]' : 'border-[var(--atez-border)] text-[var(--atez-muted)]'}`}>
         {active && (
           <svg className="animate-spin w-8 h-8 -rotate-90 absolute text-indigo-500" fill="none" viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="14" stroke="currentColor" strokeDasharray="70 30" strokeLinecap="round" strokeWidth="3.5" />
           </svg>
         )}
-        <span className={`w-2.5 h-2.5 rounded-full ${active ? 'bg-indigo-400 animate-pulse' : 'bg-slate-600'}`} />
+        <span className={`w-2.5 h-2.5 rounded-full ${active ? 'bg-[var(--atez-accent)] animate-pulse' : 'bg-[var(--atez-muted)]'}`} />
       </div>
       <div>
         <div className="flex items-center gap-2">
@@ -50,17 +50,17 @@ export function ScanScheduleStatus({ schedule }: { schedule: ScheduleView | null
           </h4>
           {active && (
             <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--atez-accent)] opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
             </span>
           )}
         </div>
-        <p className="text-[11px] font-mono tracking-wider uppercase text-slate-400 mt-1">
+        <p className="text-[11px] font-mono tracking-wider uppercase text-[var(--atez-muted)] mt-1">
           {schedule ? `${schedule.targetDate} • ${slots.filter((slot) => slot.state === 'COMPLETED').length}/${slots.length} TARAMA TAMAMLANDI` : 'ZAMANLAMA YÜKLENİYOR…'}
         </p>
       </div>
       {active && (
-        <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold tracking-wider uppercase bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 backdrop-blur-sm">
+        <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold tracking-wider uppercase bg-indigo-500/20 border border-[var(--atez-border)] text-[var(--atez-accent)] backdrop-blur-sm">
           {active.time} {active.label} Taraması
         </span>
       )}
@@ -73,11 +73,11 @@ export function ScanScheduleTimeline({ schedule }: { schedule: ScheduleView | nu
   const slots = schedule?.slots ?? []
 
   return (
-    <div className="pt-6 border-t border-slate-800/80 mt-2 relative z-10" data-purpose="live-cron-process-bar">
+    <div className="pt-6 border-t border-[var(--atez-border)]/80 mt-2 relative z-10" data-purpose="live-cron-process-bar">
       <div className="relative px-2 pt-2">
         <div className="relative flex items-center justify-between mb-4">
           <div className="absolute top-1/2 -translate-y-1/2 h-[3px] z-0" style={{ left: MARKER_INSET, right: MARKER_INSET }}>
-            <div className="w-full h-full bg-slate-800 rounded-full" />
+            <div className="w-full h-full bg-[var(--atez-raised)] rounded-full" />
             <div
               className="absolute left-0 top-0 h-full bg-indigo-500 rounded-full shadow-sm shadow-indigo-500/50 transition-[width] duration-700"
               data-purpose="process-bar-fill"
@@ -159,7 +159,7 @@ function minutesOfDay(time: string): number {
 function SlotMarker({ slot }: { slot: ScheduleSlot }) {
   if (slot.state === 'COMPLETED') {
     return (
-      <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 border-2 border-indigo-400 shadow-md shadow-indigo-900/50 text-white">
+      <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 border-2 border-[var(--atez-accent)] shadow-md shadow-indigo-900/50 text-white">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
           <path d="M4.5 12.75l6 6 9-13.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -168,8 +168,8 @@ function SlotMarker({ slot }: { slot: ScheduleSlot }) {
   }
   if (slot.state === 'RUNNING') {
     return (
-      <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-slate-900 border-2 border-indigo-400 ring-4 ring-indigo-500/20 shadow-lg text-indigo-400">
-        <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping" />
+      <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-[var(--atez-raised)] border-2 border-[var(--atez-accent)] ring-4 ring-[var(--atez-accent-soft)] shadow-lg text-[var(--atez-accent)]">
+        <span className="w-2.5 h-2.5 rounded-full bg-[var(--atez-accent)] animate-ping" />
       </div>
     )
   }
@@ -179,8 +179,8 @@ function SlotMarker({ slot }: { slot: ScheduleSlot }) {
     )
   }
   return (
-    <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-slate-800 border-2 border-slate-700 text-slate-500">
-      <span className="w-2 h-2 rounded-full bg-slate-600" />
+    <div className="relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-[var(--atez-raised)] border-2 border-[var(--atez-border)] text-[var(--atez-muted)]">
+      <span className="w-2 h-2 rounded-full bg-[var(--atez-muted)]" />
     </div>
   )
 }
@@ -190,15 +190,15 @@ function SlotCard({ slot }: { slot: ScheduleSlot }) {
   const body = (
     <>
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className={`text-xs font-bold uppercase tracking-wider ${slot.state === 'RUNNING' ? 'text-indigo-300' : slot.state === 'PENDING' ? 'text-slate-400' : 'text-slate-200'}`}>{heading}</span>
+        <span className={`text-xs font-bold uppercase tracking-wider ${slot.state === 'RUNNING' ? 'text-[var(--atez-accent)]' : slot.state === 'PENDING' ? 'text-[var(--atez-muted)]' : 'text-[var(--atez-text)]'}`}>{heading}</span>
         <SlotBadge slot={slot} />
       </div>
-      <p className={`text-xs leading-relaxed ${slot.state === 'PENDING' ? 'text-slate-500' : 'text-slate-400'}`}>{slotSummary(slot)}</p>
+      <p className={`text-xs leading-relaxed ${slot.state === 'PENDING' ? 'text-[var(--atez-muted)]' : 'text-[var(--atez-muted)]'}`}>{slotSummary(slot)}</p>
     </>
   )
 
   const className = slot.state === 'RUNNING'
-    ? 'space-y-1 bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-500/30 -mt-1 block'
+    ? 'space-y-1 bg-[var(--atez-accent-soft)] p-2.5 rounded-xl border border-[var(--atez-border)] -mt-1 block'
     : slot.state === 'ATTENTION' || slot.state === 'DUE'
       ? 'space-y-1 bg-amber-950/20 p-2.5 rounded-xl border border-amber-500/30 -mt-1 block'
       : slot.state === 'PENDING' ? 'space-y-1 opacity-75 block' : 'space-y-1 block'
@@ -206,7 +206,7 @@ function SlotCard({ slot }: { slot: ScheduleSlot }) {
   if (!slot.run) return <div className={className}>{body}</div>
 
   return (
-    <Link to={`/runs/${slot.run.id}`} className={`${className} transition-colors hover:bg-slate-800/40`}>
+    <Link to={`/runs/${slot.run.id}`} className={`${className} transition-colors hover:bg-[var(--atez-raised)]/40`}>
       {body}
     </Link>
   )
@@ -214,10 +214,10 @@ function SlotCard({ slot }: { slot: ScheduleSlot }) {
 
 function SlotBadge({ slot }: { slot: ScheduleSlot }) {
   if (slot.state === 'COMPLETED') return <span className="text-[10px] text-emerald-400 font-semibold">• Tamamlandı</span>
-  if (slot.state === 'RUNNING') return <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-1.5 py-0.5 rounded font-semibold animate-pulse">İşleniyor</span>
+  if (slot.state === 'RUNNING') return <span className="text-[10px] bg-[var(--atez-accent-soft)] text-[var(--atez-accent)] px-1.5 py-0.5 rounded font-semibold animate-pulse">İşleniyor</span>
   if (slot.state === 'ATTENTION') return <span className="text-[10px] text-amber-300 font-semibold">• Dikkat gerekiyor</span>
   if (slot.state === 'DUE') return <span className="text-[10px] text-amber-300 font-semibold">• Çalışmadı</span>
-  return <span className="text-[10px] text-slate-500 font-medium">• Beklemede</span>
+  return <span className="text-[10px] text-[var(--atez-muted)] font-medium">• Beklemede</span>
 }
 
 function slotSummary(slot: ScheduleSlot): string {

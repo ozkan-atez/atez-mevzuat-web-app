@@ -1,27 +1,48 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, Menu, Sparkles, X } from 'lucide-react'
+import { ReportCorrectionDrawer } from '../revision/ReportCorrectionDrawer'
+import { Can } from '../auth/Can'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Alert, Button, Drawer, Empty, Select, Typography } from 'antd'
+import { CloseOutlined, MenuOutlined } from '@ant-design/icons'
 import { ConversationComposer } from './ConversationComposer'
 import { ConversationHistory } from './ConversationHistory'
 import { ConversationMessages } from './ConversationMessages'
-import { createChatSession, deleteChatSession, listChatHistory } from './api'
+import { createChatSession, deleteChatSession, listChatHistory, listChatReports, type ChatReportOption } from './api'
 import { useConversation } from './useConversation'
-import type { ChatHistoryItem } from './types'
+import type { ChatHistoryItem, ChatSendOptions } from './types'
+import './chat-workspace.css'
+import { getTopic } from '../analysis/api'
+import { ReportWorkspace } from '../revision/ReportWorkspace'
 
 interface ChatLocationState {
+  browserAgent?:boolean
+  webSearch?:boolean
   initialMessage?: string
+  documentVersionIds?: string[]
 }
 
 export function ChatScreen() {
   const { sessionId } = useParams<{ sessionId: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const topicId = searchParams.get('topic')
   const navigate = useNavigate()
   const location = useLocation()
+  const initialBrowserAgent=(location.state as ChatLocationState | null)?.browserAgent
+  const initialWebSearch = (location.state as ChatLocationState | null)?.webSearch
+  const initialDocumentVersionIds = (location.state as ChatLocationState | null)?.documentVersionIds
   const initialMessage = (location.state as ChatLocationState | null)?.initialMessage?.trim() ?? ''
 
   const [history, setHistory] = useState<ChatHistoryItem[]>([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [selectedReport, setSelectedReport] = useState<string | null>(null)
+  const [reportOptions, setReportOptions] = useState<ChatReportOption[]>([])
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
+  const [reportRunId, setReportRunId] = useState<string | null>(null)
+  const [reportNotice, setReportNotice] = useState<string | null>(null)
   const [handoffError, setHandoffError] = useState<string | null>(null)
 
   const conversation = useConversation(sessionId)
@@ -30,7 +51,7 @@ export function ChatScreen() {
     setIsHistoryLoading(true)
     setHistoryError(null)
     try {
-      setHistory(await listChatHistory())
+      setHistory((await listChatHistory()).filter(item => item.type === 'GENERAL'))
     } catch (caught: unknown) {
       setHistoryError(caught instanceof Error ? caught.message : 'Sohbet geçmişi alınamadı.')
     } finally {
@@ -40,15 +61,49 @@ export function ChatScreen() {
 
   useEffect(() => { void loadHistory() }, [loadHistory])
 
+  const loadReports = useCallback(async () => {
+    setReportLoading(true); setReportError(null)
+    try { setReportOptions(await listChatReports()) }
+    catch (error) { setReportError(error instanceof Error ? error.message : 'Raporlar alınamadı.') }
+    finally { setReportLoading(false) }
+  }, [])
+  useEffect(() => { if (reportOpen) void loadReports() }, [reportOpen, loadReports])
+  // Old report URLs must never replace the conversation with a dead-end error page.
+  useEffect(() => {
+    if (!topicId) return
+    let cancelled = false
+    void getTopic(topicId).then(topic => {
+      if (cancelled) return
+      if (topic.reportVersion) { setSelectedReport(topicId); setReportNotice(null); setReportOpen(true) }
+      else {
+        setReportRunId(topic.runId ?? null)
+        setReportNotice('Bu belge için henüz yayımlanmış bir bülten yok. Sohbete devam edebilir veya başka bir rapor seçebilirsiniz.')
+        setSearchParams(params => { const next = new URLSearchParams(params); next.delete('topic'); next.delete('revision'); return next }, { replace: true })
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setReportRunId(null)
+        setReportNotice('Seçilen rapor açılamadı. Rapor düzelt panelinden başka bir kayıt seçebilirsiniz.')
+        setSearchParams(params => { const next = new URLSearchParams(params); next.delete('topic'); next.delete('revision'); return next }, { replace: true })
+      }
+    })
+    return () => { cancelled = true }
+  }, [topicId, setSearchParams])
+  const closeReport = () => {
+    setReportOpen(false)
+    setSearchParams(params => { const next = new URLSearchParams(params); next.delete('topic'); next.delete('revision'); return next }, { replace: true })
+  }
+
   // One conversation per handoff: React may run this effect twice (StrictMode, a
   // rerender), and a second session would strand the first message.
   const creating = useRef(false)
-  const startConversation = useCallback((content: string) => {
+  useEffect(() => { if (sessionId) creating.current = false }, [sessionId])
+  const startConversation = useCallback((content: string, documentVersionIds: string[] = [], options:ChatSendOptions = {}) => {
     if (creating.current || !content.trim()) return
     creating.current = true
     setHandoffError(null)
     createChatSession()
-      .then((session) => navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage: content.trim() }, viewTransition: true }))
+      .then((session) => navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage: content.trim(), documentVersionIds,...(options.webSearch?{webSearch:true}:{}),...(options.browserAgent?{browserAgent:true}:{}) }, viewTransition: true }))
       .catch((caught: unknown) => {
         creating.current = false
         setHandoffError(caught instanceof Error ? caught.message : 'Sohbet başlatılamadı.')
@@ -57,18 +112,28 @@ export function ChatScreen() {
 
   useEffect(() => {
     if (sessionId || !initialMessage) return
-    startConversation(initialMessage)
-  }, [initialMessage, sessionId, startConversation])
+    startConversation(initialMessage, initialDocumentVersionIds,initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})
+  }, [initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, sessionId, startConversation])
 
   // The handed-over message is sent exactly once, and the router state is cleared
   // so a refresh or a back-navigation cannot resend it.
-  const handedOff = useRef(false)
+  const handedOff = useRef<string | null>(null)
   useEffect(() => {
-    if (!sessionId || handedOff.current || !initialMessage) return
-    handedOff.current = true
-    navigate(`/chat/${sessionId}`, { replace: true, state: null })
-    void conversation.send(initialMessage)
-  }, [conversation, initialMessage, navigate, sessionId])
+    if (!sessionId || !initialMessage) return
+    const key = `${sessionId}:${initialMessage}`
+    if (handedOff.current === key) return
+    let cancelled = false
+    // StrictMode replays effects with an intervening cleanup. Defer until that
+    // replay is over so cleanup cannot abort the one and only handoff request.
+    queueMicrotask(() => {
+      if (cancelled || handedOff.current === key) return
+      handedOff.current = key
+      navigate(`/chat/${sessionId}`, { replace: true, state: null })
+      void conversation.send(initialMessage, initialDocumentVersionIds,initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})
+    })
+    return () => { cancelled = true }
+  }, [conversation.send, initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, navigate, sessionId])
+
 
   const handleDelete = useCallback(async (id: string) => {
     if (!window.confirm('Bu sohbet kalıcı olarak silinsin mi?')) return
@@ -90,9 +155,26 @@ export function ChatScreen() {
 
   // On the empty state there is no conversation yet, so the first message opens
   // one and is sent through the same handoff the dashboard uses.
-  const send = (content: string) => {
-    if (sessionId) void conversation.send(content)
-    else startConversation(content)
+  const send = (content: string, documentVersionIds: string[] = [], options:ChatSendOptions = {}) => {
+    if (sessionId) void conversation.send(content, documentVersionIds,options)
+    else startConversation(content, documentVersionIds,options)
+  }
+
+  const openReportLink = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return
+    const anchor = event.target.closest('a')
+    if (!anchor) return
+    const url = new URL(anchor.href)
+    const match = /^\/reports\/([^/]+)$/.exec(url.pathname)
+    if (url.origin !== window.location.origin || !match) return
+    event.preventDefault()
+    setSearchParams(params => {
+      const next = new URLSearchParams(params)
+      next.set('topic', decodeURIComponent(match[1]!))
+      if (url.searchParams.has('revision')) next.set('revision', url.searchParams.get('revision')!)
+      else next.delete('revision')
+      return next
+    }, { replace: true })
   }
 
   const historyPanel = (
@@ -103,82 +185,62 @@ export function ChatScreen() {
       error={historyError}
       onRetry={() => void loadHistory()}
       onDelete={(id) => void handleDelete(id)}
+      onOpenReports={() => { setIsDrawerOpen(false); setReportNotice(null); setReportOpen(true) }}
       onNavigate={() => setIsDrawerOpen(false)}
     />
   )
 
   return (
-    <div className="flex h-[calc(100vh-1px)] w-full bg-slate-50">
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-800 bg-[#0d1424] lg:flex xl:w-80">
-        <div className="border-b border-slate-800 px-4 py-4">
-          <Link to="/" className="inline-flex items-center gap-2 text-xs font-medium text-slate-400 transition hover:text-white">
-            <ArrowLeft className="h-3.5 w-3.5" />Panoya dön
-          </Link>
-        </div>
+    <div className="atez-chat-workspace">
+      <aside className="atez-chat-history-desktop">
         {historyPanel}
       </aside>
 
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <button type="button" aria-label="Geçmişi kapat" onClick={() => setIsDrawerOpen(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
-          <div className="relative flex h-full w-72 flex-col bg-[#0d1424] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-              <Link to="/" className="inline-flex items-center gap-2 text-xs font-medium text-slate-400">
-                <ArrowLeft className="h-3.5 w-3.5" />Panoya dön
-              </Link>
-              <button type="button" aria-label="Geçmişi kapat" onClick={() => setIsDrawerOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {historyPanel}
-          </div>
-        </div>
-      )}
+      <Drawer className="atez-chat-history-drawer" title="Sohbet geçmişi" placement="left" size={320} open={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} closable={false} extra={<Button aria-label="Geçmişi kapat" icon={<CloseOutlined />} type="text" onClick={() => setIsDrawerOpen(false)} />}>
+        {historyPanel}
+      </Drawer>
 
-      <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
-          <button
-            type="button"
-            aria-label="Sohbet geçmişini aç"
-            onClick={() => setIsDrawerOpen(true)}
-            className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50 lg:hidden"
-          >
-            <Menu className="h-4 w-4" />
-          </button>
-          <h1 className="truncate text-sm font-bold text-slate-900">
-            {history.find((item) => item.id === sessionId)?.title ?? 'Mevzuat Asistanı'}
-          </h1>
+      <section className="atez-chat-main">
+        <header className="atez-chat-header">
+          <Button aria-label="Sohbet geçmişini aç" icon={<MenuOutlined />} onClick={() => setIsDrawerOpen(true)} className="atez-chat-menu-button" />
+          <div><Typography.Text strong>{history.find((item) => item.id === sessionId)?.title ?? 'Mevzuat Asistanı'}</Typography.Text><Typography.Text type="secondary" className="atez-chat-header-subtitle">Genel mevzuat soruları</Typography.Text></div>
         </header>
 
-        <div className="custom-scroll flex-1 overflow-y-auto">
+        {reportNotice && <Alert className="atez-chat-report-notice" type="info" showIcon title={reportNotice} action={reportRunId ? <Link to={`/runs/${encodeURIComponent(reportRunId)}`}><Button size="small">Taramayı incele</Button></Link> : undefined} closable onClose={() => setReportNotice(null)} />}
+        <div className="atez-chat-scroll" onClick={openReportLink}>
           {sessionId && conversation.messages.length > 0
             ? <ConversationMessages messages={conversation.messages} isSending={conversation.isSending} activity={conversation.activity} />
             : <EmptyState />}
         </div>
 
         {(handoffError ?? conversation.error) && (
-          <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 pb-2 sm:px-6">
-            <p className="flex flex-1 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{handoffError ?? conversation.error}
-            </p>
-          </div>
+          <Alert className="atez-chat-error" type="warning" showIcon message={handoffError ?? conversation.error} />
         )}
 
-        <ConversationComposer isSending={conversation.isSending} onSend={send} />
+        <Can permission="chat.write"><ConversationComposer isSending={conversation.isSending} onStop={conversation.stop} onSend={send} /></Can>
       </section>
+      <ReportCorrectionDrawer open={reportOpen} onClose={closeReport} extra={<Button size="small" onClick={() => void loadReports()} loading={reportLoading}>Raporları yenile</Button>}>
+        <div className="atez-report-correction-content">
+          {reportError && <Alert type="warning" showIcon title={reportError} action={<Button size="small" onClick={() => void loadReports()}>Yeniden dene</Button>} />}
+          <Select aria-label="Düzeltilecek rapor" placeholder="Yayımlanmış bir rapor seçin" showSearch optionFilterProp="label" loading={reportLoading} value={selectedReport ?? undefined} style={{ width: '100%' }} options={reportOptions.map(report => ({ value: report.topicId, label: `${report.title.replace(/^\s*(?:[-–—−•]\s*)+/u, '').trim()} · r${report.version} · ${report.gazetteDate}` }))} onChange={id => {
+            setSelectedReport(id); setReportNotice(null)
+            setSearchParams(params => { const next = new URLSearchParams(params); next.set('topic', id); next.delete('revision'); return next }, { replace: true })
+          }} />
+          {selectedReport ? <ReportWorkspace key={selectedReport} topicId={selectedReport} popup onRevisionSaved={() => void loadReports()} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Önizleme, düzeltme ve yayımlama için bir rapor seçin." />}
+        </div>
+      </ReportCorrectionDrawer>
     </div>
   )
 }
 
 function EmptyState() {
   return (
-    <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-        <Sparkles className="h-5 w-5" />
-      </span>
-      <h2 className="text-xl font-bold text-slate-900">Bugün ne öğrenmek istersiniz?</h2>
-      <p className="text-sm leading-relaxed text-slate-500">
-        Gümrük ve dış ticaret mevzuatıyla ilgili sorularınızı yazın. Sohbetleriniz soldaki geçmişte saklanır ve istediğiniz zaman kaldığınız yerden devam edebilirsiniz.
+    <div className="atez-chat-empty">
+      <span className="atez-chat-orb" aria-hidden="true" />
+      <Typography.Text className="atez-chat-eyebrow">MEVZUAT RADAR AI</Typography.Text>
+      <Typography.Title level={2}>Mevzuatla ilgili bir soru sorun</Typography.Title>
+      <p>
+        Rapor düzenlemek için soldaki “Rapor düzelt” panelini açın. Sohbetinize buradan devam edebilirsiniz.
       </p>
     </div>
   )

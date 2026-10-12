@@ -1,0 +1,10 @@
+.atez-page-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-width: 0; width: 100%; }
+.atez-page-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; min-width: 0; max-width: 100%; }
+.atez-page-toolbar .ant-btn, .atez-page-action.ant-btn { flex-shrink: 0; max-width: 100%; height: auto; min-height: 36px; padding-block: 6px; white-space: normal; line-height: 1.5; box-shadow: none; }
+.atez-page-action.ant-btn > span:not(.ant-btn-icon), .atez-page-toolbar .ant-btn > span:not(.ant-btn-icon) { min-width: 0; overflow-wrap: anywhere; }
+.atez-page-toolbar .ant-btn-icon { flex-shrink: 0; }
+.atez-page-toolbar .ant-select { width: min(100%, 320px); min-width: 0; }
+@media (max-width: 600px) {
+  .atez-page-toolbar-actions { justify-content: flex-start; }
+  .atez-page-toolbar-actions:has(.ant-select) { width: 100%; }
+}

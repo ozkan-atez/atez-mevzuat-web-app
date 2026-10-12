@@ -1,71 +1,53 @@
+import { useState } from 'react'
+import { Card, Empty, Pagination, Tag } from 'antd'
 import { ExternalLink, FileText } from 'lucide-react'
 import type { ScanRunDetail } from '../scans/types'
 
+function displayTitle(title: string) {
+  return title.replace(/^\s*(?:[-–—−•]\s*)+/u, '').trim()
+}
+const pageSize = 8
+
 export function CollectedDocuments({ editions }: { editions: ScanRunDetail['editions'] }) {
-  const documentCount = editions.reduce((total, edition) => total + edition.documents.length, 0)
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
-        <h2 className="font-bold text-slate-900">Toplanan Belgeler</h2>
-        <p className="mt-1 text-sm text-slate-500">{documentCount} belge bulundu. AI filtresinin kesin sonucu belge bazında gösterilir.</p>
-      </div>
-      {editions.length === 0 ? (
-        <div className="px-6 py-10 text-center text-sm text-slate-500">Henüz belge keşfedilmedi.</div>
-      ) : (
-        <div className="divide-y divide-slate-100">
-          {editions.map((edition) => (
-            <div key={edition.id} className="px-5 py-5 sm:px-6">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-bold text-slate-800">
-                  {edition.type === 'MAIN' ? 'Ana Sayı' : `${edition.supplementNo ?? ''}. Mükerrer Sayı`}
-                </h3>
-                <span className="text-xs text-slate-500">{edition.documents.length} belge</span>
-              </div>
-              <ul className="space-y-2">
-                {edition.documents.map((document) => (
-                  <li key={document.id} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                    <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                    <div className="min-w-0 flex-1">
-                      <a className="inline-flex items-start gap-1 text-sm font-semibold text-slate-800 hover:text-blue-700" href={document.sourceUrl} target="_blank" rel="noreferrer">
-                        <span>{document.title}</span><ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      </a>
-                      <p className="mt-1 text-xs text-slate-500">{document.assetCount} bağlı dosya · {document.validationStatus === 'VALID' ? 'Doğrulandı' : document.validationStatus === 'INVALID' ? 'Hatalı' : 'Bekliyor'}</p>
-                      {document.filter && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${document.filter.finalDecision === 'IN' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : document.filter.finalDecision === 'OUT' ? 'border-slate-200 bg-white text-slate-600' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-                            {document.filter.finalDecision === 'IN' ? 'İlgili' : document.filter.finalDecision === 'OUT' ? 'İlgisiz' : 'Değerlendiriliyor'}
-                          </span>
-                          <span className="text-xs text-slate-500">{document.filter.reason}</span>
-                        </div>
-                      )}
-                      {document.previousSource && (
-                        <div className="mt-2 text-xs text-slate-500">
-                          {document.previousSource.outcome === 'VERIFIED' && document.previousSource.sourceUrl ? (
-                            <a className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:text-blue-800" href={document.previousSource.sourceUrl} target="_blank" rel="noreferrer">
-                              Önceki kaynak · {document.previousSource.publicationDate ?? document.previousSource.title}
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          ) : document.previousSource.status === 'AWAITING_RETRY' ? (
-                            <span className="font-medium text-amber-700">Önceki kaynak yeniden deneme bekliyor</span>
-                          ) : document.previousSource.outcome === 'NOT_FOUND' ? (
-                            <span>Önceki kaynak bulunamadı</span>
-                          ) : document.previousSource.outcome === 'AMBIGUOUS' ? (
-                            <span>Önceki kaynak eşleşmesi belirsiz</span>
-                          ) : document.previousSource.outcome === 'NOT_REQUIRED' ? (
-                            <span>Önceki kaynak gerekmiyor</span>
-                          ) : (
-                            <span>Önceki kaynak hazırlanıyor</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+  const [page, setPage] = useState(1)
+  const documents = editions.flatMap(edition => edition.documents.map(document => ({ document, edition })))
+  const current = Math.min(page, Math.max(1, Math.ceil(documents.length / pageSize)))
+  const visible = documents.slice((current - 1) * pageSize, current * pageSize)
+  return <Card className="atez-run-card atez-documents-card" title="Toplanan belgeler" extra={`${documents.length} belge`}>
+    <p className="atez-run-card-subtitle">Belge ve filtre sonucu. Gerekçeler için ayrıntıları açın.</p>
+    {!documents.length ? <Empty description="Seçilen kapsamda işlenecek belge bulunmadı." /> : <>
+      <ul className="atez-document-list">
+        {visible.map(({ document, edition }, index) => {
+          const title = displayTitle(document.title)
+          const decision = document.filter?.finalDecision
+          return <li key={document.id} className="atez-document-row">
+            {(index === 0 || visible[index - 1]?.edition.id !== edition.id) && <div className="atez-document-edition">
+              <h3>{edition.type === 'EXTERNAL' ? 'Dış kaynak belgeleri' : edition.type === 'MAIN' ? 'Ana Sayı' : `${edition.supplementNo ?? ''}. Mükerrer Sayı`}</h3>
+              <span>{edition.documents.length} belge</span>
+            </div>}
+            <div className="atez-document-heading">
+              <FileText size={15} aria-hidden="true" />
+              <a href={document.sourceUrl} target="_blank" rel="noreferrer" title={title}>
+                <span>{title}</span><ExternalLink size={13} aria-hidden="true" />
+              </a>
+              {document.filter && <Tag color={decision === 'IN' ? 'success' : decision === 'OUT' ? 'default' : 'warning'}>{decision === 'IN' ? 'İlgili' : decision === 'OUT' ? 'İlgisiz' : 'Değerlendiriliyor'}</Tag>}
             </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
+            <div className="atez-document-meta">
+              <span>{document.assetCount} bağlı dosya · {document.validationStatus === 'VALID' ? 'Doğrulandı' : document.validationStatus === 'INVALID' ? 'Hatalı' : 'Bekliyor'}</span>
+              {(document.filter?.reason || document.previousSource) && <details className="atez-document-details">
+                <summary aria-label={`${title} — Ayrıntılar`}>Ayrıntılar</summary>
+                <div className="atez-document-explanation">
+                  {document.filter?.reason && <p>{document.filter.reason}</p>}
+                  {document.previousSource && (document.previousSource.outcome === 'VERIFIED' && document.previousSource.sourceUrl ?
+                    <a href={document.previousSource.sourceUrl} target="_blank" rel="noreferrer">Önceki kaynak · {document.previousSource.publicationDate ?? document.previousSource.title}<ExternalLink size={12} /></a> :
+                    <p>{document.previousSource.status === 'AWAITING_RETRY' ? 'Önceki kaynak yeniden deneme bekliyor' : document.previousSource.outcome === 'NOT_FOUND' ? 'Önceki kaynak bulunamadı' : document.previousSource.outcome === 'AMBIGUOUS' ? 'Önceki kaynak eşleşmesi belirsiz' : document.previousSource.outcome === 'NOT_REQUIRED' ? 'Önceki kaynak gerekmiyor' : 'Önceki kaynak hazırlanıyor'}</p>)}
+                </div>
+              </details>}
+            </div>
+          </li>
+        })}
+      </ul>
+      {documents.length > pageSize && <Pagination className="atez-document-pagination" size="small" current={current} pageSize={pageSize} total={documents.length} onChange={setPage} showSizeChanger={false} showTotal={(total, range) => `${range[0]}–${range[1]} / ${total}`} />}
+    </>}
+  </Card>
 }

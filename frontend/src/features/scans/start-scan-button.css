@@ -1,0 +1,9 @@
+.atez-start-scan-button.ant-btn-primary {
+  background: linear-gradient(115deg, var(--atez-accent-strong), var(--atez-glow));
+  border: 0;
+  color: white;
+  box-shadow: 0 9px 25px var(--atez-accent-soft);
+}
+.atez-start-scan-button.ant-btn-primary:hover {
+  filter: brightness(1.12);
+}

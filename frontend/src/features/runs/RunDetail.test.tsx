@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -40,6 +40,7 @@ describe('RunDetail', () => {
     expect(screen.getByText('Raporlar oluşturuluyor')).toBeVisible()
     expect(screen.getByText('Örnek Resmî Gazete Kararı')).toBeVisible()
     expect(screen.getByText('İlgili')).toBeVisible()
+    await userEvent.click(screen.getByLabelText('Örnek Resmî Gazete Kararı — Ayrıntılar'))
     expect(screen.getByText('İçerikte ithalat düzenlemesi bulunuyor.')).toBeVisible()
     expect(screen.getByRole('link', { name: /Önceki kaynak/ })).toHaveAttribute('href', 'https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4-39.pdf')
     expect(document.body.textContent).not.toMatch(/güven puanı|confidence/i)

@@ -1,0 +1,15 @@
+.atez-groups { display: grid; gap: 18px; color: var(--atez-text); padding-bottom: 36px; }
+.atez-groups-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+.atez-groups-header .ant-typography { margin: 0 0 5px; color: var(--atez-text); }
+.atez-groups-list { display: grid; gap: 12px; }
+.atez-group-card, .atez-group-form { background: var(--atez-surface); border-color: var(--atez-border); }
+.atez-group-card .ant-card-body { display: flex; align-items: flex-start; gap: 15px; flex-wrap: wrap; }
+.atez-group-icon { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--atez-accent) 15%, transparent); color: var(--atez-accent); font-size: 18px; flex: none; }
+.atez-group-content { flex: 1; min-width: 200px; }
+.atez-group-title { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.atez-group-title .ant-typography { color: var(--atez-text); }
+.atez-group-content .ant-typography { margin-bottom: 6px; }
+.atez-group-emails { display: flex; gap: 4px; flex-wrap: wrap; }
+.atez-group-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.atez-groups-loading { min-height: 100px; display: grid; place-items: center; }
+@media (max-width: 640px) { .atez-group-card .ant-card-body > .ant-space { width: 100%; justify-content: flex-end; } }

@@ -46,7 +46,7 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
       doc.head.appendChild(style)
 
       for (const node of doc.querySelectorAll<HTMLElement>('[data-field]')) {
-        node.setAttribute('contenteditable', 'plaintext-only')
+        node.setAttribute('contenteditable', node.dataset.field === 'customization.customHtml' ? 'true' : 'plaintext-only')
         node.spellcheck = false
       }
       return doc
@@ -56,7 +56,7 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
       const target = (event.target as HTMLElement | null)?.closest?.('[data-field]') as HTMLElement | null
       if (!target) return
       const path = target.dataset.field
-      const next = (target.textContent ?? '').trim()
+      const next = target.dataset.field === 'customization.customHtml' ? target.innerHTML.trim() : (target.textContent ?? '').trim()
       if (!path || next === target.dataset.initial) return
       target.dataset.initial = next
       onEditRef.current(path, next)
@@ -64,7 +64,7 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
 
     const handleFocus = (event: FocusEvent) => {
       const target = (event.target as HTMLElement | null)?.closest?.('[data-field]') as HTMLElement | null
-      if (target) target.dataset.initial = (target.textContent ?? '').trim()
+      if (target) target.dataset.initial = target.dataset.field === 'customization.customHtml' ? target.innerHTML.trim() : (target.textContent ?? '').trim()
     }
 
     const bind = () => {
@@ -84,9 +84,21 @@ export function EditableReportPreview({ html, zoom, editable, onEditField }: Pro
     }
   }, [editable, html])
 
+  useEffect(() => {
+    const frame = frameRef.current
+    if (!frame) return
+    const applyZoom = () => {
+      const root = frame.contentDocument?.documentElement
+      if (root) root.style.zoom = String(zoom / 100)
+    }
+    applyZoom()
+    frame.addEventListener('load', applyZoom)
+    return () => frame.removeEventListener('load', applyZoom)
+  }, [html, zoom])
+
   return (
-    <div className="overflow-auto bg-slate-100 p-4">
-      <div style={{ width: `${zoom}%` }} className="mx-auto transition-[width] duration-150">
+    <div className="overflow-auto p-4" style={{ background: 'var(--atez-bg)' }}>
+      <div className="mx-auto w-full">
         <iframe
           ref={frameRef}
           title="Bülten Önizleme"

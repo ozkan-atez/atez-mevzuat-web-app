@@ -24,6 +24,8 @@ export interface ReportDraftSummary {
 }
 
 export interface ReportDraftView {
+  /** A previously accepted correction is still being processed by the worker. */
+  isProcessing?: boolean
   /** Null while the report still matches its published revision. */
   draft: ReportDraftSummary | null
   baseVersion: number
@@ -41,3 +43,13 @@ export interface PublishedRevision {
   card: string
   basename: string
 }
+
+export interface ReportCustomization {
+  headings?: Record<string, string>
+  order?: string[]
+  sections?: Array<{ id: string; title: string; html: string }>
+  sources?: Array<{ id: string; label: string; url: string; content: string; kind: 'URL' | 'TEXT' | 'FILE'; fileName?: string; documentVersionId?: string }>
+  templateId?: string | null
+  customHtml?: string | null
+}
+export type ReportSourceInput = Omit<NonNullable<ReportCustomization['sources']>[number], 'id'>

@@ -41,7 +41,7 @@ export function renderMarkdown(text: string): ReactNode {
     if (heading) {
       flushParagraph()
       flushList()
-      blocks.push(<p key={`h${blocks.length}`} className="font-semibold text-slate-900">{renderInline(heading[2]!)}</p>)
+      blocks.push(<p key={`h${blocks.length}`} className="font-semibold text-[var(--atez-text)]">{renderInline(heading[2]!)}</p>)
       continue
     }
 
@@ -67,7 +67,7 @@ export function renderMarkdown(text: string): ReactNode {
   return <div className="space-y-2.5">{blocks}</div>
 }
 
-const INLINE = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\n]+\*)/g
+const INLINE = /(\[[^\]\n]+\]\(\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?\)|\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\n]+\*|\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?)/g
 
 function renderInline(text: string): ReactNode[] {
   return text.split(INLINE).filter((part) => part.length > 0).map((part, index) => {
@@ -75,10 +75,15 @@ function renderInline(text: string): ReactNode[] {
       return <strong key={index} className="font-semibold">{part.slice(2, -2)}</strong>
     }
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
-      return <code key={index} className="rounded bg-slate-100 px-1 py-0.5 text-[0.85em]">{part.slice(1, -1)}</code>
+      return <code key={index} className="rounded bg-[var(--atez-raised)] px-1 py-0.5 text-[0.85em]">{part.slice(1, -1)}</code>
     }
     if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
       return <em key={index}>{part.slice(1, -1)}</em>
+    }
+    const reportLink = /^\[([^\]\n]+)\]\((\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?)\)$/.exec(part)
+    if (reportLink) return <a key={index} href={reportLink[2]} className="font-semibold text-[var(--atez-accent)] underline">{reportLink[1]}</a>
+    if (/^\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?$/.test(part)) {
+      return <a key={index} href={part} className="font-semibold text-[var(--atez-accent)] underline">{part}</a>
     }
     return <span key={index}>{part}</span>
   })

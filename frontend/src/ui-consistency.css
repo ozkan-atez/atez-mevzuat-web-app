@@ -1,0 +1,77 @@
+/* Shared spacing and typography; interactive control metrics live in Ant tokens. */
+:root {
+  --atez-space-sm: 8px;
+  --atez-space-md: 16px;
+  --atez-space-lg: 24px;
+  --atez-page-title: 28px;
+}
+.atez-content-main { padding: 24px 32px 40px; }
+.atez-page-stack { display: grid; gap: 20px; min-width: 0; }
+.atez-page-heading > div { min-width: 0; }
+.atez-page-heading h1, .atez-page-heading h2 { overflow-wrap: anywhere; }
+.atez-demo-page > .atez-page-toolbar { margin-bottom: 20px; }
+.atez-content-main .atez-demo-heading { gap: 16px; align-items: flex-start; margin-bottom: 24px; }
+.atez-content-main .atez-demo-heading > div { min-width: 0; }
+.atez-content-main .atez-demo-heading h1.ant-typography { font-size: var(--atez-page-title); line-height: 1.35; font-weight: 600; letter-spacing: -.6px; }
+.atez-content-main .atez-demo-heading p.ant-typography,
+.atez-content-main .atez-demo-page .ant-card p.ant-typography { font-size: 14px; line-height: 1.6; }
+.atez-content-main .atez-demo-page .ant-card { border-radius: 12px; }
+.atez-content-main .atez-demo-card .ant-table { font-size: 14px; }
+.atez-content-main .atez-demo-card .ant-table-thead > tr > th { font-size: 12px; letter-spacing: 0; text-transform: none; }
+.atez-source-card, .atez-template-card { width: 100%; height: 100%; }
+.atez-source-card a { overflow-wrap: anywhere; }
+.atez-source-footer { flex-wrap: wrap; gap: 12px; }
+.atez-groups-header h2.ant-typography { font-size: var(--atez-page-title); line-height: 1.35; }
+.atez-group-content { min-width: 0; }
+.atez-group-emails .ant-tag { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.atez-topbar .atez-top-button.ant-btn { width: 36px; height: 36px; padding: 0; flex: none; }
+.atez-chat-page .atez-chat-workspace { height: 100%; min-height: 0; border: 0; border-radius: 0; }
+/* Keep both assistant entry points borderless, including their focused inputs. */
+.atez-ai-command { border: 0; box-shadow: none; }
+.atez-chat-composer-box .ant-input,
+.atez-ai-command .ant-input {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+.atez-chat-workspace .atez-chat-history-desktop { width: 240px; }
+.atez-conversation-history .atez-chat-new-link.ant-btn { min-height: 36px; height: 36px; padding: 0 10px; border-radius: 8px; font-size: 13px; }
+.atez-chat-workspace .atez-report-chat-main { padding: 24px; container-type: inline-size; }
+.atez-report-header { padding: 16px 20px; }
+.atez-report-header h1 { font-size: 20px; line-height: 1.4; }
+.atez-report-preview-card .ant-card-head-wrapper { flex-wrap: wrap; gap: 12px; }
+.atez-report-preview-card .ant-card-extra { max-width: 100%; margin-inline-start: 0; }
+.atez-report-preview-card .ant-card-extra .ant-space { flex-wrap: wrap; }
+.atez-chat-workspace .atez-report-chat-main .atez-report-workspace { grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+.atez-report-source { max-width: 100%; }
+.atez-report-source .ant-tag { white-space: normal; overflow-wrap: anywhere; }
+@container (max-width: 880px) {
+  .atez-chat-workspace .atez-report-chat-main .atez-report-workspace { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1050px) { .atez-content-main { padding: 24px; } }
+@media (max-width: 760px) {
+  :root { --atez-page-title: 24px; }
+  .atez-content-main { padding: 20px 16px 32px; }
+  .atez-content-main .atez-demo-heading { flex-direction: column; gap: 12px; }
+  .atez-content-main .atez-demo-heading > .ant-space { width: 100%; flex-wrap: wrap; }
+  .atez-chat-workspace .atez-report-chat-main { padding: 16px; }
+  .atez-report-header { padding: 16px; }
+  .atez-report-header h1 { font-size: 18px; }
+  .atez-chat-workspace .atez-report-chat-main .atez-report-workspace { grid-template-columns: minmax(0, 1fr); }
+  .atez-report-preview-card .ant-card-head { padding: 12px 16px; }
+  .atez-quiz-options .ant-radio-button-wrapper { min-height: 44px; }
+}
+
+.atez-content-main .atez-page-heading h1,
+.atez-content-main .atez-page-heading h2 { font-size: var(--atez-page-title); line-height: 1.35; font-weight: 600; letter-spacing: -.6px; margin: 0 0 8px; }
+.atez-content-main .atez-page-heading p { font-size: 14px; line-height: 1.6; }
+.atez-report-toolbar .ant-space-item { max-width: 100%; }
+
+.atez-report-mobile-meta { display: grid; gap: 8px; margin-top: 8px; font-size: 12px; }
+.atez-report-mobile-meta .ant-tag { width: fit-content; max-width: 100%; white-space: normal; }
+
+/* Semantic status labels must remain readable in both Ant algorithms. */
+html[data-theme] .ant-tag.ant-tag-success:not(.ant-tag-disabled) { color: var(--atez-success); background: color-mix(in srgb,var(--atez-success) 12%,var(--atez-surface)); border-color: color-mix(in srgb,var(--atez-success) 30%,var(--atez-border)); }
+html[data-theme] .ant-tag.ant-tag-warning:not(.ant-tag-disabled) { color: var(--atez-warning); background: color-mix(in srgb,var(--atez-warning) 12%,var(--atez-surface)); border-color: color-mix(in srgb,var(--atez-warning) 30%,var(--atez-border)); }
+html[data-theme] .ant-tag.ant-tag-error:not(.ant-tag-disabled) { color: var(--atez-error); background: color-mix(in srgb,var(--atez-error) 12%,var(--atez-surface)); border-color: color-mix(in srgb,var(--atez-error) 30%,var(--atez-border)); }
+html[data-theme] .ant-tag.ant-tag-processing:not(.ant-tag-disabled) { color: var(--atez-accent); background: var(--atez-accent-soft); border-color: color-mix(in srgb,var(--atez-accent) 30%,var(--atez-border)); }

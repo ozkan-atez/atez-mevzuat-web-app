@@ -39,6 +39,7 @@ export interface DeliveryContext {
     | { configured: true; address: string | null; name: string | null }
     | { configured: false; note: string }
   groups: CustomerGroup[]
+  suggestedGroupIds?: string[]
   dispatches: DispatchRecord[]
 }
 

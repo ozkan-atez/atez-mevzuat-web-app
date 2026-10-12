@@ -1,10 +1,10 @@
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { cleanup, render, screen, waitFor } from '../../test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { StrictMode } from 'react'
 import { ReportDetail } from './ReportDetail'
-import { ActiveReportProvider } from '../revision/ActiveReportContext'
+import { ReportWorkspace } from '../revision/ReportWorkspace'
 
 const topic = {
   id: 'topic-1', runId: 'run-1', documentId: 'doc-1', title: 'İthalat Tebliği', sourceUrl: 'https://example.test/current', status: 'COMPLETED',
@@ -54,9 +54,7 @@ function stubFetch(handlers: { draft?: unknown } = {}) {
 function renderPage(strict = false) {
   const page = (
     <MemoryRouter initialEntries={['/reports/topic-1']}>
-      <ActiveReportProvider>
-        <Routes><Route path="/reports/:id" element={<ReportDetail />} /></Routes>
-      </ActiveReportProvider>
+        <Routes><Route path="/reports/:id" element={<ReportWorkspace topicId="topic-1" />} /></Routes>
     </MemoryRouter>
   )
   return render(strict ? <StrictMode>{page}</StrictMode> : page)
@@ -106,7 +104,8 @@ describe('ReportDetail', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Başlık')).toBeVisible()
+    await userEvent.click(await screen.findByText('Bu taslaktaki değişiklikler (2)'))
+    await waitFor(() => expect(screen.getByText('Başlık')).toBeVisible())
     expect(screen.getByText('Kısa özet')).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: /Kısa özet/ }))
     expect(screen.getByText('Yeni özet')).toBeVisible()
@@ -117,7 +116,7 @@ describe('ReportDetail', () => {
     stubFetch()
     const { unmount } = renderPage()
     expect(await screen.findByText('İthalat Tebliği')).toBeVisible()
-    expect(screen.queryByRole('button', { name: /Onayla ve r03 oluştur/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Kaydet ve r03 oluştur/ })).toBeNull()
     unmount()
 
     stubFetch({
@@ -127,8 +126,8 @@ describe('ReportDetail', () => {
     })
     renderPage()
 
-    expect(await screen.findByRole('button', { name: /Onayla ve r03 oluştur/ })).toBeVisible()
-    expect(screen.getByText((_, element) => element?.textContent === '1 değişiklik onayınızı bekliyor. Onaylayana kadar yayımlanmış revizyon değişmez; onayladığınızda tümü tek bir r03 revizyonuna aktarılır.', { selector: 'p' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: /Kaydet ve r03 oluştur/ })).toBeVisible()
+    expect(screen.getByText((_, element) => element?.textContent === '1 değişiklik taslakta birikti. Kaydettiğinizde tümü tek bir r03 revizyonuna aktarılır; o zamana kadar yayımlanmış sürüm değişmez.', { selector: 'p' })).toBeVisible()
   })
 
   it('warns that the delivery actions still use the published revision while a draft is open', async () => {
@@ -148,10 +147,8 @@ describe('ReportDetail', () => {
 
     render(
       <MemoryRouter initialEntries={['/reports/missing']}>
-        <ActiveReportProvider>
-          <Routes><Route path="/reports/:id" element={<ReportDetail />} /></Routes>
-        </ActiveReportProvider>
-      </MemoryRouter>,
+            <Routes><Route path="/reports/:id" element={<ReportWorkspace topicId="topic-1" />} /></Routes>
+        </MemoryRouter>,
     )
 
     await waitFor(() => expect(screen.getByText('Bülten kaydı bulunamadı')).toBeVisible())
@@ -166,6 +163,25 @@ describe('ReportDetail', () => {
 
     expect(await screen.findByText(/r03 sürümüne güncellendi/)).toBeVisible()
     expect(screen.getByRole('button', { name: /Taslağı bırak, r03 sürümünü aç/ })).toBeVisible()
-    expect(screen.queryByRole('button', { name: /Onayla ve r03 oluştur/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Kaydet ve r03 oluştur/ })).toBeNull()
   })
+})
+
+function LocationProbe() { const location = useLocation(); return <div>{location.pathname}{location.search}</div> }
+describe('ReportDetail route compatibility', () => {
+  it('opens report editing in chat and preserves the requested revision', async () => {
+    render(<MemoryRouter initialEntries={['/reports/topic-1?revision=2']}><Routes><Route path="/reports/:id" element={<ReportDetail />} /><Route path="/chat" element={<LocationProbe />} /></Routes></MemoryRouter>)
+    expect(await screen.findByText('/chat?revision=2&topic=topic-1')).toBeVisible()
+  })
+  it('opens the report directly above the correction field without a preview tab', async () => {
+    stubFetch()
+    render(<MemoryRouter><ReportWorkspace topicId="topic-1" popup /></MemoryRouter>)
+    const frame = await screen.findByTitle('Bülten Önizleme')
+    const composer = screen.getByRole('textbox', { name: 'Mesaj' })
+    expect(frame).toBeVisible()
+    expect(composer).toBeVisible()
+    expect(frame.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Bülten önizleme' })).not.toBeInTheDocument()
+  })
+
 })

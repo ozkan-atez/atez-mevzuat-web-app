@@ -1,13 +1,25 @@
+export interface WebResearch {
+  mode?:'browser'
+  completed?:boolean
+  sources:Array<{title:string;url:string}>
+  citations:Array<{endIndex:number;text?:string;sourceIndices:number[]}>
+  queries:string[]
+  searchSuggestions:string|null
+}
+export interface ChatSendOptions {webSearch?:boolean;browserAgent?:boolean}
 export type ChatRole = 'USER' | 'ASSISTANT'
 export type ChatMessageStatus = 'COMPLETED' | 'FAILED'
 
 export interface ChatMessage {
+  research?:WebResearch
   id: string
   role: ChatRole
   content: string
   status: ChatMessageStatus
   errorDetail: string | null
   createdAt: string
+  documentVersionIds?: string[]
+  operationRequestIds?: string[]
 }
 
 export interface ChatSession {

@@ -1,5 +1,7 @@
+import { ActionLink, PageToolbar } from '../../components/layout/PageToolbar'
 import { useState } from 'react'
-import { AlertCircle, ArrowLeft, CalendarDays, RefreshCw } from 'lucide-react'
+import { Alert, Button, Card, Result, Skeleton, Statistic, Tag } from 'antd'
+import { CalendarDays } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { retryAiFilter, retryPreviousSources } from '../scans/api'
 import { retryTopicAnalysis } from '../analysis/api'
@@ -8,6 +10,7 @@ import { useScanRun } from '../scans/useScanRun'
 import type { ScanRunStatus } from '../scans/types'
 import { CollectedDocuments } from './CollectedDocuments'
 import { OperationSteps } from './OperationSteps'
+import './runs.css'
 
 const statusLabels: Record<ScanRunStatus, string> = {
   QUEUED: 'Sırada', RUNNING: 'Çalışıyor', AWAITING_RETRY: 'Yeniden deneme bekliyor', COMPLETED: 'Tamamlandı', PARTIAL: 'Kısmen tamamlandı', FAILED: 'Başarısız', CANCELLED: 'İptal edildi',
@@ -53,74 +56,48 @@ export function RunDetail() {
   }
 
   if (isLoading) {
-    return <div className="flex min-h-72 items-center justify-center text-sm text-slate-500"><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Tarama yükleniyor…</div>
+    return <Card className="atez-run-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
   }
 
   if (notFound) {
-    return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-        <AlertCircle className="mx-auto h-9 w-9 text-slate-400" />
-        <h1 className="mt-4 text-xl font-bold text-slate-900">Tarama bulunamadı</h1>
-        <p className="mt-2 text-sm text-slate-500">Bu çalışma silinmiş olabilir veya bağlantı geçersizdir.</p>
-        <Link to="/" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-blue-700"><ArrowLeft className="h-4 w-4" />Ana sayfaya dön</Link>
-      </div>
-    )
+    return <Result status="404" title="Tarama bulunamadı" subTitle="Bu çalışma silinmiş olabilir veya bağlantı geçersizdir." extra={<ActionLink to="/" type="primary">Ana sayfaya dön</ActionLink>} />
   }
 
   if (!run) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-        {error || 'Tarama bilgileri alınamadı.'}
-        <button type="button" onClick={() => void refresh()} className="ml-3 font-semibold underline">Tekrar dene</button>
-      </div>
-    )
+    return <Alert type="error" showIcon message={error || 'Tarama bilgileri alınamadı.'} action={<Button onClick={() => void refresh()}>Tekrar dene</Button>} />
   }
 
   return (
-    <div className="space-y-6">
-      <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-blue-700"><ArrowLeft className="h-4 w-4" />Taramalara dön</Link>
+    <div className="atez-run-page">
+      <PageToolbar backTo="/" backLabel="Taramalara dön" />
 
       <div
         data-testid="run-overview"
-        className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(480px,0.85fr)]"
+        className="atez-run-overview"
       >
-        <section className="hero-gradient relative overflow-hidden rounded-3xl border border-[#1a2e4d] p-6 text-white shadow-xl sm:p-8">
-          <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-indigo-500/15 blur-3xl" />
-          <div className="relative flex h-full flex-wrap items-start justify-between gap-5">
+        <section className="atez-run-hero">
+          <div className="atez-run-hero-content">
             <div>
-              <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-300"><CalendarDays className="h-4 w-4" />{formatDate(run.targetDate)}</div>
-              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Tarama İnceleme Masası</h1>
-              <p className="mt-2 text-sm text-slate-400">Resmî Gazete veri toplama çalışması · {run.id}</p>
+              <div className="atez-run-date"><CalendarDays className="h-4 w-4" />{formatDate(run.targetDate)}</div>
+              <h1>Tarama İnceleme Masası</h1>
+              <p>{[...(run.sourceKeys?.includes('resmi-gazete') || !run.sourceKeys ? ['Resmî Gazete'] : []), ...(run.sourceRuns ?? []).map(source => source.source.name)].join(' · ') || 'Seçilen kaynaklar'} · {run.id}</p>
             </div>
-            <span className="rounded-full border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-sm font-semibold text-blue-200">{statusLabels[run.status]}</span>
+            <Tag color={run.status === 'COMPLETED' ? 'success' : run.status === 'FAILED' ? 'error' : 'processing'}>{statusLabels[run.status]}</Tag>
           </div>
         </section>
 
-        <section aria-label="Operasyon özeti" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <article className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300/70 hover:shadow-lg hover:shadow-blue-500/10">
-            <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-blue-500/10 blur-2xl transition-transform duration-500 group-hover:scale-125" />
-            <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Taranan madde</p>
-            <p className="relative mt-2 text-4xl font-black tracking-tight text-slate-900">{run.counts.documents}</p>
-            <p className="relative mt-2 text-xs font-medium leading-relaxed text-slate-500">T.C. Resmî Gazete mevzuat kaydı</p>
-          </article>
-
-          <article className="group relative overflow-hidden rounded-3xl border border-indigo-200/70 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-500/10">
-            <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-gradient-to-br from-indigo-500/15 to-purple-500/5 blur-2xl transition-transform duration-500 group-hover:scale-125" />
-            <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-600">Belirlenen gümrük mevzuatı tespiti</p>
-            <p className="relative mt-2 text-4xl font-black tracking-tight text-indigo-600">{run.filter?.counts.in ?? 0}</p>
-            <p className="relative mt-2 text-xs font-medium leading-relaxed text-slate-500">Şirket operasyonlarını ilgilendiren değişiklik</p>
-          </article>
+        <section aria-label="Operasyon özeti" className="atez-run-metrics">
+          <Card className="atez-run-card"><Statistic title="Taranan madde" value={run.counts.documents} /><span>Seçilen kaynaklardan toplanan kayıt</span></Card>
+          <Card className="atez-run-card"><Statistic title="İlgili mevzuat" value={run.editions.flatMap(edition => edition.documents).filter(document => document.filter?.finalDecision === 'IN').length || run.filter?.counts.in || 0} /><span>Şirket operasyonlarını ilgilendiren değişiklik</span></Card>
         </section>
       </div>
 
-      {run.errorSummary && (
-        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>{run.errorSummary}</span></div>
-      )}
+      {run.errorSummary && <Alert type={run.status === 'PARTIAL' ? 'warning' : 'error'} message={run.errorSummary} showIcon />}
       {error && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"><span>{error}</span><button type="button" onClick={() => void refresh()} className="font-semibold underline">Yenile</button></div>
+        <Alert type="warning" message={error} showIcon action={<Button onClick={() => void refresh()}>Yenile</Button>} />
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <div className="atez-run-workbench">
         <OperationSteps
           run={run}
           onRetryAiFilter={() => void handleRetry('filter')}
@@ -134,8 +111,8 @@ export function RunDetail() {
       {(run.analysis?.topics.length ?? 0) > 0 && (
         <section className="space-y-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">İlgili mevzuat analizleri</h2>
-            <p className="mt-1 text-sm text-slate-500">Her belge bağımsız analiz edilir ve tek bir bülten üretir.</p>
+            <h2 className="atez-run-section-title">İlgili mevzuat analizleri</h2>
+            <p className="atez-run-card-subtitle">Her belge bağımsız analiz edilir ve tek bir bülten üretir.</p>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             {run.analysis?.topics.map((topic) => (
@@ -146,10 +123,10 @@ export function RunDetail() {
       )}
 
       {run.reports?.find((report) => report.card === 'K6') && (
-        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+        <section className="atez-run-empty-day">
           <h2 className="font-bold text-emerald-950">Değişiklik bulunmadı</h2>
           <p className="mt-1 text-sm text-emerald-800">Bu tarihte gümrük ve dış ticaretle ilgili bir mevzuat değişikliği tespit edilmedi.</p>
-          <Link to={`/runs/${run.id}/reports/${run.reports.find((report) => report.card === 'K6')?.id}`} className="mt-4 inline-flex rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">Değişiklik yok raporunu aç</Link>
+          <Link to={`/runs/${run.id}/reports/${run.reports.find((report) => report.card === 'K6')?.id}`}><Button type="primary">Değişiklik yok raporunu aç</Button></Link>
         </section>
       )}
     </div>

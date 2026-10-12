@@ -1,0 +1,20 @@
+.atez-report-toolbar{display:flex!important;margin-bottom:18px}
+.atez-report-action-link{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:8px;background:var(--atez-accent,#8b5cf6);color:#fff;font-weight:600;white-space:nowrap}
+.atez-report-action-link:hover{color:#fff;filter:brightness(1.12)}
+.atez-report-open-link{color:var(--atez-accent,#c5aff5);font-weight:600}
+
+.atez-report-row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.atez-report-row-actions .ant-btn.atez-page-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 32px; min-height: 32px; padding: 0 10px; gap: 6px;
+  border: 1px solid var(--atez-border); border-radius: 8px;
+  background: transparent; color: var(--atez-text); font-size: 12px; font-weight: 500;
+  box-shadow: none; white-space: nowrap;
+}
+.atez-report-row-actions .ant-btn.atez-page-action:not(:disabled):hover {
+  color: var(--atez-accent); border-color: var(--atez-accent);
+  background: var(--atez-accent-soft);
+}
+.atez-report-row-actions .ant-btn.atez-page-action:focus-visible {
+  outline: 2px solid var(--atez-accent); outline-offset: 2px;
+}

@@ -1,0 +1,38 @@
+.atez-scan-source-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.atez-scan-source-toggle.ant-btn {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  white-space: normal;
+  text-align: left;
+}
+
+.atez-scan-source-toggle.ant-btn > span {
+  overflow-wrap: anywhere;
+}
+
+.atez-scan-source-toggle.ant-btn[aria-pressed="true"] {
+  border-color: var(--atez-accent);
+  background: var(--atez-accent-soft);
+  color: var(--atez-accent);
+}
+
+.atez-scan-source-toggle.ant-btn:not(:disabled):hover {
+  border-color: var(--atez-accent);
+  color: var(--atez-accent);
+}
+
+.atez-scan-source-toggle.ant-btn:focus-visible {
+  outline: 2px solid var(--atez-accent);
+  outline-offset: 2px;
+}

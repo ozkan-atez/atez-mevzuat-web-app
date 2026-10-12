@@ -1,5 +1,5 @@
 import { MemoryRouter } from 'react-router-dom'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '../../test/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ScanScheduleStatus, ScanScheduleTimeline } from './ScanScheduleTimeline'
 import type { ScheduleSlot, ScheduleView } from '../scans/types'

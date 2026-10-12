@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { AlertTriangle, Search, Sparkles } from 'lucide-react'
+import { Alert, Tag } from 'antd'
+import { GlobalOutlined, SearchOutlined } from '@ant-design/icons'
+import { OperationTaskCard } from '../operations/OperationTaskCard'
 import { renderMarkdown } from './renderMarkdown'
 import { STREAMING_MESSAGE_ID } from './useConversation'
 import type { ChatMessage } from './types'
@@ -18,39 +20,35 @@ export function ConversationMessages({ messages, isSending, activity }: Props) {
   }, [messages, activity])
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
+    <div className="atez-chat-messages">
       {messages.map((message) => {
         const isUser = message.role === 'USER'
         const isStreaming = message.id === STREAMING_MESSAGE_ID
         if (message.status === 'FAILED') {
           return (
-            <div key={message.id} className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>{message.errorDetail ?? 'Yanıt tamamlanamadı.'}</p>
-            </div>
+            <Alert key={message.id} type="error" showIcon message={message.errorDetail === 'MODEL_GENERATION_FAILED' ? 'Yapay zekâ yanıtı tamamlanamadı. Rapor sorgunuzu yeniden gönderebilirsiniz.' : message.errorDetail ?? 'Yanıt tamamlanamadı.'} />
           )
         }
         return (
-          <div key={message.id} className={isUser ? 'flex justify-end' : 'flex justify-start gap-3'}>
+          <div key={message.id} className={`atez-chat-message ${isUser ? 'user' : 'assistant'}`}>
             {!isUser && (
-              <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white">
-                <Sparkles className="h-3.5 w-3.5" />
-              </span>
+              <span className="atez-chat-orb atez-chat-message-orb" aria-hidden="true" />
             )}
-            <div className={`break-words text-sm leading-relaxed ${
-              isUser
-                ? 'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-slate-900 px-4 py-2.5 text-white'
-                : 'max-w-[85%] pt-1 text-slate-800'
-            }`}>
+            <div className="atez-chat-message-body">
               {/* The user's own words verbatim; the model's Markdown as React
                   elements, so untrusted output is never injected as HTML. */}
               {isUser ? message.content : renderMarkdown(message.content)}
+              {message.research && <div className="atez-chat-web-sources">
+                {message.research.sources.length>0 && <span className="atez-chat-web-source-label"><GlobalOutlined /> {message.research.mode==='browser'?'Tarayıcıda açılan kaynaklar':'Web kaynakları'}</span>}
+                {message.research.sources.map((source,index)=>/^https:\/\//.test(source.url) && <a key={`${source.url}:${index}`} href={source.url} target="_blank" rel="noopener noreferrer">{index+1}. {source.title}</a>)}
+                {message.research.searchSuggestions && <iframe title="Google Search önerileri" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'">${message.research.searchSuggestions}`} />}
+              </div>}
+              {message.documentVersionIds?.length ? <Tag>{message.documentVersionIds.length} belge eklendi</Tag> : null}
+              {message.operationRequestIds?.map(id => <OperationTaskCard key={id} requestId={id} />)}
               {isStreaming && isSending && (
                 activity
-                  ? <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-                      <Search className="h-3 w-3 animate-pulse" />{activity}…
-                    </span>
-                  : <span className="ml-1 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-slate-400 align-middle" aria-label="Yanıt yazılıyor" />
+                  ? <Tag icon={<SearchOutlined />}>{activity}…</Tag>
+                  : <span className="atez-chat-cursor" aria-label="Yanıt yazılıyor" />
               )}
             </div>
           </div>

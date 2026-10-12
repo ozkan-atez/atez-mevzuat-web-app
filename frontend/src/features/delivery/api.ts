@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiFetch'
 import { ScanApiError } from '../scans/api'
 import type { CustomerGroup, DeliveryContext, DispatchResult } from './types'
 
@@ -7,7 +8,7 @@ async function errorMessage(response: Response, fallback: string) {
 }
 
 export async function getDeliveryContext(topicId: string, version: number): Promise<DeliveryContext> {
-  const response = await fetch(`/api/v1/topics/${topicId}/reports/${version}/delivery`)
+  const response = await apiFetch(`/api/v1/topics/${topicId}/reports/${version}/delivery`)
   if (!response.ok) throw new ScanApiError(response.status, await errorMessage(response, 'Dağıtım bilgileri alınamadı'))
   return response.json() as Promise<DeliveryContext>
 }
@@ -21,7 +22,7 @@ export function reportPdfUrl(topicId: string, version: number): string {
  * server-side failure surfaces as an in-app error instead of a blank tab.
  */
 export async function downloadReportPdf(topicId: string, version: number): Promise<{ blob: Blob; fileName: string }> {
-  const response = await fetch(reportPdfUrl(topicId, version))
+  const response = await apiFetch(reportPdfUrl(topicId, version))
   if (!response.ok) throw new ScanApiError(response.status, await errorMessage(response, 'PDF oluşturulamadı'))
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const match = /filename="([^"]+)"/.exec(disposition)
@@ -36,7 +37,7 @@ export async function sendDispatch(topicId: string, input: {
   bodyText: string
   attachPdf: boolean
 }): Promise<DispatchResult> {
-  const response = await fetch(`/api/v1/topics/${topicId}/dispatches`, {
+  const response = await apiFetch(`/api/v1/topics/${topicId}/dispatches`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify(input),
@@ -47,13 +48,13 @@ export async function sendDispatch(topicId: string, input: {
 }
 
 export async function listCustomerGroups(): Promise<CustomerGroup[]> {
-  const response = await fetch('/api/v1/customer-groups')
+  const response = await apiFetch('/api/v1/customer-groups')
   if (!response.ok) throw new ScanApiError(response.status, await errorMessage(response, 'Müşteri grupları alınamadı'))
   return (await response.json() as { groups: CustomerGroup[] }).groups
 }
 
 export async function createCustomerGroup(input: { name: string; description: string | null; emails: string[] }): Promise<CustomerGroup> {
-  const response = await fetch('/api/v1/customer-groups', {
+  const response = await apiFetch('/api/v1/customer-groups', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   })
   if (!response.ok) throw new ScanApiError(response.status, await errorMessage(response, 'Grup oluşturulamadı'))
@@ -61,7 +62,7 @@ export async function createCustomerGroup(input: { name: string; description: st
 }
 
 export async function updateCustomerGroup(id: string, input: Partial<{ name: string; description: string | null; emails: string[]; isActive: boolean }>): Promise<CustomerGroup> {
-  const response = await fetch(`/api/v1/customer-groups/${id}`, {
+  const response = await apiFetch(`/api/v1/customer-groups/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   })
   if (!response.ok) throw new ScanApiError(response.status, await errorMessage(response, 'Grup güncellenemedi'))
@@ -69,7 +70,7 @@ export async function updateCustomerGroup(id: string, input: Partial<{ name: str
 }
 
 export async function deleteCustomerGroup(id: string): Promise<void> {
-  const response = await fetch(`/api/v1/customer-groups/${id}`, { method: 'DELETE' })
+  const response = await apiFetch(`/api/v1/customer-groups/${id}`, { method: 'DELETE' })
   if (!response.ok) throw new ScanApiError(response.status, await errorMessage(response, 'Grup silinemedi'))
 }
 

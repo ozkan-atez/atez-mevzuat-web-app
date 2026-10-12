@@ -1,0 +1,5 @@
+.atez-auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 65% 10%, var(--atez-accent-soft), transparent 65%), var(--atez-bg); color: var(--atez-text); }
+.atez-auth-card { width: min(100%, 440px); border: 1px solid var(--atez-border); background: var(--atez-surface); border-radius: 20px; box-shadow: 0 24px 70px #0003; }
+.atez-auth-card .ant-card-body { padding: 36px; }
+.atez-auth-card h2 { margin-top: 0; }
+.atez-auth-logo { max-width: 150px; max-height: 70px; object-fit: contain; object-position: left; }

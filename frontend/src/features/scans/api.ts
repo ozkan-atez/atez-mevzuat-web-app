@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiFetch'
 import type { ScanRunDetail, ScanRunStatus, ScanRunSummary, ScheduleView } from './types'
 
 export class ScanApiError extends Error {
@@ -19,18 +20,18 @@ async function readError(response: Response, fallback: string) {
   }
 }
 
-export async function createManualScan(targetDate: string): Promise<{
+export async function createManualScan(targetDate: string, requestKey: string = crypto.randomUUID(), sourceKeys?: string[], datePolicy?: string): Promise<{
   runId: string
   status: ScanRunStatus
   targetDate: string
 }> {
-  const response = await fetch('/api/v1/scan-runs', {
+  const response = await apiFetch('/api/v1/scan-runs', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Idempotency-Key': crypto.randomUUID(),
+      'Idempotency-Key': requestKey,
     },
-    body: JSON.stringify({ trigger: 'MANUAL', targetDate }),
+    body: JSON.stringify({ trigger: 'MANUAL', targetDate, ...(sourceKeys?{sourceKeys}:{}), ...(datePolicy?{datePolicy}:{}) }),
   })
   if (!response.ok) {
     throw new ScanApiError(response.status, await readError(response, 'Tarama başlatılamadı'))
@@ -39,7 +40,7 @@ export async function createManualScan(targetDate: string): Promise<{
 }
 
 export async function getScanRun(runId: string): Promise<ScanRunDetail> {
-  const response = await fetch(`/api/v1/scan-runs/${runId}`)
+  const response = await apiFetch(`/api/v1/scan-runs/${runId}`)
   if (!response.ok) {
     throw new ScanApiError(response.status, await readError(response, 'Tarama bilgileri alınamadı'))
   }
@@ -47,13 +48,13 @@ export async function getScanRun(runId: string): Promise<ScanRunDetail> {
 }
 
 export async function getRunReportHtml(runId: string, reportId: string): Promise<string> {
-  const response = await fetch(`/api/v1/scan-runs/${runId}/reports/${reportId}/html`)
+  const response = await apiFetch(`/api/v1/scan-runs/${runId}/reports/${reportId}/html`)
   if (!response.ok) throw new ScanApiError(response.status, await readError(response, 'Bülten içeriği alınamadı'))
   return response.text()
 }
 
 export async function retryAiFilter(runId: string): Promise<{ runId: string; status: 'QUEUED' }> {
-  const response = await fetch(`/api/v1/scan-runs/${runId}/ai-filter/retry`, {
+  const response = await apiFetch(`/api/v1/scan-runs/${runId}/ai-filter/retry`, {
     method: 'POST',
     headers: { 'Idempotency-Key': crypto.randomUUID() },
   })
@@ -64,7 +65,7 @@ export async function retryAiFilter(runId: string): Promise<{ runId: string; sta
 }
 
 export async function retryPreviousSources(runId: string): Promise<{ runId: string; status: 'QUEUED' }> {
-  const response = await fetch(`/api/v1/scan-runs/${runId}/previous-sources/retry`, {
+  const response = await apiFetch(`/api/v1/scan-runs/${runId}/previous-sources/retry`, {
     method: 'POST',
     headers: { 'Idempotency-Key': crypto.randomUUID() },
   })
@@ -75,7 +76,7 @@ export async function retryPreviousSources(runId: string): Promise<{ runId: stri
 }
 
 export async function listScanRuns(limit = 10): Promise<ScanRunSummary[]> {
-  const response = await fetch(`/api/v1/scan-runs?limit=${limit}`)
+  const response = await apiFetch(`/api/v1/scan-runs?limit=${limit}`)
   if (!response.ok) {
     throw new ScanApiError(response.status, await readError(response, 'Taramalar alınamadı'))
   }
@@ -84,7 +85,7 @@ export async function listScanRuns(limit = 10): Promise<ScanRunSummary[]> {
 }
 
 export async function getScanSchedule(date?: string): Promise<ScheduleView> {
-  const response = await fetch(`/api/v1/scan-runs/schedule${date ? `?date=${date}` : ''}`)
+  const response = await apiFetch(`/api/v1/scan-runs/schedule${date ? `?date=${date}` : ''}`)
   if (!response.ok) throw new ScanApiError(response.status, 'Tarama zamanlaması alınamadı')
   return response.json() as Promise<ScheduleView>
 }
