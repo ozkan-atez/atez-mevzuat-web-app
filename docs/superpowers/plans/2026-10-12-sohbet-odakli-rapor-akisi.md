@@ -1,12 +1,14 @@
 # Sohbet odaklı tarama ve ekip raporları uygulama planı
 
-12 Ekim 2026 · Durum: `codex/chat-report-workflows` branchinde uygulandı; canlı ortama alınmadı.
+12 Ekim 2026 · Durum: `codex/chat-report-workflows` branchinde uygulandı; yerel çalışma ortamına alındı. Şirket ortamına dağıtılmadı.
 
 Yeni taramalar sohbetten başlatılacak. Kullanıcı sohbetin artı menüsünden kaynaklarını ve belgelerini seçecek; araştırma ve rapor üretimi bu seçimle sınırlanacak. Her rapor, kendisine bağlı sohbetleri, değişiklikleri ve sürümleri aynı çalışma alanında toplayacak. Rapor sohbetlerini rapora erişen ekip üyeleri görecek; genel sohbetler kişisel kalacak. Bu görünürlük kararı kullanıcı tarafından doğrulandı.
 
 Bu paket mevcut uygulama ve `/Users/ozkan/Downloads/prototype/` içeriğine göre hazırlanmıştır. Prototipin HTML ve JavaScript içeriği incelendi; tarayıcı yerel dosya erişimini engellediği için prototipin görsel etkileşim doğrulaması yapılmadı. Prototipteki örnek yanıtlar ve yerel durum kayıtları, gerçek servis davranışı olarak kabul edilmez. Aşağıdaki mevcut durum tablosu geliştirme öncesi bulguları korur.
 
 ## Uygulama ve devreye alma kaydı
+
+12 Ekim 21:06 yerel çalışma ortamı düzeltmesi: güncel frontend ile 13:53'ten beri çalışan eski API birlikte kullanıldığı için `/api/auth/me` 200, yeni `/api/v1/reports` 403 dönüyordu. Yerel veritabanının özel izinli yedeği alındı; API/worker durdurularak migration uygulandı ve servisler yeniden başlatıldı. Gerçek yerel Keycloak admin girişiyle rapor ekranı doğrulandı: ADMIN, `report.read`, rapor API 200 ve 69 rapor. Tarama, sohbet, mesaj, belge, sürüm ve taslak sayıları geçiş öncesiyle aynı kaldı. Bu kontrol gerçek AI çağrısı yapmadı.
 
 - Önceki çalışma `codex/chat-scan-run` üzerinde dört commit ile kaydedildi; yerel `main`, `origin/main` ile eşitlendi. Yeni uygulama bu tabandan ayrı branchte geliştirildi.
 - Dashboard tarama butonu kaldırıldı; diğer tarama girişleri kaynak seçimi açık sohbet ekranına gider. Rapor listesi sunucuda sayfalanır; üretim türü ile içerik türü ayrı filtrelenir.
