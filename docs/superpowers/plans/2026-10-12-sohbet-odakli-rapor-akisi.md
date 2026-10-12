@@ -1,10 +1,26 @@
 # Sohbet odaklı tarama ve ekip raporları uygulama planı
 
-12 Ekim 2026 · Durum: Uygulama planı
+12 Ekim 2026 · Durum: `codex/chat-report-workflows` branchinde uygulandı; canlı ortama alınmadı.
 
 Yeni taramalar sohbetten başlatılacak. Kullanıcı sohbetin artı menüsünden kaynaklarını ve belgelerini seçecek; araştırma ve rapor üretimi bu seçimle sınırlanacak. Her rapor, kendisine bağlı sohbetleri, değişiklikleri ve sürümleri aynı çalışma alanında toplayacak. Rapor sohbetlerini rapora erişen ekip üyeleri görecek; genel sohbetler kişisel kalacak. Bu görünürlük kararı kullanıcı tarafından doğrulandı.
 
-Bu paket mevcut uygulama ve `/Users/ozkan/Downloads/prototype/` içeriğine göre hazırlanmıştır. Uygulama kodunda değişiklik yapılmamıştır. Prototipin HTML ve JavaScript içeriği incelendi; tarayıcı yerel dosya erişimini engellediği için görsel etkileşim doğrulaması yapılmadı. Prototipteki örnek yanıtlar ve yerel durum kayıtları, gerçek servis davranışı olarak kabul edilmez.
+Bu paket mevcut uygulama ve `/Users/ozkan/Downloads/prototype/` içeriğine göre hazırlanmıştır. Prototipin HTML ve JavaScript içeriği incelendi; tarayıcı yerel dosya erişimini engellediği için prototipin görsel etkileşim doğrulaması yapılmadı. Prototipteki örnek yanıtlar ve yerel durum kayıtları, gerçek servis davranışı olarak kabul edilmez. Aşağıdaki mevcut durum tablosu geliştirme öncesi bulguları korur.
+
+## Uygulama ve devreye alma kaydı
+
+- Önceki çalışma `codex/chat-scan-run` üzerinde dört commit ile kaydedildi; yerel `main`, `origin/main` ile eşitlendi. Yeni uygulama bu tabandan ayrı branchte geliştirildi.
+- Dashboard tarama butonu kaldırıldı; diğer tarama girişleri kaynak seçimi açık sohbet ekranına gider. Rapor listesi sunucuda sayfalanır; üretim türü ile içerik türü ayrı filtrelenir.
+- Sohbet kapsamı ve mesaj istek kimliği kalıcıdır. Araçlar, belge erişimi, tarama ve bağımsız işlemler seçilen kapsamı sunucuda doğrular. Seçili şablon ve kaynak profil sürümleri iş kaydına alınır.
+- Rapor sohbetleri rapor erişimini izler. AI önerileri seçilerek taslağa uygulanır; uygulayan/isteyen kişi, alan değişiklikleri ve sürüm kökeni kaydedilir. Eşzamanlı düzenlemeler çakışma döndürür; yayımlanmış eski sürümler değiştirilmez.
+- Web kaynağı için kurulum/test işleri ve dosya kaynakları için sabit belge sürümleri eklendi. Periyodik kaynak yenilemesi kaldırıldı. Ortak kaynak düzenlemesi çalışma alanına özel kopya oluşturur.
+- Şablon bölüm açıklamaları ve talimatları gerçek üretim girdisidir. Zorunlu kanıt yoksa rapor üretimi engellenir. Şablon önerisi incelenip uygulanır.
+- Kullanım defteri çağrı bazındadır; sohbet, rapor revizyonu, analiz, kaynak kurulumu ve şablon üretimi ayrılır. Eksik ölçüm sıfır kabul edilmez; ekip tüketimi ayrıca yetkilendirilir.
+
+Dağıtım sırasında API ve worker aynı sürümle güncellenmelidir. Önce eski worker işleri tamamlanmalı ve yeni iş alımı durdurulmalı; ardından `20261012150000_chat_report_workflows` migration'ı uygulanıp Prisma istemcisi üretilmeli ve yeni API/worker başlatılmalıdır. Bu migration eklemelidir: geçmiş AI kullanımını tek deftere aktarır; eski rapor mesajlarını salt okunur rapor sohbetleri altında korur; özel genel sohbetleri kopyalamaz. Eski kullanım toplamları yeni deftere tekrar eklenmez.
+
+Doğrulama canlı veritabanından ayrı `_test` veritabanlarında ve ayrı test nesne deposunda yapıldı. Backend: 116 dosyada 563 test geçti; RabbitMQ entegrasyon ortamına bağlı 2 dosyada 5 test atlandı. Frontend: 48 dosyada 183 test geçti. Her iki derleme başarılı. Migration boş veritabanına başarıyla uygulandı; geçmiş sohbet aktarımı iki kez çalıştırılarak tekrar güvenliği ve gizlilik doğrulandı. Canlı kaynak hesabı, gerçek AI sağlayıcısı ve tarayıcıda uçtan uca kullanım bu doğrulamanın kapsamı dışındadır.
+
+Davranış sınırları: kaynak kökeni eksiksiz doğrulanamayan eski raporlar genel kaynaklı sohbetten okunmaz; kendi rapor sohbetine yönlendirilir. Dosya koleksiyonlarında web taraması yerine belge analizi istenir; karma seçimler dosyaları sessizce dışarıda bırakmaz. Eski rapor sohbetleri arşiv olarak görüntülenir, yeni revizyonlar yeni sohbetten başlatılır. Çalışma alanı atanmamış eski özel kaynaklar kendiliğinden ekibe açılmaz; dağıtımda gerekiyorsa sahiplikleri açıkça eşlenmelidir.
 
 ## Sayfa bazında planlar
 
