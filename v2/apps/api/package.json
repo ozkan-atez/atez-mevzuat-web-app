@@ -1,0 +1,17 @@
+{
+  "name": "@atez/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@atez/contracts": "workspace:*",
+    "@atez/platform": "workspace:*",
+    "@atez/engine": "workspace:*",
+    "fastify": "^5.2.0",
+    "zod": "^4.1.0",
+    "drizzle-orm": "^0.38.0"
+  }
+}

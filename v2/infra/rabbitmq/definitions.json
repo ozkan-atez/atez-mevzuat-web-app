@@ -1,0 +1,279 @@
+{
+  "exchanges": [
+    {
+      "name": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "atez.evt",
+      "vhost": "atez-mevzuat",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "atez.retry",
+      "vhost": "atez-mevzuat",
+      "type": "headers",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "atez.dlx",
+      "vhost": "atez-mevzuat",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "q.io",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.doc",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.ai.lite",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.ai.main",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.ai.interactive",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.render",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.delivery",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.orchestrator",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "atez.dlx"
+      }
+    },
+    {
+      "name": "q.parking",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "q.retry.10s",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 10000,
+        "x-dead-letter-exchange": "atez.cmd"
+      }
+    },
+    {
+      "name": "q.retry.1m",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 60000,
+        "x-dead-letter-exchange": "atez.cmd"
+      }
+    },
+    {
+      "name": "q.retry.10m",
+      "vhost": "atez-mevzuat",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 600000,
+        "x-dead-letter-exchange": "atez.cmd"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.doc",
+      "destination_type": "queue",
+      "routing_key": "step.demo.split",
+      "arguments": {}
+    },
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.doc",
+      "destination_type": "queue",
+      "routing_key": "step.demo.upper",
+      "arguments": {}
+    },
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.doc",
+      "destination_type": "queue",
+      "routing_key": "step.demo.join",
+      "arguments": {}
+    },
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.io",
+      "destination_type": "queue",
+      "routing_key": "step.source.discover",
+      "arguments": {}
+    },
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.ai.lite",
+      "destination_type": "queue",
+      "routing_key": "step.classify.title",
+      "arguments": {}
+    },
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.io",
+      "destination_type": "queue",
+      "routing_key": "step.doc.fetch",
+      "arguments": {}
+    },
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.doc",
+      "destination_type": "queue",
+      "routing_key": "step.doc.normalize",
+      "arguments": {}
+    },
+    {
+      "source": "atez.cmd",
+      "vhost": "atez-mevzuat",
+      "destination": "q.ai.main",
+      "destination_type": "queue",
+      "routing_key": "step.classify.profile",
+      "arguments": {}
+    },
+    {
+      "source": "atez.evt",
+      "vhost": "atez-mevzuat",
+      "destination": "q.orchestrator",
+      "destination_type": "queue",
+      "routing_key": "work_item.#",
+      "arguments": {}
+    },
+    {
+      "source": "atez.dlx",
+      "vhost": "atez-mevzuat",
+      "destination": "q.parking",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    },
+    {
+      "source": "atez.retry",
+      "vhost": "atez-mevzuat",
+      "destination": "q.retry.10s",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {
+        "x-match": "all",
+        "x-retry-delay": "10s"
+      }
+    },
+    {
+      "source": "atez.retry",
+      "vhost": "atez-mevzuat",
+      "destination": "q.retry.1m",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {
+        "x-match": "all",
+        "x-retry-delay": "1m"
+      }
+    },
+    {
+      "source": "atez.retry",
+      "vhost": "atez-mevzuat",
+      "destination": "q.retry.10m",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {
+        "x-match": "all",
+        "x-retry-delay": "10m"
+      }
+    }
+  ]
+}

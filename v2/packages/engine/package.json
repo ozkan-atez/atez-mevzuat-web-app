@@ -1,0 +1,17 @@
+{
+  "name": "@atez/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "dependencies": {
+    "@atez/contracts": "workspace:*",
+    "@atez/platform": "workspace:*",
+    "zod": "^4.1.0",
+    "drizzle-orm": "^0.38.0",
+    "@marcbachmann/cel-js": "^4.0.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@atez/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "React + Vite arayüzü (Aşama 2 belge detay ekranıyla başlayacak; şimdilik yer tutucu)."
+}

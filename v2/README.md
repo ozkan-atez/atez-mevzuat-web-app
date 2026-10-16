@@ -1,0 +1,41 @@
+# ATEZ Mevzuat Radarı — v2
+
+Hedef mimarinin (`docs/architecture/2026-10-15-hedef-mimari.md`) uygulaması. Eski sistem
+(`backend/`, `frontend/`) dokunulmadan çalışmaya devam eder; geçiş sonra yapılacak.
+
+## Yapı (§13)
+
+```text
+apps/       api · worker · scheduler · relay · web
+packages/   contracts · engine · steps · modules · platform
+config/     recipes · sources · keyword-sets · templates · prompts · ai.json · schedules.json
+infra/      yerel docker-compose yardımcıları, RabbitMQ definitions JSON
+```
+
+## Yerel geliştirme
+
+```bash
+cp .env.example .env
+pnpm install
+pnpm infra:up          # postgres :55432, rabbitmq :55672 (yönetim :55673), minio :55900
+pnpm db:migrate
+pnpm worker            # --pool=all: bütün havuzlar + orkestratör + reaper
+pnpm relay             # outbox → RabbitMQ
+pnpm api               # :3100  POST /runs  GET /runs/:id
+```
+
+## Testler
+
+```bash
+pnpm typecheck
+pnpm test              # unit + integration
+```
+
+Entegrasyon testleri yalnızca adı `_test` ile biten veritabanında (`atez_v2_test`) ve `-test`
+ile biten RabbitMQ vhost'unda çalışır; koşul sağlanmazsa test süreci başlamaz (Ek B.3 madde 12).
+
+## RabbitMQ
+
+Topoloji koddan idempotent kurulur. Kuyruk açma yetkisi olmayan ortamlar için
+`pnpm topology:export <vhost> > definitions.json` çıktısı altyapı ekibine verilir
+(`infra/rabbitmq/definitions.json` güncel kopyadır).

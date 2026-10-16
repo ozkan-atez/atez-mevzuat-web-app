@@ -1,0 +1,8 @@
+{
+  "name": "@atez/modules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@atez/contracts": "workspace:*", "@atez/platform": "workspace:*", "zod": "^4.1.0", "drizzle-orm": "^0.38.0", "cheerio": "^1.0.0", "iconv-lite": "^0.6.3", "pdf-lib": "^1.17.1" }
+}
