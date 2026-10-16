@@ -39,7 +39,7 @@
   ],
   "queues": [
     {
-      "name": "q.io",
+      "name": "workflow.io",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -49,7 +49,7 @@
       }
     },
     {
-      "name": "q.doc",
+      "name": "workflow.browser",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -59,7 +59,7 @@
       }
     },
     {
-      "name": "q.ai.lite",
+      "name": "workflow.document",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -69,7 +69,7 @@
       }
     },
     {
-      "name": "q.ai.main",
+      "name": "workflow.ai.batch",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -79,7 +79,7 @@
       }
     },
     {
-      "name": "q.ai.interactive",
+      "name": "workflow.ai.interactive",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -89,7 +89,7 @@
       }
     },
     {
-      "name": "q.render",
+      "name": "workflow.render",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -99,7 +99,7 @@
       }
     },
     {
-      "name": "q.delivery",
+      "name": "workflow.delivery",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -109,7 +109,7 @@
       }
     },
     {
-      "name": "q.orchestrator",
+      "name": "workflow.coordinator",
       "vhost": "atez-mevzuat",
       "durable": true,
       "auto_delete": false,
@@ -165,7 +165,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.doc",
+      "destination": "workflow.document",
       "destination_type": "queue",
       "routing_key": "step.demo.split",
       "arguments": {}
@@ -173,7 +173,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.doc",
+      "destination": "workflow.document",
       "destination_type": "queue",
       "routing_key": "step.demo.upper",
       "arguments": {}
@@ -181,7 +181,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.doc",
+      "destination": "workflow.document",
       "destination_type": "queue",
       "routing_key": "step.demo.join",
       "arguments": {}
@@ -189,7 +189,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.io",
+      "destination": "workflow.io",
       "destination_type": "queue",
       "routing_key": "step.source.discover",
       "arguments": {}
@@ -197,7 +197,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.ai.lite",
+      "destination": "workflow.ai.batch",
       "destination_type": "queue",
       "routing_key": "step.classify.title",
       "arguments": {}
@@ -205,7 +205,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.io",
+      "destination": "workflow.io",
       "destination_type": "queue",
       "routing_key": "step.doc.fetch",
       "arguments": {}
@@ -213,7 +213,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.doc",
+      "destination": "workflow.document",
       "destination_type": "queue",
       "routing_key": "step.doc.normalize",
       "arguments": {}
@@ -221,7 +221,7 @@
     {
       "source": "atez.cmd",
       "vhost": "atez-mevzuat",
-      "destination": "q.ai.main",
+      "destination": "workflow.ai.batch",
       "destination_type": "queue",
       "routing_key": "step.classify.profile",
       "arguments": {}
@@ -229,7 +229,7 @@
     {
       "source": "atez.evt",
       "vhost": "atez-mevzuat",
-      "destination": "q.orchestrator",
+      "destination": "workflow.coordinator",
       "destination_type": "queue",
       "routing_key": "work_item.#",
       "arguments": {}

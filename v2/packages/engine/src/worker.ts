@@ -74,7 +74,9 @@ export class StepWorker<D> {
   }
 
   async consumePools(connection: ChannelModel, pools: Pool[]): Promise<() => Promise<void>> {
-    const subs = await Promise.all(pools.map((p) => consume(connection, poolQueue(p), (env) => this.handle(env), { prefetch: 1, logger: this.log })))
+    // ai-lite ve ai-main aynı kuyruğu paylaşır; her kuyruğa bir kez abone olunur.
+    const queues = [...new Set(pools.map(poolQueue))]
+    const subs = await Promise.all(queues.map((q) => consume(connection, q, (env) => this.handle(env), { prefetch: 1, logger: this.log })))
     return async () => {
       for (const s of subs) await s.cancel()
     }

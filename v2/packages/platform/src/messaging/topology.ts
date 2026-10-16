@@ -16,14 +16,32 @@ export const EXCHANGES = {
   dlx: 'atez.dlx',
 } as const
 
-export const ORCHESTRATOR_QUEUE = 'q.orchestrator'
+/** Orkestratör kuyruğu (Ç7: dalın `workflow.coordinator` adı). */
+export const ORCHESTRATOR_QUEUE = 'workflow.coordinator'
 export const PARKING_QUEUE = 'q.parking'
 export const RETRY_HEADER = 'x-retry-delay'
 
-export const POOLS: readonly Pool[] = ['io', 'doc', 'ai-lite', 'ai-main', 'ai-interactive', 'render', 'delivery']
+export const POOLS: readonly Pool[] = ['io', 'browser', 'doc', 'ai-lite', 'ai-main', 'ai-interactive', 'render', 'delivery']
 
-/** Havuz kuyruk adı: `ai-lite` → `q.ai.lite`. */
-export const poolQueue = (pool: Pool): string => `q.${pool.replace(/-/g, '.')}`
+/**
+ * Havuz → kuyruk eşlemesi (Ek B.4 Ç7: dalın `workflow.*` adları; §12'deki `q.*` adlarının yerini
+ * alır). `ai-lite` ve `ai-main` aynı toplu AI kuyruğunu paylaşır; model katmanı adımın kendisinde
+ * seçilir. Chat/revizyon işleri ayrı `workflow.ai.interactive` kuyruğunda gece işlerinin arkasında
+ * beklemez.
+ */
+export const POOL_QUEUES: Record<Pool, string> = {
+  io: 'workflow.io',
+  browser: 'workflow.browser',
+  doc: 'workflow.document',
+  'ai-lite': 'workflow.ai.batch',
+  'ai-main': 'workflow.ai.batch',
+  'ai-interactive': 'workflow.ai.interactive',
+  render: 'workflow.render',
+  delivery: 'workflow.delivery',
+}
+export const poolQueue = (pool: Pool): string => POOL_QUEUES[pool]
+/** API'ye canlı olay iletimi (SSE) için örnek başına kuyruk. */
+export const apiPushQueue = (instance: string): string => `workflow.api.push.${instance}`
 export const stepRoutingKey = (step: StepKey | string): string => `step.${step}`
 
 export interface RetryTier {
@@ -60,8 +78,8 @@ export function buildTopology(tiers: readonly RetryTier[] = DEFAULT_RETRY_TIERS)
     queues: [],
     bindings: [],
   }
-  for (const pool of POOLS) {
-    spec.queues.push({ name: poolQueue(pool), arguments: { ...quorum, 'x-dead-letter-exchange': EXCHANGES.dlx } })
+  for (const name of new Set(POOLS.map(poolQueue))) {
+    spec.queues.push({ name, arguments: { ...quorum, 'x-dead-letter-exchange': EXCHANGES.dlx } })
   }
   for (const [step, contract] of Object.entries(STEP_CATALOG)) {
     spec.bindings.push({ source: EXCHANGES.cmd, destination: poolQueue(contract.pool), routingKey: stepRoutingKey(step), arguments: {} })

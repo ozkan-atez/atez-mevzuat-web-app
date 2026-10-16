@@ -6,7 +6,7 @@ import { ProfileDecision } from './profile'
  * Adım kataloğu (§5.1). Kuyruklar süreç değil havuz bazındadır (§12); her adım tek bir
  * havuza aittir. Girdi/çıktı şemaları web ile paylaşılır.
  */
-export const Pool = z.enum(['io', 'doc', 'ai-lite', 'ai-main', 'ai-interactive', 'render', 'delivery'])
+export const Pool = z.enum(['io', 'browser', 'doc', 'ai-lite', 'ai-main', 'ai-interactive', 'render', 'delivery'])
 export type Pool = z.infer<typeof Pool>
 
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)

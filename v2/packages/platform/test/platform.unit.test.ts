@@ -41,16 +41,31 @@ describe('RabbitMQ topolojisi (§12)', () => {
   const spec = buildTopology()
   it('dört exchange ve havuz kuyrukları', () => {
     expect(spec.exchanges.map((e) => e.name)).toEqual(['atez.cmd', 'atez.evt', 'atez.retry', 'atez.dlx'])
-    expect(poolQueue('ai-lite')).toBe('q.ai.lite')
-    expect(spec.queues.map((q) => q.name)).toEqual(expect.arrayContaining(['q.io', 'q.doc', 'q.ai.lite', 'q.ai.main', 'q.orchestrator', 'q.parking', 'q.retry.10s', 'q.retry.1m', 'q.retry.10m']))
+    expect(poolQueue('ai-lite')).toBe('workflow.ai.batch')
+    expect(poolQueue('ai-main')).toBe('workflow.ai.batch')
+    expect(spec.queues.map((q) => q.name)).toEqual(
+      expect.arrayContaining([
+        'workflow.io',
+        'workflow.browser',
+        'workflow.document',
+        'workflow.ai.batch',
+        'workflow.ai.interactive',
+        'workflow.render',
+        'workflow.delivery',
+        'workflow.coordinator',
+        'q.parking',
+        'q.retry.10s',
+      ]),
+    )
+    expect(new Set(spec.queues.map((q) => q.name)).size).toBe(spec.queues.length)
   })
   it('retry kuyrukları TTL + DLX → atez.cmd, havuz kuyrukları DLX → atez.dlx, hepsi quorum', () => {
     const r = spec.queues.find((q) => q.name === 'q.retry.1m')!
     expect(r.arguments).toMatchObject({ 'x-message-ttl': 60_000, 'x-dead-letter-exchange': 'atez.cmd', 'x-queue-type': 'quorum' })
-    expect(spec.queues.find((q) => q.name === 'q.io')!.arguments).toMatchObject({ 'x-dead-letter-exchange': 'atez.dlx' })
+    expect(spec.queues.find((q) => q.name === 'workflow.io')!.arguments).toMatchObject({ 'x-dead-letter-exchange': 'atez.dlx' })
   })
   it('adımlar routing key step.<key> ile havuz kuyruğuna bağlı', () => {
-    expect(spec.bindings).toContainEqual(expect.objectContaining({ source: 'atez.cmd', destination: 'q.ai.main', routingKey: 'step.classify.profile' }))
+    expect(spec.bindings).toContainEqual(expect.objectContaining({ source: 'atez.cmd', destination: 'workflow.ai.batch', routingKey: 'step.classify.profile' }))
   })
   it('kademeli gecikme seçimi', () => {
     expect(retryTierFor(DEFAULT_RETRY_TIERS, 1).label).toBe('10s')
