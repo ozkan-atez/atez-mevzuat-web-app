@@ -7,6 +7,7 @@ import {
   connectAmqp,
   schema,
   type AmqpHandle,
+  type Db,
   type DbHandle,
   type RetryTier,
 } from '@atez/platform'
@@ -40,7 +41,8 @@ export interface Harness<D> {
  */
 export async function startHarness<D>(opts: {
   steps: StepRegistry<D>
-  deps: D
+  /** Servisler test DB'sine ihtiyaç duyabilir; o yüzden fonksiyon da verilebilir. */
+  deps: D | ((db: Db) => D)
   recipes: RecipeRegistry
   pools: Pool[]
   leaseMs?: number
@@ -57,7 +59,7 @@ export async function startHarness<D>(opts: {
 
   const relay = new OutboxRelay(db.db, amqp.publisher, { idleMs: 25 })
   relay.start()
-  const worker = new StepWorker<D>({ db: db.db, steps: opts.steps, deps: opts.deps, owner: 'test-worker', retryTiers: TEST_RETRY_TIERS, leaseMs: opts.leaseMs ?? 30_000 })
+  const worker = new StepWorker<D>({ db: db.db, steps: opts.steps, deps: typeof opts.deps === 'function' ? (opts.deps as (db: Db) => D)(db.db) : opts.deps, owner: 'test-worker', retryTiers: TEST_RETRY_TIERS, leaseMs: opts.leaseMs ?? 30_000 })
   const stopWorker = await worker.consumePools(amqp.connection, opts.pools)
   const orchestrator = new Orchestrator(db.db)
   const stopOrch = await orchestrator.consume(amqp.connection)

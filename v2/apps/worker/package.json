@@ -10,6 +10,7 @@
     "@atez/platform": "workspace:*",
     "@atez/engine": "workspace:*",
     "@atez/steps": "workspace:*",
-    "@atez/contracts": "workspace:*"
+    "@atez/contracts": "workspace:*",
+    "drizzle-orm": "^0.38.0"
   }
 }

@@ -24,6 +24,25 @@ pnpm relay             # outbox → RabbitMQ
 pnpm api               # :3100  POST /runs  GET /runs/:id
 ```
 
+## Tek seferlik çalıştırma (geliştirici aracı)
+
+```bash
+gcloud auth application-default login     # Vertex AI kimliği (ADC)
+# .env: VERTEX_PROJECT, VERTEX_LOCATION
+pnpm run-once --recipe rg-daily-profile --date 2025-12-31
+```
+
+Relay + bütün havuzlar + orkestratör tek süreçte açılır; run bitince adım sayaçları, ön kontrol
+durumu ve bu run'daki AI çağrısı sayısı basılır. Aynı tarih ikinci kez çalıştırıldığında ön
+kontrol `NO_CHANGE` döner ve AI çağrısı yapılmaz.
+
+## Aşama durumu
+
+| Aşama | Durum |
+|---|---|
+| 1. İskelet | contracts, platform (RabbitMQ topolojisi, outbox/inbox, relay, MinIO, AI geçidi), engine (run/work_item/step_result, lease+heartbeat, reaper, modlar) |
+| 2. RG çekirdeği | `rg-daily-profile` tarifi: `source.discover` (ön kontrol) → `classify.title` → `doc.fetch` → `doc.normalize` → `classify.profile` |
+
 ## Testler
 
 ```bash

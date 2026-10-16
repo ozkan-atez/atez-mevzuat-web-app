@@ -64,6 +64,8 @@ export const DocFetchOutput = z.object({
   delta: ContentDelta,
   files: z.array(FileRef),
   manifestKey: z.string(),
+  /** Edinilemeyen ekler; profil kapsamını eksik kılar (→ REVIEW). */
+  failed: z.array(z.object({ url: z.string(), reason: z.string() })),
 })
 
 // ---- doc.normalize -----------------------------------------------------------
@@ -72,6 +74,8 @@ export const DocNormalizeOutput = z.object({
   documentVersionId: z.string().uuid(),
   contentHash: z.string(),
   modelInputs: z.array(FileRef),
+  /** Modele verilemeyen dosyalar (desteklenmeyen biçim, edinilemeyen ek). */
+  skipped: z.array(z.object({ label: z.string(), reason: z.string() })),
 })
 
 // ---- classify.profile --------------------------------------------------------

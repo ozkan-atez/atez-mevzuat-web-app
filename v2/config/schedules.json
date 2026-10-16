@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "key": "rg-daily",
+    "cron": "0 5,10,15,23 * * *",
+    "timezone": "Europe/Istanbul",
+    "recipeKey": "rg-daily-profile",
+    "input": { "date": "$today" },
+    "mode": "FILL_MISSING",
+    "enabled": true
+  }
+]

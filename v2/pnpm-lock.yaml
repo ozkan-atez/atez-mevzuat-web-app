@@ -85,6 +85,9 @@ importers:
       '@atez/steps':
         specifier: workspace:*
         version: link:../../packages/steps
+      drizzle-orm:
+        specifier: ^0.38.0
+        version: 0.38.4(@types/pg@8.23.1)(pg@8.23.1)
 
   packages/contracts:
     dependencies:
@@ -185,6 +188,10 @@ importers:
       zod:
         specifier: ^4.1.0
         version: 4.6.7
+    devDependencies:
+      pdf-lib:
+        specifier: ^1.17.1
+        version: 1.17.1
 
 packages:
 

@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@atez/contracts": "workspace:*", "@atez/platform": "workspace:*", "@atez/engine": "workspace:*", "@atez/modules": "workspace:*", "zod": "^4.1.0", "drizzle-orm": "^0.38.0" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@atez/contracts": "workspace:*",
+    "@atez/platform": "workspace:*",
+    "@atez/engine": "workspace:*",
+    "@atez/modules": "workspace:*",
+    "zod": "^4.1.0",
+    "drizzle-orm": "^0.38.0"
+  },
+  "devDependencies": {
+    "pdf-lib": "^1.17.1"
+  }
 }
