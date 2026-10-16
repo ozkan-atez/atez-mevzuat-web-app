@@ -9,6 +9,7 @@ export interface CustomerGroupInput {
   name: string
   description: string | null
   emails: string[]
+  recipientNames?: Record<string, string>
   isActive: boolean
 }
 
@@ -49,6 +50,21 @@ export class PrismaDeliveryRepository {
     } catch (error) {
       throw toGroupError(error)
     }
+  }
+
+  async importGroups(inputs: { name: string; emails: string[]; recipientNames: Record<string,string> }[]) {
+    return this.prisma.$transaction(async tx => {
+      const results = [];
+      for (const input of inputs) {
+        const existing = await tx.customerGroup.findUnique({ where: { name: input.name } });
+        const emails = [...new Set([...(existing?.emails ?? []), ...input.emails])];
+        if (emails.length > 200) throw new Error(`${input.name}: grup başına en fazla 200 alıcı eklenebilir.`);
+        const recipientNames = { ...input.recipientNames, ...((existing?.recipientNames ?? {}) as Record<string,string>) };
+        const data = { emails, recipientNames };
+        results.push(mapGroup(existing ? await tx.customerGroup.update({where:{id:existing.id},data}) : await tx.customerGroup.create({data:{name:input.name,...data}})));
+      }
+      return results;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async resolveGroupRecipients(groupIds: string[]): Promise<string[]> {
@@ -112,12 +128,14 @@ export class PrismaDeliveryRepository {
   }
 }
 
-function mapGroup(group: { id: string; name: string; description: string | null; emails: string[]; isActive: boolean; createdAt: Date; updatedAt: Date }) {
+function mapGroup(group: { recipientNames?: unknown; id: string; name: string; description: string | null; emails: string[]; isActive: boolean; createdAt: Date; updatedAt: Date }) {
   return {
     id: group.id,
     name: group.name,
     description: group.description,
     emails: group.emails,
+    recipientNames: Object.fromEntries(group.emails.map(email => [email, (group.recipientNames as Record<string,string> | undefined)?.[email] ?? ""])),
+    recipientCount: group.emails.length,
     isActive: group.isActive,
     createdAt: group.createdAt.toISOString(),
     updatedAt: group.updatedAt.toISOString(),

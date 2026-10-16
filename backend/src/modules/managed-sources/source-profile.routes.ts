@@ -1,5 +1,5 @@
 import { discoverProfile } from './profile-discovery'
-import { getActorContext } from '../../platform/actor-context'
+import { getActorContext, hasPermission } from '../../platform/actor-context'
 import { timingSafeEqual } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { Prisma, type PrismaClient } from '@prisma/client'
@@ -12,7 +12,7 @@ import { collectSource } from './source-collector'
 /** Until deployment OIDC is supplied, secrets may only be managed by this local installation's owner. */
 export function sourceAdminAllowed(request:Pick<FastifyRequest,'headers'|'ip'|'method'>,admin=process.env.SOURCE_ADMIN_BEARER):boolean {
   const actor = getActorContext()
-  if (actor) return actor.permissions.includes('config.manage')
+  if (actor) return hasPermission(actor,'config.manage')
   if(admin){const actual=Buffer.from(String(request.headers.authorization??''));const expected=Buffer.from(`Bearer ${admin}`);return actual.length===expected.length&&timingSafeEqual(actual,expected)}
   if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(request.ip))return false
   const origin=request.headers.origin

@@ -1,3 +1,4 @@
+import { sourceCaptureFailure } from './source-capture-failures'
 import type { SourceProcessingDependencies } from './process-source-documents'
 import type { PrismaClient } from '@prisma/client'
 import type { RabbitQueue } from '../../platform/rabbitmq'
@@ -15,8 +16,11 @@ export async function dispatchSourceRuns(prisma: PrismaClient, queue: Pick<Rabbi
 export async function executeSourceCommand(prisma: PrismaClient, command: { runId: string; version: number }, retryCount: number, processing?: SourceProcessingDependencies) {
   const current = await prisma.sourceScanRun.findUnique({ where: { id: command.runId } })
   if (!current || current.queueVersion !== command.version) return
-  if (retryCount > 0) await prisma.sourceScanRun.updateMany({ where: { id: command.runId, queueVersion: command.version, status: { in: ['RUNNING', 'FAILED'] } }, data: { status: 'QUEUED' } })
+  if (retryCount > 0) await prisma.sourceScanRun.updateMany({ where: { id: command.runId, queueVersion: command.version, status: { in: ['RUNNING', 'FAILED', 'PARTIAL'] } }, data: { status: 'QUEUED' } })
   await executeSourceRun(prisma, command.runId, tariffCredentialsFromEnv(), command.version, processing)
   const result = await prisma.sourceScanRun.findUnique({ where: { id: command.runId } })
+  if(result?.queueVersion===command.version&&['FAILED','PARTIAL'].includes(result.status)) {
+    const failure=await sourceCaptureFailure(prisma,[command.runId]);if(failure)throw failure
+  }
   if (result?.queueVersion === command.version && result.status === 'FAILED') throw new Error(result.errorSummary ?? 'Kaynak taranamadı.')
 }

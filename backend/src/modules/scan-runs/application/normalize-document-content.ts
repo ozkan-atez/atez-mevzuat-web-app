@@ -24,7 +24,7 @@ export function normalizeDocumentContent(input: Input): AiInputPart[] {
   if (input.mediaType === 'text/plain') {
     return [{ text: `${metadata}\nİçerik:\n${input.bytes.toString('utf8')}` }]
   }
-  if (input.mediaType === 'application/pdf') {
+  if (input.mediaType === 'application/pdf' || ['image/png','image/jpeg','image/webp'].includes(input.mediaType)) {
     return [{ text: metadata }, { inlineData: { mimeType: input.mediaType, data: input.bytes.toString('base64') } }]
   }
   throw new AiProviderError('CONTENT_REJECTED', false, `Belge filtresi için desteklenmeyen içerik türü: ${input.mediaType}`)

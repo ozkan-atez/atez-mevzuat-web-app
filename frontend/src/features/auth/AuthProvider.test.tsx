@@ -24,6 +24,14 @@ describe('cookie session UI',()=>{
     expect(screen.queryByLabelText(/parola|şifre/i)).not.toBeInTheDocument()
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
+  it('allows every admin action even when the permission list is incomplete',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({...testSession,role:'ADMIN',permissions:[]}))))
+    app()
+    expect(await screen.findByRole('button',{name:'Raporu düzenle'})).toBeVisible()
+    expect(screen.getByRole('button',{name:'E-posta gönder'})).toBeVisible()
+    expect(screen.getByRole('button',{name:/Yeni tarama başlat/})).toBeVisible()
+    expect(screen.getByRole('menuitem',{name:'Yönetim'})).toBeVisible()
+  })
   it('uses server permissions to hide viewer mutations and admin navigation',async()=>{
     vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({...testSession,role:'VIEWER',permissions:['workspace.read','report.read','document.read','chat.read']}))))
     const store=vi.spyOn(Storage.prototype,'setItem')

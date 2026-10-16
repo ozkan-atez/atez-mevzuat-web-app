@@ -46,7 +46,7 @@ export async function streamChatMessage(sessionId: string, content: string, sign
   return apiFetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, ...(options.webSearch ? {webSearch:true}:{}), ...(options.browserAgent ? {browserAgent:true}:{}), ...(documentVersionIds.length ? { documentVersionIds } : {}) }),
+    body: JSON.stringify({ content, ...(options.sourceIds?.length ? {sourceIds: options.sourceIds} : {}), ...(options.templateId ? {templateId: options.templateId} : {}), ...(options.webSearch ? {webSearch:true}:{}), ...(options.browserAgent ? {browserAgent:true}:{}), ...(documentVersionIds.length ? { documentVersionIds } : {}) }),
     signal,
   })
 }
@@ -63,20 +63,33 @@ export async function* parseChatEventStream(response: Response): AsyncGenerator<
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let terminal = false
 
   try {
     for (;;) {
-      const { done, value } = await reader.read()
+      let timer:ReturnType<typeof setTimeout>|undefined
+      const {done,value}=await Promise.race([
+        reader.read(),
+        new Promise<never>((_resolve,reject)=>{timer=setTimeout(()=>reject(new ChatApiError(504,'Sunucudan yanıt akışı alınamıyor. Bağlantıyı kontrol edip yeniden deneyin.')),45000)}),
+      ]).finally(()=>clearTimeout(timer))
       buffer += decoder.decode(value, { stream: !done })
       const frames = buffer.split('\n\n')
       buffer = frames.pop() ?? ''
       for (const frame of frames) {
         const data = frame.split('\n').find((line) => line.startsWith('data: '))?.slice(6)
-        if (data) yield JSON.parse(data) as ChatStreamEvent
+        if (data) {
+          const event=JSON.parse(data) as ChatStreamEvent
+          if(event.type==='complete' || event.type==='error')terminal=true
+          yield event
+        }
       }
-      if (done) break
+      if (done) {
+        if(!terminal)throw new ChatApiError(502,'Yanıt tamamlanmadan bağlantı kesildi. Mesajınız kaydedildi; yeniden deneyebilirsiniz.')
+        break
+      }
     }
   } finally {
+    if(!terminal)void reader.cancel().catch(()=>undefined)
     reader.releaseLock()
   }
 }
@@ -86,4 +99,27 @@ export async function listChatReports(): Promise<ChatReportOption[]> {
   const response = await apiFetch('/api/v1/chat/reports')
   if (!response.ok) throw await ChatApiError.from(response, 'Düzeltilebilecek raporlar alınamadı.')
   return ((await response.json()) as { reports: ChatReportOption[] }).reports
+}
+
+export interface ReportThread {
+  reportId: string; topicId: string | null; title: string; latestVersion: number
+  messages: ChatMessage[]
+  revisions: Array<{version: number; createdAt: string; createdBy?: string | null; createdByName?: string | null}>
+}
+export async function getReportThread(id: string, signal?: AbortSignal): Promise<ReportThread> {
+  const response = await apiFetch(`/api/v1/chat/report-threads/${encodeURIComponent(id)}`, signal ? {signal} : {})
+  if (!response.ok) throw await ChatApiError.from(response, 'Rapor sohbeti alınamadı.')
+  return response.json()
+}
+
+export interface ChatActivity {startedAt:number;stage:string;content:string;stopping:boolean}
+export async function getChatState(sessionId:string,signal?:AbortSignal):Promise<{messages:ChatMessage[];active:ChatActivity|null}> {
+  const response=await apiFetch(`/api/v1/chat/sessions/${sessionId}/messages`,signal?{signal}:{})
+  if(!response.ok)throw await ChatApiError.from(response,'Sohbet durumu alınamadı.')
+  const data=await response.json()
+  return {messages:data.messages,active:data.active??null}
+}
+export async function stopChatMessage(sessionId:string):Promise<void> {
+  const response=await apiFetch(`/api/v1/chat/sessions/${sessionId}/stop`,{method:'POST'})
+  if(!response.ok)throw await ChatApiError.from(response,'İşlem durdurulamadı.')
 }

@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
-import { permissionsForRole, resolveActorContext, runWithActorContext, type ActorContext } from './actor-context'
+import { hasPermission, permissionsForRole, resolveActorContext, runWithActorContext, type ActorContext } from './actor-context'
 export class WorkerAuthorizationError extends Error {}
 
 /** Jobs carry identifiers only. Authorization is resolved again from current membership. */
@@ -10,7 +10,7 @@ export async function withJobActor<T>(db: PrismaClient, input: { workspaceId?: s
   if (!issuer) throw new WorkerAuthorizationError('İşin kimlik sağlayıcısı yapılandırılmamış.')
   const identity = await db.externalIdentity.findFirst({ where: { userId: input.initiatorUserId, issuer, user: { isActive: true } } })
   const actor = identity ? await resolveActorContext(db, { userId: input.initiatorUserId, identityId: identity.id, workspaceId: input.workspaceId }) : null
-  if (!actor?.permissions.includes(permission)) throw new WorkerAuthorizationError('İşi başlatan kullanıcının geçerli işlem yetkisi bulunmuyor.')
+  if (!actor || !hasPermission(actor,permission)) throw new WorkerAuthorizationError('İşi başlatan kullanıcının geçerli işlem yetkisi bulunmuyor.')
   return runWithActorContext(actor, action)
 }
 

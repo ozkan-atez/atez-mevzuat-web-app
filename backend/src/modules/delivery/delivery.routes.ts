@@ -1,5 +1,6 @@
+import { groupFileRoutes } from './group-files.routes'
 import type { FastifyInstance } from 'fastify'
-import { getActorContext } from '../../platform/actor-context'
+import { getActorContext, hasPermission } from '../../platform/actor-context'
 import { idempotencyKeySchema } from '../scan-runs/scan-runs.schemas'
 import type { PrismaTopicAnalysisRepository } from '../topic-analysis/infrastructure/prisma-topic-analysis-repository'
 import type { TopicObjectStore } from '../topic-analysis/application/ports'
@@ -24,10 +25,11 @@ interface Options {
 }
 
 export async function customerGroupRoutes(app: FastifyInstance, options: Pick<Options, 'repository'>) {
+  await groupFileRoutes(app, options.repository)
   app.get('/', async (_request, reply) => {
     const groups = await options.repository.listCustomerGroups()
     const actor = getActorContext()
-    return reply.send({ groups: !actor || actor.permissions.includes('config.manage') ? groups : groups.map(group => ({ ...group, emails: [] })) })
+    return reply.send({ groups: !actor || hasPermission(actor,'config.manage') ? groups : groups.map(group => ({ ...group, emails: [], recipientNames: {} })) })
   })
 
   app.post('/', async (request, reply) => {
@@ -38,6 +40,7 @@ export async function customerGroupRoutes(app: FastifyInstance, options: Pick<Op
         name: body.data.name,
         description: body.data.description ?? null,
         emails: normalizeEmails(body.data.emails),
+        ...(body.data.recipientNames ? {recipientNames: Object.fromEntries(Object.entries(body.data.recipientNames).map(([email,name])=>[email.toLowerCase(),name]))} : {}),
         isActive: body.data.isActive,
       })
       return reply.code(201).send(group)
@@ -53,6 +56,7 @@ export async function customerGroupRoutes(app: FastifyInstance, options: Pick<Op
     const { id } = request.params as { id: string }
     try {
       return reply.send(await options.repository.updateCustomerGroup(id, {
+        ...(body.data.recipientNames === undefined ? {} : {recipientNames: Object.fromEntries(Object.entries(body.data.recipientNames).map(([email,name])=>[email.toLowerCase(),name]))}),
         ...(body.data.name === undefined ? {} : { name: body.data.name }),
         ...(body.data.description === undefined ? {} : { description: body.data.description ?? null }),
         ...(body.data.emails === undefined ? {} : { emails: normalizeEmails(body.data.emails) }),
@@ -104,7 +108,7 @@ export async function topicDeliveryRoutes(app: FastifyInstance, options: Options
     const loaded = await loadContext(id, version)
     if (!loaded) return reply.code(404).send({ message: 'Rapor bulunamadı' })
     const actor = getActorContext()
-    if (actor && !actor.permissions.includes('delivery.send')) return reply.send({ topicId: loaded.context.topicId, reportVersion: loaded.context.reportVersion, targetDate: loaded.context.targetDate, sources: loaded.draft.sources, draft: { subject: '', bodyText: '', attachmentName: '' }, sender: { configured: false }, groups: [], suggestedGroupIds: [], dispatches: [] })
+    if (actor && !hasPermission(actor,'delivery.send')) return reply.send({ topicId: loaded.context.topicId, reportVersion: loaded.context.reportVersion, targetDate: loaded.context.targetDate, sources: loaded.draft.sources, draft: { subject: '', bodyText: '', attachmentName: '' }, sender: { configured: false }, groups: [], suggestedGroupIds: [], dispatches: [] })
     return reply.send({
       topicId: loaded.context.topicId,
       reportVersion: loaded.context.reportVersion,

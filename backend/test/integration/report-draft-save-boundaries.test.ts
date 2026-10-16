@@ -41,7 +41,7 @@ describe.skipIf(!enabled)('report correction Save boundaries on isolated databas
   expect(await prisma.reportRevision.count({where:{report:{topicId:f.topicId}}})).toBe(1)
   await f.edit('note','Üçüncü düzenleme')
   const saved=await f.save();expect(saved.version).toBe(2);expect(await prisma.reportRevision.count({where:{report:{topicId:f.topicId}}})).toBe(2);expect(await drafts.getOpenDraft(f.topicId)).toBeNull()
-  const history=await drafts.getPublishedHistory(f.topicId);expect(history).toHaveLength(1);expect(history[0]!.version).toBe(2);expect(history[0]!.edits.map(e=>e.path)).toEqual(['title','summary','note']);expect(history[0]!.edits.every(e=>!e.revertible)).toBe(true)
+  const history=await drafts.getPublishedHistory(f.topicId);expect(history).toHaveLength(2);expect(history[1]!.version).toBe(1);expect(history[1]!.edits).toEqual([]);expect(history[0]!.version).toBe(2);expect(history[0]!.edits.map(e=>e.path)).toEqual(['title','summary','note']);expect(history[0]!.edits.every(e=>!e.revertible)).toBe(true)
   expect(f.values.get(f.originalHtmlKey)?.toString()).toBe('immutable original html');expect(JSON.parse(f.values.get(f.originalSpecKey)!.toString()).summary).toBe('Orijinal özet')
   await executeTopicRevision({topicId:f.topicId,messageId:message.id},deps);expect(model.generateStructured).toHaveBeenCalledTimes(1);expect(await drafts.getOpenDraft(f.topicId)).toBeNull()
  })

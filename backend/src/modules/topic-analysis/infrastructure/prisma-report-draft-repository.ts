@@ -1,3 +1,4 @@
+import { reportActor } from '../../chat/infrastructure/report-audit'
 import { getActorContext, resourceOwnership, reportAccessWhere } from '../../../platform/actor-context'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import type { PublishedReportBase, ReportDraftRecord, ReportDraftRepository } from '../application/ports'
@@ -10,14 +11,16 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
 
   async getPublishedBase(topicId: string): Promise<PublishedReportBase | null> {
     const revision = await this.prisma.reportRevision.findFirst({
-      where: { report: { AND: [reportAccessWhere()], OR: [{ topicId }, { id: topicId, topicId: null, card: 'K6' }] }, status: 'VALIDATED' },
+      where: { report: { AND: [reportAccessWhere()], OR: [{ topicId }, { id: topicId, topicId: null }] }, status: 'VALIDATED' },
       orderBy: { version: 'desc' },
       select: {
+        createdAt: true,
         version: true,
         specObjectKey: true,
         analysisRevisionId: true,
         report: {
           select: {
+            id: true,
             basename: true,
             scanRunId: true,
             scanRun: { select: { targetDate: true } },
@@ -27,20 +30,20 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
       },
     })
     const topic = revision?.report.topic
-    if (!revision || !revision.report.scanRunId) return null
+    if (!revision) return null
     return {
-      runId: revision.report.scanRunId,
-      targetDate: toIsoDate(topic?.document.edition.publicationDate ?? revision.report.scanRun!.targetDate),
+      runId: revision.report.scanRunId ?? revision.report.id,
+      targetDate: toIsoDate(topic?.document.edition.publicationDate ?? revision.report.scanRun?.targetDate ?? revision.createdAt),
       version: revision.version,
       analysisRevisionId: revision.analysisRevisionId,
-      basename: revision.report.basename,
+      basename: !revision.report.scanRunId && !/^\d{2}-[a-z0-9-]+\.html$/.test(revision.report.basename) ? `01-belge-raporu-${revision.report.id}.html` : revision.report.basename,
       specObjectKey: revision.specObjectKey,
     }
   }
 
   async getPublishedHistory(topicId:string) {
-    const revisions=await this.prisma.reportRevision.findMany({where:{report:{AND:[reportAccessWhere()],OR:[{topicId},{id:topicId,topicId:null,card:'K6'}]},status:'VALIDATED',draftId:{not:null}},orderBy:{version:'desc'},take:20,include:{draft:{include:{edits:{orderBy:{sequence:'asc'}}}}}})
-    return revisions.filter(r=>(r.draft?.topicId ?? r.draft?.reportId)===topicId).map(r=>({version:r.version,createdAt:r.createdAt.toISOString(),edits:mapDraft(r.draft!).edits.map(e=>({...e,revertible:false}))}))
+    const revisions=await this.prisma.reportRevision.findMany({where:{report:{AND:[reportAccessWhere()],OR:[{topicId},{id:topicId,topicId:null}]},status:'VALIDATED'},orderBy:{version:'desc'},include:{draft:{include:{edits:{orderBy:{sequence:'asc'}}}}}})
+    return revisions.map(r=>({version:r.version,createdAt:r.createdAt.toISOString(),createdBy:r.createdBy,createdByName:r.createdByName,edits:r.draft ? mapDraft(r.draft).edits.map(e=>({...e,revertible:false})) : []}))
   }
 
   async getOpenDraft(topicId: string): Promise<ReportDraftRecord | null> {
@@ -52,7 +55,7 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
   }
 
   async openDraft(input: { topicId: string; baseVersion: number; spec: unknown; createdBy: string | null }): Promise<ReportDraftRecord> {
-    const report = await this.prisma.topicReport.findFirst({where:{AND:[reportAccessWhere()],OR:[{topicId:input.topicId},{id:input.topicId,topicId:null,card:'K6'}]}})
+    const report = await this.prisma.topicReport.findFirst({where:{AND:[reportAccessWhere()],OR:[{topicId:input.topicId},{id:input.topicId,topicId:null}]}})
     if (!report) throw new DraftConflictError('Rapor bulunamadı.')
     try {
       const draft = await this.prisma.reportDraft.create({
@@ -103,20 +106,28 @@ export class PrismaReportDraftRepository implements ReportDraftRepository {
     source: 'USER' | 'AI'
     prompt: string | null
     chatMessageId: string | null
-    edits: Array<{ path: string; previousValue: unknown; nextValue: unknown; revertsEditId: string | null }>
+    edits: Array<{
+    actorId?: string | null
+    actorName?: string | null
+    baseVersion?: number | null
+    conversationId?: string | null; path: string; previousValue: unknown; nextValue: unknown; revertsEditId: string | null }>
   }): Promise<ReportDraftRecord> {
     const draft = await this.prisma.$transaction(async (tx) => {
       const current = await tx.reportDraft.findUnique({
         where: { id: input.draftId,...reportAccessWhere() },
-        select: { status: true, edits: { orderBy: { sequence: 'desc' }, take: 1, select: { sequence: true } } },
+        select: { status: true, topicId: true, reportId: true, baseVersion: true, edits: { orderBy: { sequence: 'desc' }, take: 1, select: { sequence: true } } },
       })
       if (!current) throw new DraftConflictError('Taslak bulunamadı.')
       if (current.status !== 'OPEN') throw new DraftConflictError('Taslak kapanmış; düzenleme eklenemez.')
 
+      const actor = await reportActor(tx)
+      const report = current.reportId ? {id: current.reportId} : current.topicId ? await tx.topicReport.findUnique({where: {topicId: current.topicId}, select: {id: true}}) : null
+      if (report) await tx.topicReport.update({where: {id: report.id}, data: {updatedAt: new Date()}})
       const firstSequence = (current.edits[0]?.sequence ?? 0) + 1
       for (const [index, edit] of input.edits.entries()) {
         await tx.reportFieldEdit.create({
           data: {
+            actorId: actor.id, actorName: actor.name, requestedBy: actor.id, baseVersion: current.baseVersion, conversationId: report ? `report:${report.id}` : null,
             draftId: input.draftId,
             sequence: firstSequence + index,
             path: edit.path,
@@ -165,6 +176,10 @@ function mapDraft(draft: {
   createdAt: Date
   updatedAt: Date
   edits: Array<{
+    actorId?: string | null
+    actorName?: string | null
+    baseVersion?: number | null
+    conversationId?: string | null
     id: string
     sequence: number
     path: string
@@ -189,6 +204,7 @@ function mapDraft(draft: {
     createdAt: draft.createdAt.toISOString(),
     updatedAt: draft.updatedAt.toISOString(),
     edits: draft.edits.map((edit) => ({
+      actorId: edit.actorId ?? null, actorName: edit.actorName ?? null, baseVersion: edit.baseVersion ?? null, conversationId: edit.conversationId ?? null,
       id: edit.id,
       sequence: edit.sequence,
       path: edit.path,

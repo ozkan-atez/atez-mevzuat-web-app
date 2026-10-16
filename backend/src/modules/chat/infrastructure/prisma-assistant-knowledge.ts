@@ -1,3 +1,5 @@
+import { fetchManagedSource, normalizeManagedSourceUrl } from '../../managed-sources/fetch-managed-source'
+import { scrapeChatSource } from './scrape-chat-source'
 import { documentAccessWhere, privateResourceWhere, reportAccessWhere,topicContentAccessWhere } from '../../../platform/actor-context'
 import { load } from 'cheerio'
 import { extractPdfText } from '../../managed-sources/pdf-text'
@@ -31,6 +33,23 @@ export class PrismaAssistantKnowledge implements AssistantKnowledge {
     private readonly prisma: PrismaClient,
     private readonly objectStore: ObjectReader,
   ) {}
+
+  async searchChatSources(input: {query?: string; limit: number}) {
+    const query = input.query?.trim()
+    const sources = await this.prisma.source.findMany({where: {isActive: true, ...(query ? {OR: [{name: {contains: query, mode: 'insensitive' as const}}, {key: {contains: query, mode: 'insensitive' as const}}, {baseUrl: {contains: query, mode: 'insensitive' as const}}]} : {})}, orderBy: {createdAt: 'asc'}, take: Math.min(input.limit, 100)})
+    return sources.map(source => ({id: source.id, key: source.key, title: source.name || source.key, url: source.baseUrl, description: source.description}))
+  }
+
+  async getChatSource(id: string) {
+    const source = await this.prisma.source.findFirst({where: {id, isActive: true}})
+    return source ? {id: source.id, key: source.key, title: source.name || source.key, url: source.baseUrl, description: source.description} : null
+  }
+
+  async scrapeChatSource(input: {id: string; query: string; signal?: AbortSignal}) {
+    const source = await this.getChatSource(input.id)
+    if (!source) throw new Error('Seçilen kaynak bulunamadı veya etkin değil.')
+    return scrapeChatSource(this.prisma, source, input.query, input.signal)
+  }
 
   async listOperationSources() {
     return this.prisma.source.findMany({where:{isActive:true},select:{id:true,key:true,name:true,authorityType:true},orderBy:{name:'asc'},take:30})
@@ -75,7 +94,20 @@ export class PrismaAssistantKnowledge implements AssistantKnowledge {
   async getArchiveDocumentVersion(input: { versionId: string }) {
     const version = await this.prisma.documentVersion.findFirst({ where: { id: input.versionId, document:documentAccessWhere() }, include: { document: true } })
     if (!version) return null
-    return { documentId: version.documentId, versionId: version.id, title: version.document.title, origin: version.document.origin, publishedOn: version.document.publishedOn ? isoDay(version.document.publishedOn) : null, sourceUrl: version.document.canonicalUrl, mimeType: version.mimeType, extractionStatus: version.extractionStatus, text: version.extractedText ? truncate(version.extractedText, MAX_DOCUMENT_CHARACTERS) : null }
+    return { documentId: version.documentId, versionId: version.id, title: version.document.title, origin: version.document.origin, publishedOn: version.document.publishedOn ? isoDay(version.document.publishedOn) : null, sourceUrl: version.document.canonicalUrl, mimeType: version.mimeType, extractionStatus: version.extractionStatus, text: version.extractedText || null }
+  }
+
+  async readChatUrl(value:string) {
+    const url=normalizeManagedSourceUrl(value), result=await fetchManagedSource(url)
+    return result.contentText?{id:url,title:url,url,text:result.contentText,publishedOn:null}:null
+  }
+
+  async listChatTemplates() {
+    return this.prisma.reportTemplate.findMany({where: {isActive: true}, select: {id: true, name: true}, orderBy: {createdAt: 'asc'}})
+  }
+
+  async getChatTemplate(id: string) {
+    return this.prisma.reportTemplate.findFirst({where: {id, isActive: true}, select: {id: true, name: true, sections: true}})
   }
 
   async searchManagedSources(input: { query?: string; limit: number }): Promise<ManagedSourceSummary[]> {

@@ -1,3 +1,5 @@
+import { assertReportLayoutPreserved } from './preserve-report-layout'
+import { readReportSpec } from '../../operations/report-spec'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import { applyReportPatch, type ReportPatch } from '../domain/report-patch'
 import type { ReportDraftRecord, ReportDraftRepository, TopicObjectStore } from './ports'
@@ -72,6 +74,7 @@ export async function applyReportFieldEdits(
   // Applied before anything is written, so a rejected patch cannot leave an empty
   // draft — and therefore cannot block the report with a draft nobody asked for.
   const { spec, applied } = applyReportPatch(current.spec, input.patch)
+  if(input.source==='AI')assertReportLayoutPreserved(current.spec,spec)
   if (applied.length === 0) return toView(current)
 
   const draft = current.draft ?? await dependencies.repository.openDraft({
@@ -138,7 +141,7 @@ export async function getReportDraftView(
   if (draft) {
     return toView({ draft, baseVersion: draft.baseVersion, publishedVersion: base.version, spec: ReportSpecSchema.parse(draft.spec) })
   }
-  return toView({ draft: null, baseVersion: base.version, publishedVersion: base.version, spec: await loadSpec(base.specObjectKey, dependencies) })
+  return toView({ draft: null, baseVersion: base.version, publishedVersion: base.version, spec: await loadSpec(base.specObjectKey, dependencies,base.targetDate) })
 }
 
 async function loadCurrent(
@@ -150,12 +153,12 @@ async function loadCurrent(
 
   const draft = await dependencies.repository.getOpenDraft(topicId)
   if (draft) return { draft, baseVersion: draft.baseVersion, publishedVersion: base.version, spec: ReportSpecSchema.parse(draft.spec) }
-  return { draft: null, baseVersion: base.version, publishedVersion: base.version, spec: await loadSpec(base.specObjectKey, dependencies) }
+  return { draft: null, baseVersion: base.version, publishedVersion: base.version, spec: await loadSpec(base.specObjectKey, dependencies,base.targetDate) }
 }
 
-async function loadSpec(specObjectKey: string, dependencies: Dependencies): Promise<ReportSpec> {
+async function loadSpec(specObjectKey: string, dependencies: Dependencies,date?:string): Promise<ReportSpec> {
   const raw = JSON.parse((await dependencies.objectStore.getContent(specObjectKey)).toString('utf8')) as unknown
-  return ReportSpecSchema.parse(raw)
+  return readReportSpec(raw,date?new Date(date+'T12:00:00Z'):undefined)
 }
 
 async function toView(input: { draft: ReportDraftRecord | null; baseVersion: number; publishedVersion: number; spec: ReportSpec }): Promise<ReportDraftView> {

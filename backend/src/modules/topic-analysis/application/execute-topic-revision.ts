@@ -10,7 +10,6 @@ import type { PrismaTopicAnalysisRepository } from '../infrastructure/prisma-top
 import { buildEvidenceBundle } from './build-evidence-bundle'
 import { buildRevisionContext } from './build-revision-context'
 import { analysisResponseJsonSchema, buildTopicAnalysisSystemInstruction, TOPIC_ANALYSIS_PROMPT_VERSION } from './analysis-prompts'
-import { buildReportSpec } from './build-report-spec'
 import { getReportDraftView } from './apply-report-field-edits'
 import { stageAnalysisInDraft } from './stage-analysis-in-draft'
 import type { ReportDraftRepository } from './ports'
@@ -33,22 +32,8 @@ export async function executeTopicRevision(command: { topicId: string; messageId
     await appendSuccessResult(work, work.requestReport.version, dependencies)
     return
   }
-  // A previous attempt already produced the analysis for this message; finish by
-  // staging its result rather than running the model again.
+  // Replay the recorded analysis without changing the user's report draft.
   if (work.message.revisionKind === 'ANALYSIS' && work.requestAnalysis) {
-    const analysis = AnalysisResultSchema.parse(JSON.parse((await dependencies.objectStore.getContent(work.requestAnalysis.analysisObjectKey)).toString('utf8')))
-    if (analysis.status === 'PASS') {
-      const staged = await stageAnalysisInDraft({
-        topicId: work.topicId,
-        spec: buildReportSpec(analysis, { sequence: await dependencies.repository.getTopicSequence(work.topicId) }),
-        analysisRevisionId: work.requestAnalysis.id,
-        prompt: work.message.content,
-        chatMessageId: work.message.id,
-      }, { repository: dependencies.draftRepository, objectStore: dependencies.objectStore })
-      await dependencies.repository.markTopicCompleted(work.topicId)
-      await appendStagedResult(work, staged.stagedChanges, dependencies)
-      return
-    }
     await dependencies.repository.markTopicCompleted(work.topicId)
     await appendSuccessResult(work, work.requestAnalysis.version, dependencies)
     return
@@ -80,6 +65,7 @@ async function executeAnalysisRevision(work: NonNullable<Awaited<ReturnType<Pris
   const startedAt = Date.now()
   try {
     const response = await dependencies.aiModel.generateStructured({
+      onUsage: usage => dependencies.repository.recordTopicAiUsage(execution.id, usage),
       model: dependencies.model,
       systemInstruction: `${buildTopicAnalysisSystemInstruction()}\nBu bir revizyondur. Kullanıcının talebini yalnızca kanıtlar destekliyorsa uygula; topic kimliğini değiştirme.`,
       parts,
@@ -102,24 +88,10 @@ async function executeAnalysisRevision(work: NonNullable<Awaited<ReturnType<Pris
       requestMessageId: work.message.id,
     })
     await dependencies.repository.completeTopicAiExecution(execution.id, {
+      ...response.usage,
       analysisRevisionId: revision.id, providerRequestId: response.providerRequestId, latencyMs: Date.now() - startedAt,
       inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens,
     })
-    if (analysis.status === 'PASS') {
-      // Staged, not published: a revision is the user's decision to make.
-      const spec = buildReportSpec(analysis, { sequence: await dependencies.repository.getTopicSequence(work.topicId) })
-      const staged = await stageAnalysisInDraft({
-        topicId: work.topicId,
-        spec,
-        analysisRevisionId: revision.id,
-        previousSpec:buildReportSpec(AnalysisResultSchema.parse(JSON.parse(currentJson)),{sequence:await dependencies.repository.getTopicSequence(work.topicId)}),
-        prompt: work.message.content,
-        chatMessageId: work.message.id,
-      }, { repository: dependencies.draftRepository, objectStore: dependencies.objectStore })
-      await dependencies.repository.markTopicCompleted(work.topicId)
-      await appendStagedResult(work, staged.stagedChanges, dependencies)
-      return
-    }
     await dependencies.repository.markTopicCompleted(work.topicId)
     await appendSuccessResult(work, version, dependencies)
   } catch (error) {
@@ -143,6 +115,7 @@ async function executePublicationRevision(work: NonNullable<Awaited<ReturnType<P
   const startedAt = Date.now()
   try {
     const response = await dependencies.aiModel.generateStructured({
+      onUsage: usage => dependencies.repository.recordTopicAiUsage(execution.id, usage),
       model: dependencies.model,
       systemInstruction: 'Mevcut ATEZ rapor spesifikasyonunun yalnızca ifade biçimini kullanıcı talebine göre revize et. Kanonik analizde olmayan olgu ekleme. topicId, card, reportId, issueNumber ve kaynak URL alanlarını değiştirme. Yalnızca JSON Schema ile uyumlu JSON döndür.',
       parts: [{ text: `Kanonik analiz:\n${currentAnalysisJson}` }, { text: `Mevcut rapor spesifikasyonu:\n${JSON.stringify(currentSpec)}` }, { text: `Revizyon talebi:\n${work.message.content}` }],
@@ -152,6 +125,7 @@ async function executePublicationRevision(work: NonNullable<Awaited<ReturnType<P
     assertPublicationIdentity(currentSpec, revised)
     const staged=await stageAnalysisInDraft({topicId:work.topicId,spec:revised,previousSpec:currentSpec,analysisRevisionId:view.draft?.analysisRevisionId ?? work.latestAnalysis.id,prompt:work.message.content,chatMessageId:work.message.id,preserveCustomization:false,stageKind:'PUBLICATION'}, {repository:dependencies.draftRepository,objectStore:dependencies.objectStore})
     await dependencies.repository.completeTopicAiExecution(execution.id, {
+      ...response.usage,
       analysisRevisionId: work.latestAnalysis.id, providerRequestId: response.providerRequestId, latencyMs: Date.now() - startedAt,
       inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens,
     })
@@ -183,7 +157,7 @@ async function appendSuccessResult(
   const label = { ANALYSIS: 'Analiz', PUBLICATION: 'Rapor', DIRECT_EDIT: 'Alan' }[work.message.revisionKind]
   await dependencies.repository.appendRevisionResult(work.topicId, {
     role: 'ASSISTANT', kind: 'REVISION_RESULT', revisionKind: work.message.revisionKind,
-    content: `${label} revizyonu r${String(version).padStart(2, '0')} oluşturuldu.`,
+    content: `${label} revizyonu r${String(version).padStart(2, '0')} oluşturuldu.${work.message.revisionKind === 'ANALYSIS' ? ' Rapor metni ve taslağı değiştirilmedi. Analizi rapora uygulamamı ayrıca isteyebilirsiniz.' : ''}`,
     requestKey: `revision-result:${work.message.id}`,
   })
 }

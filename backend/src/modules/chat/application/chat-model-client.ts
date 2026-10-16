@@ -29,6 +29,7 @@ export type ChatTurn =
   | { role: 'tool-results'; results: Array<{ name: string; response: unknown }> }
 
 export type ChatModelChunk =
+  | { type: 'usage'; usage: import('../../usage/measurement').TokenUsage }
   | { type: 'text'; text: string }
   | { type: 'tool-call'; call: ToolCall }
   | { type: 'grounding'; research: WebResearch }
@@ -39,6 +40,7 @@ export interface ChatModelRequest {
   systemInstruction: string
   turns: ChatTurn[]
   tools?: ChatToolDeclaration[]
+  toolMode?: 'none'
   signal?: AbortSignal
 }
 

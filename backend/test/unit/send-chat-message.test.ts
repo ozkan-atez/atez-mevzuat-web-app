@@ -61,27 +61,29 @@ function message(content: string, role: 'USER' | 'ASSISTANT' = 'USER'): ChatMess
 }
 
 describe('sendChatMessage', () => {
-  it('uses the browser only for an explicit chat request without invoking a source scan',async()=>{
-    const repository=new MemoryChatRepository(),model=new StubModel()
-    const scanStarter={startScan:vi.fn()}
-    const research={mode:'browser' as const,completed:true,sources:[{title:'Gazete',url:'https://www.resmigazete.gov.tr'}],citations:[],queries:[],searchSuggestions:null}
-    const browserResearch={async *run(){yield {type:'activity' as const,label:'İnceleniyor'};yield {type:'result' as const,content:'Tarayıcı yanıtı',research}}}
-    const events=await collect(sendChatMessage({sessionId:'s1',content:'Bu sayfayı incele',browserAgent:true},{repository,model,modelName:'test',knowledge,scanStarter,browserResearch}))
-    expect(repository.saved.at(-1)?.research).toEqual(research)
-    expect(events.at(-1)?.type).toBe('complete')
+  it('records explicit zero only for a completed answer with no AI call', async () => {
+    const repository = new MemoryChatRepository(), model = new StubModel(), save = vi.fn()
+    await collect(sendChatMessage({sessionId: 's1', content: '12 Ekim 2026 tarihli taramayı başlat'}, {repository, model, modelName: 'test', knowledge, usageRecorder: {save}, scanStarter: {startScan: async () => ({id: 'run-1', targetDate: '2026-10-12', status: 'QUEUED'})}}))
     expect(model.requests).toHaveLength(0)
-    expect(scanStarter.startScan).not.toHaveBeenCalled()
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({conversationId: 's1', messageId: 'm1', mode: 'NO_MODEL', totalTokens: 0, inputTokens: 0, outputTokens: 0, status: 'COMPLETED'}))
   })
-  it('persists web sources and excludes private conversation history and document tools from Search',async()=>{
-    const repository=new MemoryChatRepository()
-    repository.messages=[message('Private document text')]
-    const research={sources:[{title:'Resmî Gazete',url:'https://www.resmigazete.gov.tr/doc.htm'}],citations:[],queries:['gümrük'],searchSuggestions:null}
-    const model=new StubModel([],[[{type:'text',text:'Kaynaklı yanıt.'},{type:'grounding',research}]])
-    const events=await collect(sendChatMessage({sessionId:'s1',content:'Web’de gümrük duyurularını bul',webSearch:true},{repository,model,modelName:'test',knowledge}))
-    expect(model.requests[0]).toMatchObject({webSearch:true,turns:[{role:'user',content:'Web’de gümrük duyurularını bul'}]})
-    expect(model.requests[0]?.tools).toBeUndefined()
-    expect(repository.saved.at(-1)?.research).toEqual(research)
-    expect(events.at(-1)?.type).toBe('complete')
+  it('associates every model round with the same user message', async () => {
+    const repository = new MemoryChatRepository(), save = vi.fn()
+    const model = new StubModel([], [[{type: 'tool-call', call: {name: 'unknown-tool', args: {}}}], [{type: 'text', text: 'Yanıt'}]])
+    await collect(sendChatMessage({sessionId: 's1', content: 'Bir kavramı açıkla'}, {repository, model, modelName: 'test', knowledge, usageRecorder: {save}}))
+    const calls = new Map(save.mock.calls.map(([call]) => [call.id, call]))
+    expect(calls.size).toBe(2)
+    for (const call of calls.values()) expect(call).toMatchObject({conversationId: 's1', messageId: 'm1', mode: 'CHAT', status: 'COMPLETED', totalTokens: null})
+  })
+
+  it.each(['browserAgent', 'webSearch'] as const)('rejects disabled %s before invoking any model or saving messages', async mode => {
+    const repository=new MemoryChatRepository(), model=new StubModel()
+    const run=vi.fn()
+    const events=await collect(sendChatMessage({sessionId:'s1',content:'Araştır',[mode]:true},{repository,model,modelName:'test',knowledge,browserResearch:{run}}))
+    expect(events).toEqual([{type:'error',message:expect.stringContaining('şu anda kapalı')}])
+    expect(model.requests).toHaveLength(0)
+    expect(repository.saved).toHaveLength(0)
+    expect(run).not.toHaveBeenCalled()
   })
   it('starts a requested scan without waiting for the model to choose a tool', async () => {
     const repository = new MemoryChatRepository()
@@ -209,6 +211,30 @@ describe('sendChatMessage', () => {
     expect(model.requests.at(-1)!.tools).toBeUndefined()
   })
 
+  it('does not execute a provider tool call on the final answer round and reports the actual failure', async () => {
+    const repository = new MemoryChatRepository()
+    const searchReports = vi.fn(async () => [])
+    const call = { type: 'tool-call' as const, call: { name: 'raporlari_ara', args: {} } }
+    const model = new StubModel([], [[call], [call], [call], [call]])
+    const events = await collect(sendChatMessage({ sessionId: 's1', content: 'Sor' }, { repository, model, modelName: 'test', knowledge: { searchReports } as unknown as AssistantKnowledge }))
+    expect(searchReports).toHaveBeenCalledTimes(3)
+    expect(model.requests.at(-1)?.toolMode).toBe('none')
+    expect(events.at(-1)).toMatchObject({ type: 'error', message: expect.stringContaining('Araştırma adımları sınırına') })
+    expect(repository.saved.at(-1)?.status).toBe('FAILED')
+  })
+
+  it('returns all three historical tariff results in one round without unrelated data crowding them out', async () => {
+    const repository = new MemoryChatRepository()
+    const codes = ['690740000000', '691010000000', '691090000000']
+    const model = new StubModel([], [codes.map(gtip => ({ type: 'tool-call' as const, call: { name: 'gtip_tariff_sorgula', args: { gtip, tarih: '2026-07-10', alan: 'birim_gumruk_kiymeti' } } })), [{ type: 'text', text: 'Üç GTİP için sonuçlar.' }]])
+    const lookup = vi.fn(async (input: { code: string; date: string }) => ({ ...input, description: null, source: 'https://tariff.singlewindow.io/', fetchedAt: '', classification: 'SUPPORTING_NON_AUTHORITATIVE' as const, comparisons: [], notes: [] }))
+    await collect(sendChatMessage({ sessionId: 's1', content: '11 Temmuz öncesi birim gümrük kıymeti' }, { repository, model, modelName: 'test', knowledge, tariffLookup: { lookup } }))
+    expect(lookup).toHaveBeenCalledTimes(3)
+    for (const code of codes) expect(lookup).toHaveBeenCalledWith({ code, date: '2026-07-10', compare: false })
+    expect(model.requests[1]?.turns.at(-1)).toMatchObject({ role: 'tool-results', results: codes.map(code => ({ response: { code, date: '2026-07-10' } })) })
+    expect(repository.saved.at(-1)?.status).toBe('COMPLETED')
+  })
+
   it('records a failed assistant message and reports a safe error', async () => {
     const repository = new MemoryChatRepository()
     const model = new StubModel()
@@ -244,4 +270,40 @@ describe('sendChatMessage', () => {
     expect(repository.saved.at(-1)?.status).toBe('FAILED')
   })
 
+})
+
+it('uses selected sources and template without searching outside the selection', async () => {
+  const repository = new MemoryChatRepository()
+  repository.messages = [message('Unselected source evidence')]
+  const model = new StubModel(['Kaynaklı özet'])
+  const searchReports = vi.fn()
+  const scrapeChatSource = vi.fn().mockResolvedValue({documents: [{title: 'Seçili kaynak', url: 'https://example.com', text: 'Seçili kanıt'}]})
+  const getChatTemplate = vi.fn().mockResolvedValue({id: 'template-1', name: 'Yönetici Özeti', sections: [{heading: 'Etki', enabled: true}]})
+  await collect(sendChatMessage({sessionId: 's1', content: 'Raporları özetle', sourceIds: ['source-1'], templateId: 'template-1'}, {repository, model, modelName: 'test', knowledge: {...knowledge, searchReports, scrapeChatSource, getChatTemplate}}))
+  expect(scrapeChatSource).toHaveBeenCalledWith({id: 'source-1', query: 'Raporları özetle'})
+  expect(getChatTemplate).toHaveBeenCalledWith('template-1')
+  expect(searchReports).not.toHaveBeenCalled()
+  expect(model.requests[0]?.tools).toBeUndefined()
+  expect(JSON.stringify(model.requests[0]?.turns)).toContain('Seçili kanıt')
+  expect(JSON.stringify(model.requests[0]?.turns)).toContain('Yönetici Özeti')
+  expect(JSON.stringify(model.requests[0]?.turns)).not.toContain('Unselected source evidence')
+})
+
+ it('does not fall back to global tools or old evidence when a selected scraper fails',async()=>{
+  const repository=new MemoryChatRepository(),model=new StubModel(['Kaynağa erişilemedi.'])
+  const searchReports=vi.fn(),scrapeChatSource=vi.fn().mockRejectedValue(new Error('Unavailable'))
+  repository.messages=[message('Eski kaynak kanıtı')]
+  await collect(sendChatMessage({sessionId:'s1',content:'Özetle',sourceIds:['s1']},{repository,model,modelName:'test',knowledge:{...knowledge,searchReports,scrapeChatSource}}))
+  expect(searchReports).not.toHaveBeenCalled()
+  expect(model.requests[0]?.tools).toBeUndefined()
+  expect(JSON.stringify(model.requests[0]?.turns)).toContain('başka kaynağa geçme')
+  expect(JSON.stringify(model.requests[0]?.turns)).not.toContain('Eski kaynak kanıtı')
+ })
+
+it('persists an interrupted answer so returning to the chat explains the gap',async()=>{
+  const repository=new MemoryChatRepository(),controller=new AbortController()
+  const model:ChatModelClient={async *streamReply(){controller.abort(new Error('CLIENT_DISCONNECTED'));throw new Error('aborted')}}
+  await collect(sendChatMessage({sessionId:'s',content:'Bir sorum var',signal:controller.signal},{repository,model,modelName:'test',knowledge}))
+  expect(repository.saved.at(-1)).toMatchObject({role:'ASSISTANT',status:'FAILED',errorDetail:expect.stringContaining('bağlantı kapandı')})
+  expect(repository.saved.at(-1)?.errorDetail).toContain('Takip: m1')
 })

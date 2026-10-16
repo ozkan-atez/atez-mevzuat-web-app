@@ -1,5 +1,5 @@
 import { apiFetch } from '../../lib/apiFetch'
-export interface StandaloneReport { id:string; title:string; latestVersion:number; operationTaskId:string; createdAt:string }
+export interface StandaloneReport { automationId?:string|null;automationName?:string|null; id:string; title:string; latestVersion:number; operationTaskId:string; createdAt:string }
 export interface StandaloneRevision { operationRequestId?:string|null; version:number; operationTaskId:string; createdAt:string }
 export interface StandaloneReportDetail extends StandaloneReport { revisions:StandaloneRevision[] }
 export interface StandaloneReportContent { reportId:string; version:number; html:string; title?:string; reportContent?:{title:string;summary:string;detailedAnalysis:string} }

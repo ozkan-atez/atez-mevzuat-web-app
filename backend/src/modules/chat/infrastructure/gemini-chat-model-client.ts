@@ -1,3 +1,4 @@
+import { geminiTokens, type GeminiUsageMetadata } from '../../usage/measurement'
 import { normalizeGrounding, type GroundingMetadata } from '../application/web-grounding'
 import { AiProviderError } from '../../ai/domain/ai-errors'
 import { mapGeminiError } from '../../ai/infrastructure/gemini-ai-model-client'
@@ -14,6 +15,7 @@ export interface GeminiChatTransportRequest {
   model: string
   contents: Array<{ role: 'user' | 'model'; parts: GeminiChatPart[] }>
   config: {
+    toolConfig?: { functionCallingConfig: { mode: 'NONE' } }
     systemInstruction: string
     abortSignal?: AbortSignal
     httpOptions?: { timeout: number }
@@ -22,6 +24,7 @@ export interface GeminiChatTransportRequest {
 }
 
 export interface GeminiChatChunk {
+  usageMetadata?: GeminiUsageMetadata
   text?: string
   functionCalls?: Array<{ name?: string; args?: Record<string, unknown> }>
   /** The raw parts, which carry the thought signature the getter above drops. */
@@ -58,6 +61,7 @@ export class GeminiChatModelClient implements ChatModelClient {
         contents: input.turns.map(toContent),
         config: {
           systemInstruction: input.systemInstruction,
+          ...(input.toolMode === 'none' ? { toolConfig: { functionCallingConfig: { mode: 'NONE' as const } } } : {}),
           abortSignal: controller.signal,
           httpOptions: { timeout: this.options.timeoutMs },
           ...(input.webSearch ? {tools:[{googleSearch:{}},{urlContext:{}}]} : input.tools?.length ? { tools: [{ functionDeclarations: input.tools }] } : {}),
@@ -65,6 +69,7 @@ export class GeminiChatModelClient implements ChatModelClient {
       })
       for await (const chunk of stream) {
         if (timedOut) throw new AiProviderError('TIMEOUT', true, 'Gemini isteği zaman aşımına uğradı.')
+        if (chunk.usageMetadata) yield { type: 'usage', usage: geminiTokens(chunk.usageMetadata) }
         if (chunk.text) yield { type: 'text', text: chunk.text }
         const grounding=chunk.candidates?.[0]?.groundingMetadata
         if(grounding)yield {type:'grounding',research:normalizeGrounding(grounding)}

@@ -78,13 +78,13 @@ export function inForceOn(measures: TariffMeasure[], date: string): TariffMeasur
 }
 
 export interface TariffLookup {
-  lookup(input: { code: string; date: string; previousDate?: string; origin?: string }): Promise<TariffLookupResult>
+  lookup(input: { code: string; date: string; previousDate?: string; origin?: string; compare?: boolean }): Promise<TariffLookupResult>
 }
 
 export class SingleWindowTariffLookup implements TariffLookup {
   constructor(private readonly credentials: TariffCredentials, private readonly fetcher: typeof fetch = fetch) {}
 
-  async lookup(input: { code: string; date: string; previousDate?: string; origin?: string }): Promise<TariffLookupResult> {
+  async lookup(input: { code: string; date: string; previousDate?: string; origin?: string; compare?: boolean }): Promise<TariffLookupResult> {
     const code = normalizeGtip(input.code)
     if (!validTariffDate(input.date) || (input.previousDate && !validTariffDate(input.previousDate))) throw new Error('Geçerli bir YYYY-AA-GG tarihi girin.')
     const source = `${API}?${new URLSearchParams({ commodityCode: code, countryCode: 'TR', queryType: 'import', queryDate: input.date })}`
@@ -94,6 +94,12 @@ export class SingleWindowTariffLookup implements TariffLookup {
     for (const measure of current) {
       const key = `${measure.typeCode}|${measure.origin ?? ''}`
       groups.set(key, [...(groups.get(key) ?? []), measure])
+    }
+    if (input.compare === false) {
+      return { code, date: input.date, description, source, fetchedAt: new Date().toISOString(), classification: 'SUPPORTING_NON_AUTHORITATIVE',
+        comparisons: [...groups.values()].map(group => ({ typeCode: group[0]!.typeCode, typeName: group[0]!.typeName, origin: group[0]!.origin,
+          current: group, previous: null, previousDate: null, status: 'unknown' })),
+        notes: current.length ? [] : ['Seçilen tarihte geçerli önlem bulunamadı. Bu sonuç kıymetin sıfır olduğu anlamına gelmez.'] }
     }
     const dates = [...new Set([...groups.values()].map((group) => input.previousDate ?? dayBefore(earliestStart(group))).filter((date): date is string => Boolean(date)))]
     const historical = new Map<string, TariffMeasure[]>()

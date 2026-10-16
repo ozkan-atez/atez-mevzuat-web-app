@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getChatMessages, parseChatEventStream, streamChatMessage } from './api'
+import { getChatState, stopChatMessage, parseChatEventStream, streamChatMessage } from './api'
 import { MAX_MESSAGE_LENGTH, type ChatMessage, type ChatStreamEvent, type ChatSendOptions } from './types'
 
 export const STREAMING_MESSAGE_ID = 'streaming-assistant'
@@ -54,11 +54,15 @@ export function useConversation(sessionId: string | undefined): Conversation {
   const [activity, setActivity] = useState<string | null>(null)
   // A ref, not the state: two submits in the same tick would both read `false`.
   const sending = useRef(false)
+  const generation=useRef(0)
+  const currentSession=useRef(sessionId)
+  currentSession.current=sessionId
   const sendController = useRef<AbortController | null>(null)
   const loadController = useRef<AbortController | null>(null)
 
   useEffect(() => {
     sendController.current?.abort()
+    sendController.current=null
     sending.current = false
     setIsSending(false)
     setMessages([])
@@ -73,29 +77,37 @@ export function useConversation(sessionId: string | undefined): Conversation {
     const controller = new AbortController()
     loadController.current = controller
     setIsLoading(true)
-    getChatMessages(sessionId, controller.signal)
-      .then((loaded) => { if (!controller.signal.aborted) setMessages(loaded) })
-      .catch((caught: unknown) => {
-        if (controller.signal.aborted) return
-        setError(caught instanceof Error ? caught.message : 'Mesajlar alınamadı.')
-      })
-      .finally(() => { if (!controller.signal.aborted) setIsLoading(false) })
-    return () => controller.abort()
+    let timer:ReturnType<typeof setTimeout>
+    const load=async()=>{
+      const version=generation.current
+      try{
+        if(sendController.current)return
+        const loaded=await getChatState(sessionId,controller.signal)
+        if(controller.signal.aborted || sendController.current || version!==generation.current)return
+        sending.current=Boolean(loaded.active)
+        setIsSending(Boolean(loaded.active))
+        setActivity(loaded.active?(loaded.active.stopping?'İşlem durduruluyor':loaded.active.stage):null)
+        setMessages(loaded.active?[...loaded.messages,{...streamingPlaceholder(),content:loaded.active.content}]:loaded.messages)
+      }catch(caught){if(!controller.signal.aborted)setError(caught instanceof Error?caught.message:'Mesajlar alınamadı.')}
+      finally{if(!controller.signal.aborted){setIsLoading(false);timer=setTimeout(()=>void load(),2000)}}
+    }
+    void load()
+    return ()=>{controller.abort();clearTimeout(timer)}
   }, [sessionId])
 
-  // Leaving the page must stop the request; an orphaned stream would keep writing
-  // into a transcript nobody is looking at.
+  // Detach the browser stream on navigation; server work continues independently.
   useEffect(() => () => sendController.current?.abort(), [])
 
   const send = useCallback(async (raw: string, documentVersionIds: string[] = [], options:ChatSendOptions = {}) => {
     const content = raw.trim()
     if (!sessionId || sending.current || content.length === 0 || content.length > MAX_MESSAGE_LENGTH) return
     sending.current = true
+    generation.current++
     setIsSending(true)
     setError(null)
+    setActivity('Yanıt hazırlanıyor')
     // A transcript request already in flight is now stale — a freshly created
     // conversation answers it as empty, which would wipe the message being sent.
-    loadController.current?.abort()
     setIsLoading(false)
     const optimisticId = `optimistic-${crypto.randomUUID()}`
     setMessages((current) => [...current, optimistic(optimisticId, content), streamingPlaceholder()])
@@ -114,7 +126,7 @@ export function useConversation(sessionId: string | undefined): Conversation {
     } catch (caught: unknown) {
       if (!controller.signal.aborted) {
         setError(caught instanceof Error ? caught.message : 'Yanıt alınamadı.')
-        setMessages((current) => current.filter((message) => message.id !== STREAMING_MESSAGE_ID))
+        setMessages((current) => current.map(message=>message.id===STREAMING_MESSAGE_ID?{...message,status:'FAILED',errorDetail:caught instanceof Error?caught.message:'Yanıt tamamlanamadı.'}:message))
       }
     } finally {
       if (sendController.current === controller) {
@@ -127,11 +139,18 @@ export function useConversation(sessionId: string | undefined): Conversation {
   }, [sessionId])
 
   const stop=useCallback(()=>{
-    sendController.current?.abort()
-    sending.current=false
-    setIsSending(false);setActivity(null)
-    setMessages(current=>current.map(message=>message.id===STREAMING_MESSAGE_ID?{...message,id:`stopped-${crypto.randomUUID()}`,content:message.content ? message.content+'\n\nYanıt durduruldu.' : 'Araştırma durduruldu.'}:message))
-  },[])
+    if(!sessionId)return
+    setActivity('İşlem durduruluyor')
+    void stopChatMessage(sessionId).then(()=>{
+      if(currentSession.current!==sessionId)return
+      // Only explicit stop reaches the cancellation endpoint. Detaching SSE is separate.
+      sendController.current?.abort()
+      sendController.current=null
+      sending.current=true
+      setIsSending(true);setActivity('İşlem durduruluyor')
+      setMessages(current=>current.map(message=>message.id===STREAMING_MESSAGE_ID?{...message,id:`stopped-${crypto.randomUUID()}`,content:message.content ? message.content+'\n\nİşlem isteğiniz üzerine durduruldu.' : 'İşlem isteğiniz üzerine durduruldu.'}:message))
+    }).catch(caught=>setError(caught instanceof Error?caught.message:'İşlem durdurulamadı.'))
+  },[sessionId])
   const clearError = useCallback(() => setError(null), [])
 
   return { messages, isLoading, isSending, activity, error, send, stop, clearError }

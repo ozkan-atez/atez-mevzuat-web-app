@@ -3,6 +3,9 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 export type ApplicationRole = 'VIEWER' | 'EDITOR' | 'ADMIN'
 export interface ActorContext { userId:string; identityId:string; workspaceId:string; role:ApplicationRole; permissions:string[]; issuer:string; subject:string; sessionId?:string; serviceActor?:boolean }
 export const actorContext = new AsyncLocalStorage<ActorContext>()
+export function hasPermission(actor: ActorContext | undefined, permission: string): boolean {
+ return !!actor && (actor.role === 'ADMIN' || actor.permissions.includes(permission))
+}
 export const getActorContext=()=>actorContext.getStore()
 export const runWithActorContext=<T>(actor:ActorContext,action:()=>T):T=>actorContext.run(actor,action)
 export const enterActorContext=(actor:ActorContext)=>actorContext.enterWith(actor)

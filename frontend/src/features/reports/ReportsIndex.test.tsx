@@ -9,30 +9,29 @@ vi.mock('../revision/ReportWorkspace', () => ({ReportWorkspace: ({topicId}:{topi
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('ReportsIndex', () => {
-  it('opens the scan dialog in reports, cancels in place and navigates only after creating a scan', async () => {
-    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === '/api/v1/sources') return new Response(JSON.stringify({ sources: [{ id: 'rg', key: 'resmi-gazete', name: 'Resmî Gazete', isActive: true, scanSupported: true }] }))
-      if (init?.method === 'POST') return new Response(JSON.stringify({ runId: 'new-run', status: 'QUEUED' }))
-      return new Response(JSON.stringify(String(input).includes('standalone-reports') ? { reports: [] } : { runs: [] }))
-    })
+  it('preserves automation provenance even when the automation was started manually',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input)
+      if(url.includes('standalone-reports'))return new Response(JSON.stringify({reports:[]}))
+      if(url.includes('scan-runs?'))return new Response(JSON.stringify({runs:[{id:'run-auto',trigger:'MANUAL',automationId:'daily',automationName:'Günlük gümrük takibi'}]}))
+      return new Response(JSON.stringify({id:'run-auto',targetDate:'2026-10-14',reports:[{id:'r',title:'Günlük bülten',version:1,card:'K6',topicId:null}]}))
+    }))
+    render(<MemoryRouter><ReportsIndex/></MemoryRouter>)
+    await screen.findByText('Günlük bülten')
+    expect(screen.getByText(/Otomasyon.*Günlük gümrük takibi/)).toBeVisible()
+    await userEvent.type(screen.getByRole('searchbox',{name:'Raporlarda ara'}),'Günlük gümrük takibi')
+    expect(screen.getByText('Günlük bülten')).toBeVisible()
+  })
+  it('opens chat without starting a scan', async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify(String(input).includes('standalone-reports') ? {reports: []} : {runs: []})))
     vi.stubGlobal('fetch', fetcher)
     render(<MemoryRouter initialEntries={['/reports']}><Routes>
       <Route path="/reports" element={<ReportsIndex />} />
-      <Route path="/" element={<div>Dashboard yönlendirmesi</div>} />
-      <Route path="/runs/new-run" element={<div>Yeni tarama ayrıntıları</div>} />
+      <Route path="/chat" element={<div>Sohbet ekranı</div>} />
     </Routes></MemoryRouter>)
-    await userEvent.click(screen.getByRole('button', { name: /Yeni tarama başlat/ }))
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Raporlar', hidden: true })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', {name: /Yeni tarama başlat/}))
+    expect(await screen.findByText('Sohbet ekranı')).toBeVisible()
     expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
-    await userEvent.click(screen.getByRole('button', { name: 'İptal' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: /Yeni tarama başlat/ }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Taramayı Başlat' })).toBeEnabled())
-    await userEvent.click(screen.getByRole('button', { name: 'Taramayı Başlat' }))
-    expect(await screen.findByText('Yeni tarama ayrıntıları')).toBeVisible()
-    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
-    expect(screen.queryByText('Dashboard yönlendirmesi')).not.toBeInTheDocument()
   })
   it('shows a newly generated historical report ahead of older reports for current dates', async () => {
     vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{

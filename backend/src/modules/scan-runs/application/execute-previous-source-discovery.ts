@@ -213,5 +213,6 @@ function dayBefore(date: string): string {
 
 function toFailure(error: unknown): { category: 'AUTHENTICATION' | 'PERMISSION' | 'QUOTA_EXCEEDED' | 'RATE_LIMITED' | 'PROVIDER_UNAVAILABLE' | 'TIMEOUT' | 'INVALID_RESPONSE' | 'CONTENT_REJECTED' | 'UNKNOWN_PROVIDER_ERROR'; providerStatus: number | null; message: string } {
   if (error instanceof AiProviderError) return { category: error.category, providerStatus: error.providerStatus, message: error.message }
+  if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return { category: 'TIMEOUT', providerStatus: null, message: 'Önceki kaynak indirme işlemi zaman aşımına uğradı.' }
   return { category: 'UNKNOWN_PROVIDER_ERROR', providerStatus: null, message: error instanceof Error ? error.message.slice(0, 1_000) : 'Önceki kaynak hazırlama işlemi başarısız oldu.' }
 }

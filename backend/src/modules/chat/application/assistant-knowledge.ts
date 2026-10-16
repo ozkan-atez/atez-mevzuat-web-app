@@ -7,6 +7,12 @@
  * letting the model compose queries of its own.
  */
 export interface AssistantKnowledge {
+  readChatUrl?(url:string):Promise<import('./create-chat-report').ChatEvidence | null>
+  searchChatSources?(input: {query?: string; limit: number}): Promise<Array<{id: string; key: string; title: string; url: string; description: string | null}>>
+  getChatSource?(id: string): Promise<{id: string; key: string; title: string; url: string; description: string | null} | null>
+  scrapeChatSource?(input: {id: string; query: string; signal?: AbortSignal}): Promise<unknown>
+  listChatTemplates?(): Promise<Array<{id: string; name: string}>>
+  getChatTemplate?(id: string): Promise<{id: string; name: string; sections: unknown} | null>
   listOperationSources?(): Promise<Array<{id:string;key:string;name:string|null;authorityType:string}>>
   listAutomations?(input: { date?: string; limit: number }): Promise<AutomationSummary[]>
   searchArchiveDocuments?(input: { query?: string; from?: string; to?: string; limit: number }): Promise<ArchiveDocumentSummary[]>

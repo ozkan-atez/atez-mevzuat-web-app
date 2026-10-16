@@ -1,12 +1,5 @@
 .atez-automations-page { display: grid; gap: 16px; }
 .atez-automations-page .atez-demo-heading { margin-bottom: 0; }
-.atez-schedule-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
-.atez-schedule-card .ant-card-body { padding: 14px 16px; }
-.atez-schedule-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
-.atez-schedule-top .ant-tag { color: var(--atez-accent); background: var(--atez-accent-soft); border: 0; margin: 0; font-size: 10px; }
-.atez-schedule-time { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 6px; color: var(--atez-accent); font-size: 25px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.atez-schedule-time span { color: var(--atez-muted); font-size: 10px; font-weight: 400; }
-.atez-schedule-card p { color: var(--atez-muted); font-size: 11px; line-height: 1.6; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .atez-automations-page .atez-automation-card .ant-card-head { min-height: 48px; padding: 0 16px; }
 .atez-automation-card .ant-card-head-title { font-size: 14px; }
 .atez-automation-card .ant-card-extra { font-size: 11px; }
@@ -26,8 +19,20 @@
 .atez-monitor-details { margin-top: 12px; border-top: 1px solid var(--atez-border); padding-top: 10px; }
 .atez-monitor-details summary { cursor: pointer; color: var(--atez-accent); font-size: 12px; width: fit-content; margin-bottom: 8px; }
 .atez-monitor-note { display: block; font-size: 11px; margin-top: 8px; }
-@media (max-width: 1000px) { .atez-schedule-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (max-width: 600px) { .atez-schedule-grid { grid-template-columns: minmax(0,1fr); } .atez-monitor-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 .atez-automation-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 4px; }
 .atez-automation-empty p { margin: 0; font-size: 12px; color: var(--atez-muted); }
 @media (max-width: 600px) { .atez-automation-empty { align-items: flex-start; flex-direction: column; } }
+.atez-history-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+.atez-history-filters .ant-select { min-width: 210px; }
+.atez-history-cell { display: flex; flex-direction: column; gap: 6px; max-width: 340px; overflow-wrap: anywhere; }
+.atez-history-cell .ant-typography { font-size: 12px; }
+@media (max-width: 600px) { .atez-history-filters .ant-select { width: 100%; } .atez-monitor-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+.atez-automation-name { font-weight: 600; color: var(--atez-text); }
+.atez-automation-list .ant-table-tbody > tr > td { padding-block: 20px; }
+.atez-automation-list .atez-history-cell { gap: 8px; }
+.activity-description { margin:0 0 20px;color:var(--atez-muted);font-size:13px;line-height:1.6; }
+.atez-monitor-metrics>button { display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:var(--atez-surface);border:1px solid var(--atez-border);border-radius:10px;cursor:pointer;text-align:left;font:inherit; }
+.atez-monitor-metrics>button.is-selected { border-color:var(--atez-accent);background:var(--atez-accent-soft); }
+.activity-filters { display:flex;flex-wrap:wrap;gap:12px;margin:20px 0;align-items:center; }.activity-filters .ant-select { min-width:190px; }.activity-filters>span { margin-left:auto;color:var(--atez-muted);font-size:12px; }.activity-result { font-size:12px;color:var(--atez-muted);line-height:1.6; }
+.activity-detail { padding-top:12px;line-height:1.7; }.activity-detail dl { display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;margin:20px 0; }.activity-detail dt { color:var(--atez-muted); }.activity-detail dd { margin:0;overflow-wrap:anywhere; }.activity-detail pre { white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;padding:14px;background:var(--atez-surface);border-radius:8px; }.activity-detail summary { cursor:pointer;color:var(--atez-muted); }

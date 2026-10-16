@@ -1,10 +1,11 @@
+import { TemplateReportSchema } from '../../workspace/template-definition'
 import { z } from 'zod'
 import { sanitizeReportFragment } from './sanitize-report-fragment'
 
 const text = z.string().trim().min(1)
 const httpUrl = z.string().url().refine((value) => /^https?:\/\//.test(value))
 const blockId = z.enum(['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10'])
-const source = z.object({ label: text, url: httpUrl }).strict()
+const source = z.object({ label: text, url: z.union([httpUrl,z.literal('')]) }).strict()
 export const ReportSourceSchema = z.object({
   id: z.string().min(1).max(100), label: text.max(300), url: z.union([httpUrl,z.literal('')]).default(''),
   content: z.string().trim().min(1).max(100_000),
@@ -12,6 +13,7 @@ export const ReportSourceSchema = z.object({
   kind: z.enum(['URL', 'TEXT', 'FILE']), fileName: z.string().max(300).optional(),
 }).strict()
 export const ReportCustomizationSchema = z.object({
+  templateReport: TemplateReportSchema.nullable().optional(),
   headings: z.record(z.string().max(100), text.max(300)).default({}),
   order: z.array(z.string().min(1).max(100)).max(50).default([]),
   sections: z.array(z.object({id: z.string().regex(/^[a-zA-Z0-9-]+$/).max(80), title: text.max(300), html: z.string().max(100_000).transform(sanitizeReportFragment)}).strict()).max(30).default([]),

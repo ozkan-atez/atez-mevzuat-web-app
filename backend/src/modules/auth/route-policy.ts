@@ -1,7 +1,11 @@
 const read:Record<string,string>={
+ '/api/v1/connectors':'workspace.read',
+ '/api/v1/usage/details':'workspace.read',
  '/api/v1/workspace/activity':'workspace.read',
+ '/api/v1/chat/report-threads/:id':'report.read',
+ '/api/v1/chat/context':'chat.read',
  '/api/v1/chat/reports':'report.read','/api/v1/chat/sessions':'chat.read','/api/v1/chat/sessions/:id/messages':'chat.read',
- '/api/v1/documents':'document.read','/api/v1/documents/:id':'document.read','/api/v1/document-versions/:id/content':'document.read','/api/v1/document-imports/:id':'document.read',
+ '/api/v1/documents':'document.read','/api/v1/documents/:id':'document.read','/api/v1/document-versions/:id/content':'document.read','/api/v1/document-versions/:id/original':'document.read','/api/v1/document-imports/:id':'document.read',
  '/api/v1/operations/:id':'workspace.read','/api/v1/operation-tasks/:id/publication':'report.edit',
  '/api/v1/standalone-reports':'report.read','/api/v1/standalone-reports/:id':'report.read','/api/v1/standalone-reports/:id/revisions/:version':'report.read',
  '/api/v1/topics/:id/delivery':'report.read','/api/v1/topics/:id':'report.read','/api/v1/topics/:id/messages':'report.read','/api/v1/topics/:id/reports/:revision/html':'report.read',
@@ -13,7 +17,13 @@ const read:Record<string,string>={
  '/api/v1/users':'admin.manage','/api/v1/background-jobs':'admin.manage','/api/v1/usage':'workspace.read','/api/v1/academy/attempts':'workspace.read','/api/v1/customer-groups':'workspace.read',
 }
 const mutations:Record<string,string>={
- 'POST /api/v1/chat/sessions':'chat.write','DELETE /api/v1/chat/sessions/:id':'chat.write','POST /api/v1/chat/sessions/:id/messages':'chat.write','POST /api/v1/chat/sessions/:id/documents':'chat.write',
+ 'POST /api/v1/connectors':'config.manage','POST /api/v1/connectors/:id/test':'config.manage',
+ 'POST /api/v1/documents/:id/test':'document.upload',
+ 'POST /api/v1/templates/preview':'workspace.read','POST /api/v1/templates/ai':'config.manage',
+ 'POST /api/v1/customer-groups/parse-file':'config.manage',
+ 'POST /api/v1/customer-groups/import':'config.manage',
+ 'POST /api/v1/customer-groups/export':'config.manage',
+ 'POST /api/v1/chat/sessions/:id/stop':'chat.write','POST /api/v1/chat/sessions':'chat.write','DELETE /api/v1/chat/sessions/:id':'chat.write','POST /api/v1/chat/sessions/:id/messages':'chat.write','POST /api/v1/chat/sessions/:id/documents':'chat.write',
  'POST /api/v1/documents/uploads':'document.upload','POST /api/v1/documents/imports':'document.upload',
  'POST /api/v1/operations/plan':'analysis.run','POST /api/v1/operations':'analysis.run','POST /api/v1/operations/:id/cancel':'operation.manage','POST /api/v1/operation-tasks/:id/retry':'operation.manage','POST /api/v1/operation-tasks/:id/publish':'report.publish',
  'POST /api/v1/automations/:id/operations':'operation.manage','POST /api/v1/automations/:id/run':'scan.run',

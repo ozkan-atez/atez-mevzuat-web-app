@@ -1,3 +1,6 @@
+import { readReportSpec } from './report-spec'
+import { renderReportHtml } from '../topic-analysis/application/render-report-html'
+import { reportActor } from '../chat/infrastructure/report-audit'
 import { getActorContext, privateActorScope, resourceOwnership } from '../../platform/actor-context'
 import { installLocalWorkspaceBoundary } from '../../platform/local-workspace-access'
 import { createHash } from 'node:crypto'
@@ -11,7 +14,14 @@ import { OperationError } from './operation-service'
 export class StandaloneReportsService {
  constructor(readonly prisma:PrismaClient,readonly objectStore:Pick<ObjectStore,'putRunFile'|'getContent'>,readonly defaultScope='local-workspace') {}
  get scope():string{return getActorContext()?privateActorScope():this.defaultScope}
- async list() {return {reports:await this.prisma.topicReport.findMany({where:{actorScope:this.scope,operationTaskId:{not:null},latestVersion:{gt:0}},orderBy:{updatedAt:'desc'},select:{id:true,title:true,latestVersion:true,operationTaskId:true,createdAt:true,updatedAt:true}})}}
+ async list() {
+  const rows=await this.prisma.topicReport.findMany({where:{actorScope:this.scope,operationTaskId:{not:null},latestVersion:{gt:0}},orderBy:{updatedAt:'desc'},select:{id:true,title:true,latestVersion:true,operationTaskId:true,createdAt:true,updatedAt:true,operationTask:{select:{request:{select:{parameters:true,sourceRun:{select:{scanRun:{select:{automationId:true}}}}}}}}}})
+  const reports=rows.map(({operationTask,...report})=>{const params=operationTask?.request.parameters as Record<string,unknown>|null;return {...report,automationId:typeof params?.automationId==='string'?params.automationId:operationTask?.request.sourceRun?.scanRun?.automationId ?? null}})
+  const ids=[...new Set(reports.flatMap(report=>report.automationId?[report.automationId]:[]))]
+  const names=ids.length?await this.prisma.workspaceAutomation.findMany({where:{id:{in:ids}},select:{id:true,name:true}}):[]
+  return {reports:reports.map(report=>({...report,automationName:names.find(a=>a.id===report.automationId)?.name ?? null}))}
+ }
+
  async get(id:string) {
   const report=await this.prisma.topicReport.findFirst({where:{id,actorScope:this.scope,operationTaskId:{not:null}},include:{revisions:{where:{status:'VALIDATED'},orderBy:{version:'desc'},include:{draft:{select:{operationTaskId:true,operationTask:{select:{requestId:true}}}}}}}})
   if(!report) throw new OperationError('Rapor bulunamadı.',404)
@@ -21,7 +31,9 @@ export class StandaloneReportsService {
   const report=await this.get(id),revision=report.revisions.find(r=>r.version===version)
   if(!revision)throw new OperationError('Rapor sürümü bulunamadı.',404)
   const bytes=await this.objectStore.getContent(revision.specObjectKey)
-  return {...JSON.parse(bytes.toString('utf8')),reportId:id,version,createdAt:revision.createdAt,publicationStatus:'PUBLISHED'}
+  const data=JSON.parse(bytes.toString('utf8'))
+  const spec=readReportSpec(data,revision.createdAt)
+  return {...data,reportSpec:spec,html:await renderReportHtml(spec),reportId:id,version,createdAt:revision.createdAt,publicationStatus:'PUBLISHED'}
  }
  async publication(taskId:string): Promise<{reportId:string|null;expectedVersion:number;isPublished:boolean;version:number|null}> {
   const task=await this.prisma.operationTask.findFirst({where:{id:taskId,actorScope:this.scope,status:'SUCCEEDED'},include:{artifacts:true,drafts:{include:{revision:true}}}})
@@ -73,9 +85,10 @@ export class StandaloneReportsService {
    let report=await tx.topicReport.findUnique({where:{operationTaskId:rootId}})
    if(report && report.actorScope!==this.scope)throw new OperationError('Rapor bulunamadı.',404)
    if((report?.latestVersion ?? 0)!==expectedVersion)throw new OperationError('Rapor sürümü değişti; güncel sürümü kontrol edin.',409,'VERSION_CONFLICT')
-   if(!report)report=await tx.topicReport.create({data:{...resourceOwnership(),operationTaskId:rootId,actorScope:this.scope,title:String(data.title),basename:`belge-raporu-${rootId}`,card:'K5'}})
+   if(!report)report=await tx.topicReport.create({data:{...resourceOwnership(),operationTaskId:rootId,actorScope:this.scope,title:String(data.title),basename:`01-belge-raporu-${rootId}.html`,card:'K5'}})
    const version=report.latestVersion+1
-   await tx.reportRevision.create({data:{reportId:report.id,version,status:'VALIDATED',card:'K5',specObjectKey,htmlObjectKey,draftId:draft.id}})
+   const publisher=await reportActor(tx)
+   await tx.reportRevision.create({data:{createdBy:publisher.id,createdByName:publisher.name,baseVersion:version-1,conversationId:`report:${report.id}`,reportId:report.id,version,status:'VALIDATED',card:'K5',specObjectKey,htmlObjectKey,draftId:draft.id}})
    await tx.topicReport.update({where:{id:report.id},data:{title:String(data.title),latestVersion:version}})
    await tx.reportDraft.update({where:{id:draft.id},data:{status:'PUBLISHED',closedAt:new Date()}})
    return {reportId:report.id,version,operationTaskId:taskId}

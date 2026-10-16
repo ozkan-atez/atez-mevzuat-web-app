@@ -155,6 +155,10 @@ export interface RunTopicAnalysisRepository extends TopicAnalysisRepository {
 }
 
 export interface ReportDraftEditRecord {
+  actorId?: string | null
+  actorName?: string | null
+  baseVersion?: number | null
+  conversationId?: string | null
   id: string
   sequence: number
   path: string

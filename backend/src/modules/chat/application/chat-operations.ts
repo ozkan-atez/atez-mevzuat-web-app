@@ -6,11 +6,12 @@ export interface ChatOperations {
   get(id: string): Promise<unknown>
 }
 
-/** Only direct verbs authorize work; discussion, questions and document content never do. */
+/** A requested outcome authorizes its prerequisites; uploads alone do not. */
 export function parseDocumentOperation(content: string, versionIds: string[], mode: OperationInput['mode'] = 'FILL_MISSING'): OperationInput | null {
   const text = normalizeTurkish(content)
-  if (!versionIds.length || /\b(nasil|miyim|misin|mumkun|yapma|calistirma|baslatma|analiz etme)\b/.test(text)) return null
-  if (/\banaliz\s+(?:et\w*|yap\w*|baslat\w*|calistir\w*)/.test(text) || /\b(?:incele|degerlendir)\b/.test(text)) return { operation: 'ANALYZE', mode, documentVersionIds: versionIds, instruction: content }
+  if (!versionIds.length || /\b(nasil|miyim|yapma|calistirma|baslatma|analiz etme|inceleme|incelemey\w*|okuma|okumay\w*|istemiyorum)\b/.test(text)) return null
+  if (/\banaliz\s+(?:et\w*|yap\w*|baslat\w*|calistir\w*)/.test(text) || /\b(?:incele\w*|degerlendir\w*)\b/.test(text)) return { operation: 'ANALYZE', mode, documentVersionIds: versionIds, instruction: content }
+  if (/\b(?:oku|okur|okuyabilir)\w*\b/.test(text)) return { operation: 'EXTRACT', mode, documentVersionIds: versionIds }
   if (/\b(?:metin\w*|icerig\w*)\s+(?:cikar\w*|oku\w*)/.test(text)) return { operation: 'EXTRACT', mode, documentVersionIds: versionIds }
   return null
 }

@@ -1,6 +1,10 @@
 export type ReportEditSource = 'USER' | 'AI'
 
 export interface ReportFieldEditRecord {
+  actorId?: string | null
+  actorName?: string | null
+  baseVersion?: number | null
+  conversationId?: string | null
   id: string
   sequence: number
   path: string

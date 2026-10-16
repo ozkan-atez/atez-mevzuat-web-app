@@ -50,6 +50,62 @@ describe('Tariff GTİP lookup', () => {
     expect(result.comparisons[0]).toMatchObject({ status: 'withdrawn', previousDate: '2026-09-22' })
   })
 
+  it('queries only the selected date for a snapshot, never substitutes an earlier value', async () => {
+    const urls: string[] = []
+    const fetcher = vi.fn(async (url: string) => {
+      urls.push(url)
+      if (url.includes('login.singlewindow')) return new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }))
+      if (url.includes('/mcp')) return new Response('{}', { status: 404 })
+      return new Response(JSON.stringify({ measures: [measure('5,500 USD', '2026-08-10')] }))
+    }) as unknown as typeof fetch
+    const result = await new SingleWindowTariffLookup({ username: 'u', password: 'p' }, fetcher).lookup({ code: '691090000000', date: '2026-07-10', compare: false })
+    expect(result.comparisons).toEqual([])
+    expect(urls.filter(url => url.includes('queryDate='))).toHaveLength(1)
+    expect(result.notes.join(' ')).toContain('sıfır')
+  })
+
+  it('keeps surveillance values after large unrelated results and skips automatic comparisons', async () => {
+    const surveillance = { typeCode: 'TRC057', typeName: 'Gözetim', origin: '1011', current: parseTariffMeasures({ measures: [measure('4,500.00 USD / 1000 kg', '2026-01-30')] }), previous: null, previousDate: null, status: 'unknown' as const }
+    const lookup = { lookup: vi.fn(async () => ({ code: '691090000000', date: '2026-07-10', description: null, source: 'https://tariff.singlewindow.io/', fetchedAt: '', classification: 'SUPPORTING_NON_AUTHORITATIVE' as const,
+      comparisons: [{ ...surveillance, typeCode: 'OTHER', typeName: 'x'.repeat(30000) }, surveillance], notes: [] })) }
+    const result = await runChatTool('gtip_tariff_sorgula', { gtip: '6910.90', tarih: '2026-07-10' }, {} as AssistantKnowledge, { tariffLookup: lookup, userContent: 'birim gümrük kıymetini öğrenmek istiyorum' })
+    expect(lookup.lookup).toHaveBeenCalledWith({ code: '691090000000', date: '2026-07-10', compare: false })
+    expect(JSON.stringify(result).length).toBeLessThan(24000)
+    expect(result).toMatchObject({ comparisons: [surveillance] })
+  })
+
+  it.each(['691010000000', '691090000000'])('keeps July and August validity boundaries for %s', async (code) => {
+    const requests: string[] = []
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('login.singlewindow')) return new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }))
+      if (url.includes('/mcp')) return new Response('{}', { status: 404 })
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer token' })
+      requests.push(new URL(url).searchParams.get('queryDate')!)
+      // The provider can include both historical and future rows in one response.
+      return new Response(JSON.stringify({ measures: [
+        measure('4,500.00 USD / 1000 kg', '2026-01-30', '2026-08-09'),
+        measure('5,500.00 USD / 1000 kg', '2026-08-10'),
+      ] }))
+    }) as unknown as typeof fetch
+    const lookup = new SingleWindowTariffLookup({ username: 'u', password: 'p' }, fetcher)
+    for (const date of ['2026-07-10', '2026-07-12', '2026-08-09', '2026-08-10']) {
+      const result = await lookup.lookup({ code, date, compare: false })
+      expect(result.comparisons).toHaveLength(1)
+      expect(result.comparisons[0]!.current).toHaveLength(1)
+      expect(result.comparisons[0]!.current[0]!.value).toBe(date === '2026-08-10' ? '5,500.00 USD / 1000 kg' : '4,500.00 USD / 1000 kg')
+    }
+    expect(requests).toEqual(['2026-07-10', '2026-07-12', '2026-08-09', '2026-08-10'])
+  })
+
+  it.each([undefined, 'birim_gumruk_kiymeti'])('does not pass authenticated API links to chat (%s)', async (alan) => {
+    const lookup = { lookup: vi.fn(async () => ({ code: '691090000000', date: '2026-07-12', description: null,
+      source: 'https://tariff.singlewindow.io/api/v2-0/tariff-query/tariff-measures-by-commodity?queryDate=2026-07-12',
+      fetchedAt: '', classification: 'SUPPORTING_NON_AUTHORITATIVE' as const, comparisons: [], notes: [] })) }
+    const result = await runChatTool('gtip_tariff_sorgula', { gtip: '6910.90', tarih: '2026-07-12', ...(alan ? { alan } : {}) }, {} as AssistantKnowledge, { tariffLookup: lookup })
+    expect(result).toMatchObject({ source: 'Tariff (yetkilendirilmiş sorgu)', date: '2026-07-12' })
+    expect(JSON.stringify(result)).not.toContain('https://tariff.singlewindow.io/api/')
+  })
+
   it('offers the same lookup to chat without exposing credentials', async () => {
     const lookup = { lookup: vi.fn(async () => ({ code: '691090000000', date: '2026-09-23', description: null, source: 'https://tariff.singlewindow.io/', fetchedAt: '2026-09-23T00:00:00Z', classification: 'SUPPORTING_NON_AUTHORITATIVE' as const, comparisons: [], notes: [] })) }
     await runChatTool('gtip_tariff_sorgula', { gtip: '6910.90', tarih: '2026-09-23', mense: 'CN' }, {} as AssistantKnowledge, { tariffLookup: lookup })

@@ -28,10 +28,12 @@ export async function collectSource(profile:SourceProfileConfig,targetDate:strin
   }
   const records=new Map<string,SourceCandidate>();const warnings:string[]=[];const pages:string[]=[];const dates:string[]=[]
   for(const feed of profile.feeds) {
+    if(records.size>=profile.maxDocuments){warnings.push(`${feed.title}: Belge sınırı nedeniyle bu listeye ulaşılamadı; tarama kapsamı eksik.`);continue}
     const first=feed.yearInPath?feed.url.replace(/\/\d{4}\/?$/,`/${targetDate.slice(0,4)}`):feed.url
-    const feedStart=records.size;const feedLimit=Math.max(1,Math.floor(profile.maxDocuments/profile.feeds.length))
+    // Share the inventory budget: a busy feed must not be cut to 1/N of the limit.
+    const feedLimit=profile.maxDocuments
     const pending=[first];const seen=new Set<string>();let feedDates:string[]=[];let seenRows=0
-    while(pending.length&&seen.size<profile.maxPages&&records.size-feedStart<feedLimit) {
+    while(pending.length&&seen.size<profile.maxPages&&records.size<feedLimit) {
       const url=pending.shift()!;if(seen.has(url))continue;seen.add(url)
       try {
         const html=await session.html(url);pages.push(url);const $=load(html);const pageDates:string[]=[]
@@ -39,9 +41,10 @@ export async function collectSource(profile:SourceProfileConfig,targetDate:strin
         for(const row of rows) {
           const link=$(row).find(feed.link).first();const href=link.attr('href');if(!href)continue
           const resolved=sourceUrl(href,url,profile);if(!resolved)continue
-          const title=link.text().trim().replace(/\s+/g,' ').slice(0,300);if(!title)continue;actionable++;seenRows++
-          if(records.has(resolved))continue
-          if(records.size-feedStart>=feedLimit){warnings.push('Belge sınırına ulaşıldı; kaynak bütünüyle taranamadı.');break}
+          const title=(feed.titleSelector?$(row).find(feed.titleSelector).first().text():link.text()).trim().replace(/\s+/g,' ').slice(0,300);if(!title)continue;actionable++;seenRows++
+          const existing=records.get(resolved)
+          if(existing){if(existing.publishedOn){pageDates.push(existing.publishedOn);feedDates.push(existing.publishedOn)};continue}
+          if(records.size>=feedLimit){warnings.push('Belge sınırına ulaşıldı; kaynak bütünüyle taranamadı.');break}
           const dateNode=feed.date?$(row).find(feed.date).first():null
           let publishedOn=dateNode?sourceDate(dateNode.attr('datetime')??$(row).find(feed.date!).map((_i,node)=>$(node).text()).get().join(' ')):null
           if(!publishedOn&&feed.detailDate&&!/\.(pdf|docx?|xlsx?|zip)(?:$|\?)/i.test(resolved)) {
@@ -53,15 +56,15 @@ export async function collectSource(profile:SourceProfileConfig,targetDate:strin
         }
         if(!actionable)warnings.push(`${feed.title}: Beklenen liste yapısı bulunamadı; boş gün doğrulanamadı.`)
         if(feed.next) {
-          const currentNumber=Number(new URL(url).searchParams.get('p')??1)
-          const links=$(feed.next).toArray().flatMap(a=>{const next=sourceUrl($(a).attr('href')??'',url,profile);if(!next||seen.has(next))return [];const p=Number(new URL(next).searchParams.get('p'));return p&&p<=currentNumber?[]:[next]})
+          const currentNumber=Number(new URL(url).searchParams.get(feed.pageParameter??'p')??1)
+          const links=$(feed.next).toArray().flatMap(a=>{const next=sourceUrl($(a).attr('href')??'',url,profile);if(!next||seen.has(next))return [];const p=Number(new URL(next).searchParams.get(feed.pageParameter??'p'));return p&&p<=currentNumber?[]:[next]})
           // Only stop after a whole dated page is older than the requested day.
-          if(mode!=='PUBLISHED_DATE'||!pageDates.length||pageDates.some(d=>d>=targetDate)) pending.push(...links.sort((a,b)=>Number(new URL(a).searchParams.get('p')??0)-Number(new URL(b).searchParams.get('p')??0)).slice(0,1).filter(next=>!pending.includes(next)))
+          if(mode!=='PUBLISHED_DATE'||pageDates.length<actionable||pageDates.some(d=>d>=targetDate)) pending.push(...links.sort((a,b)=>Number(new URL(a).searchParams.get(feed.pageParameter??'p')??0)-Number(new URL(b).searchParams.get(feed.pageParameter??'p')??0)).slice(0,1).filter(next=>!pending.includes(next)))
         }
         if(pending.length)await new Promise(resolve=>setTimeout(resolve,profile.delayMs))
       }catch(error){warnings.push(`${feed.title}: ${error instanceof Error?error.message:'Liste okunamadı.'}`)}
     }
-    if(pending.length||records.size-feedStart>=feedLimit)warnings.push(`${feed.title}: Sayfa/belge sınırına ulaşıldı; tarama kapsamı eksik.`)
+    if(pending.length||records.size>=feedLimit)warnings.push(`${feed.title}: Sayfa/belge sınırına ulaşıldı; tarama kapsamı eksik.`)
     if(!seenRows)warnings.push(`${feed.title}: Kayıt yapısı doğrulanamadı.`)
     if(feed.recentOnly&&feedDates.length&&targetDate<feedDates.sort()[0]!)warnings.push(`${feed.title}: Hedef tarih görünür listenin dışında; arşiv erişimi gerekiyor.`)
     if(!feedDates.length&&mode==='PUBLISHED_DATE')warnings.push(`${feed.title}: Yayın tarihleri doğrulanamadı.`)

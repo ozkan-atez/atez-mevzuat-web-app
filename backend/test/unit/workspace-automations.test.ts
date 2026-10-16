@@ -25,11 +25,13 @@ describe('workspace automation', () => {
     const db = mockPrisma(); db.source.findMany.mockResolvedValue([{ id: 's1', baseUrl: 'https://tariff.com.tr' }])
     await expect(validateAutomation(db as unknown as PrismaClient, automation)).rejects.toThrow('bağlayıcısı')
   })
-  it('reconciles only custom schedules and preserves existing four Gazette schedules', async () => {
+  it('removes legacy fixed schedules and reconciles managed automations', async () => {
     const db = mockPrisma()
     const queue = { getSchedules: vi.fn().mockResolvedValue([{ name: 'resmi-gazete-scheduled-scan', key: 'ANA_SAYI' }, { name: 'atez-workspace-daily-automation', key: 'deleted' }]), unschedule: vi.fn(), schedule: vi.fn() }
     await reconcileAutomationSchedules(db as unknown as PrismaClient, queue as unknown as PgBoss)
-    expect(queue.unschedule).toHaveBeenCalledExactlyOnceWith('atez-workspace-daily-automation', 'deleted')
+    expect(queue.unschedule).toHaveBeenCalledWith('resmi-gazete-scheduled-scan', 'ANA_SAYI')
+    expect(queue.unschedule).toHaveBeenCalledWith('atez-workspace-daily-automation', 'deleted')
+    expect(queue.unschedule).toHaveBeenCalledTimes(2)
     expect(queue.schedule).toHaveBeenCalledWith('atez-workspace-daily-automation', '15 8 * * *', { automationId: 'a1' }, { tz: 'Europe/Istanbul', key: 'a1' })
   })
   it('creates a real run and outbox with template/group snapshot requiring manual delivery approval', async () => {

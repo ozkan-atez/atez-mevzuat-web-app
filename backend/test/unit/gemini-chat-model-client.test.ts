@@ -36,6 +36,12 @@ describe('GeminiChatModelClient', () => {
     expect(requests[0]?.config.tools).toEqual([{googleSearch:{}},{urlContext:{}}])
     expect(chunks).toContainEqual({type:'grounding',research:{sources:[{url:'https://www.resmigazete.gov.tr/doc.htm',title:'Gazete'}],queries:['gümrük'],citations:[],searchSuggestions:null}})
   })
+  it('explicitly disables function calling during answer synthesis', async () => {
+    const { transport, requests } = transportWith([{ text: 'Sonuç' }])
+    await collect(new GeminiChatModelClient(transport, { timeoutMs: 1000 }).streamReply({ ...request, toolMode: 'none' }))
+    expect(requests[0]?.config.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } })
+  })
+
   it('maps conversation roles and yields only non-empty text chunks', async () => {
     const { transport, requests } = transportWith([{ text: 'Merhaba' }, {}, { text: ' dünya' }])
     const client = new GeminiChatModelClient(transport, { timeoutMs: 1_000 })

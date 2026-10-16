@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { cleanup, render, screen, waitFor } from '../../test/test-utils'
+import { cleanup, render, screen, waitFor, within } from '../../test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChatScreen } from './ChatScreen'
@@ -75,12 +75,18 @@ beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true) })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('ChatScreen', () => {
-  it('keeps automatic report threads out of the conversation list', async () => {
-    stubFetch({ history: [historyItem({}), historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/reports/topic-1' })] })
+  it('shows report revision groups alongside general conversations', async () => {
+    stubFetch({ history: [historyItem({}), historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/chat?report=topic-1' })] })
     renderChat('/chat/general-1')
     expect(await screen.findByRole('navigation', { name: 'Sohbet geçmişi' })).toBeVisible()
     await waitFor(() => expect(screen.getByRole('link', { name: /GTİP sorusu/ })).toBeVisible())
-    expect(screen.queryByRole('link', { name: /PET revizyonu/ })).not.toBeInTheDocument()
+    const reports = screen.getByRole('region', { name: 'Rapor değişiklikleri' })
+    const conversations = screen.getByRole('region', { name: 'Sohbetler' })
+    expect(within(reports).getByRole('link', { name: /PET revizyonu/ })).toHaveAttribute('href', '/chat?report=topic-1')
+    expect(within(conversations).getByRole('link', { name: /GTİP sorusu/ })).toHaveAttribute('aria-current', 'page')
+    expect(within(reports).queryByRole('link', { name: /GTİP sorusu/ })).not.toBeInTheDocument()
+    expect(within(conversations).queryByRole('link', { name: /PET revizyonu/ })).not.toBeInTheDocument()
+    expect(reports.compareDocumentPosition(conversations) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('GTİP nedir?')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Rapor düzelt/ })).toBeVisible()
   })
@@ -155,7 +161,7 @@ describe('ChatScreen', () => {
   it('deletes a general conversation after confirmation and leaves report threads alone', async () => {
     stubFetch({ history: [
       historyItem({}),
-      historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/reports/topic-1' }),
+      historyItem({ id: 'thread-1', type: 'REPORT_REVISION', title: 'PET revizyonu', target: '/chat?report=topic-1' }),
     ] })
     renderChat('/chat/general-1')
 
@@ -196,4 +202,12 @@ describe('ChatScreen', () => {
     expect(screen.queryByText('MODEL_GENERATION_FAILED')).not.toBeInTheDocument()
   })
 
+})
+
+it('preserves selected sources and template in the first-message handoff', async () => {
+  stubFetch()
+  renderChat('/chat', {initialMessage: 'Kaynakları özetle', sourceIds: ['source-1'], templateId: 'template-1'}, {strict: true})
+  await waitFor(() => expect(sent).toEqual(['Kaynakları özetle']))
+  const post = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).endsWith('/messages') && init?.method === 'POST')
+  expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({sourceIds: ['source-1'], templateId: 'template-1'})
 })

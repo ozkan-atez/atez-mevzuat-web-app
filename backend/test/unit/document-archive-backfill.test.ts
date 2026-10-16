@@ -1,5 +1,7 @@
 import { describe,expect,it,vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
+import { runWithActorContext, type ActorContext } from '../../src/platform/actor-context'
+import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
 import { backfillDocumentArchive } from '../../src/modules/documents/application/backfill-document-archive'
 
 function archiveFake(){
@@ -32,4 +34,29 @@ describe('additive historical archive backfill',()=>{
     const result=await backfillDocumentArchive(fake.prisma,{apply:true})
     expect(result.scopeConflicts).toBe(1);expect(fake.versions).toHaveLength(1);expect(fake.docs[0].actorScope).toBe('private-workspace')
   })
+  it('archives each downloaded scan document immediately in the shared official archive',async()=>{
+    const fake=archiveFake()
+    const db=fake.prisma as any
+    db.source.findUnique.mockResolvedValue({id:'gazette-source',key:'resmi-gazete'})
+    const rows=await db.collectedDocument.findMany({})
+    rows[0].sourceUrl='https://www.resmigazete.gov.tr/eskiler/2026/10/20261013-1.htm'
+    db.collectedDocument.update=vi.fn()
+    db.storedObject.upsert=vi.fn(async()=>({id:'blob'}))
+    const actor={workspaceId:'workspace-1',userId:'user-1'} as ActorContext
+    await runWithActorContext(actor,()=>new PrismaScanRepository(fake.prisma).attachDocumentObject('collected',{
+      sha256:'a'.repeat(64),bucket:'test',objectKey:'original',mediaType:'text/html',byteSize:100n,
+    }))
+    expect(db.collectedDocument.findMany).toHaveBeenLastCalledWith(expect.objectContaining({where:{id:'collected'}}))
+    expect(db.sourceScanDocument.findMany).not.toHaveBeenCalled()
+    expect(fake.docs[0]).toMatchObject({actorScope:'workspace:workspace-1:shared',workspaceId:'workspace-1',ownerUserId:null,visibility:'WORKSPACE'})
+    expect(fake.links[0]).toMatchObject({workspaceId:'workspace-1',visibility:'WORKSPACE',scanRunId:'scan'})
+  })
+  it('limits managed-source synchronization to the captured run',async()=>{
+    const fake=archiveFake()
+    await backfillDocumentArchive(fake.prisma,{apply:true,sourceRunId:'source-run'})
+    expect(fake.prisma.collectedDocument.findMany).not.toHaveBeenCalled()
+    expect(fake.prisma.sourceScanDocument.findMany).toHaveBeenCalledWith(expect.objectContaining({where:{runId:'source-run'}}))
+    expect(fake.docs).toHaveLength(1)
+  })
+
 })

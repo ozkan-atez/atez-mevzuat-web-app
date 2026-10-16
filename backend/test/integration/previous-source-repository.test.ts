@@ -9,6 +9,24 @@ describe('previous source repository', () => {
   beforeEach(() => prisma.scanRun.deleteMany())
   afterAll(() => prisma.$disconnect())
 
+  it('marks a resumed stage running and exposes each blocked document and cause', async () => {
+    const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-07-11' })
+    await repository.saveEditions(run.id, run.targetDate, [{ type: 'MAIN', supplementNo: null, indexUrl: 'https://www.resmigazete.gov.tr/index.htm', discoveryOrder: 0,
+      documents: [{ title: '10781 sayılı karar', sourceUrl: 'https://www.resmigazete.gov.tr/current.pdf', publicationOrder: 1 }] }])
+    const document = (await repository.listFilterDocuments(run.id))[0]!
+    const job = await prisma.previousSourceJob.create({ data: { scanRunId: run.id, documentId: document.id, model: 'test', promptVersion: 'test', configurationHash: 'a'.repeat(64), status: 'AWAITING_RETRY', lastErrorCategory: 'TIMEOUT', lastErrorMessage: 'Resmî Gazete erişimi zaman aşımına uğradı.' } })
+    await repository.startStage(run.id, 'DISCOVERING_PREVIOUS_SOURCES', 1)
+    expect((await prisma.scanRun.findUniqueOrThrow({ where: { id: run.id } })).status).toBe('RUNNING')
+    await repository.markPreviousSourceStageAwaitingRetry(run.id, 'Kaynaklar hazırlanamadı.')
+    const failed = await prisma.scanRun.findUniqueOrThrow({ where: { id: run.id } })
+    expect(failed.errorSummary).toContain('10781 sayılı karar: TIMEOUT')
+    expect(failed.errorSummary).toContain('zaman aşımına')
+    await repository.requestPreviousSourceRetry(run.id, crypto.randomUUID())
+    await repository.startStage(run.id, 'DISCOVERING_PREVIOUS_SOURCES', 1)
+    expect((await prisma.scanRun.findUniqueOrThrow({ where: { id: run.id } })).status).toBe('RUNNING')
+    expect((await prisma.previousSourceJob.findUniqueOrThrow({ where: { id: job.id } })).status).toBe('QUEUED')
+  })
+
   it('creates one resumable job for each final IN document only', async () => {
     const run = await repository.createManualRun({ requestKey: crypto.randomUUID(), targetDate: '2026-09-14' })
     await repository.saveEditions(run.id, run.targetDate, [{

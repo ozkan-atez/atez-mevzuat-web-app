@@ -31,7 +31,7 @@ export async function runAutomation(prisma: PrismaClient, id: string, requestKey
       ...jobInitiatorFields(),
       requestKey: key, sourceKeys, automationId: id, trigger: requestKey ? 'MANUAL' : 'CRON', timezone: automation.timezone,
       targetDate: new Date(`${targetDate}T00:00:00Z`),
-      workspaceConfig: { automationName: automation.name, datePolicy: automation.datePolicy, sourceIds: automation.sourceIds, groupIds: automation.groupIds, templateId: automation.templateId, template: template ? { html: template.html, sections: template.sections } : null, deliveryMode: 'MANUAL_APPROVAL' } as Prisma.InputJsonValue,
+      workspaceConfig: { automationName: automation.name, datePolicy: automation.datePolicy, sourceIds: automation.sourceIds, groupIds: automation.groupIds, templateId: automation.templateId, template: template ? { html: template.html, sections: template.sections, definition: template.definition, revision: template.revision } : null, deliveryMode: 'MANUAL_APPROVAL' } as Prisma.InputJsonValue,
       outbox: { create: { requestKey: key, ...jobInitiatorFields() } },
     } })
     await tx.workspaceAutomation.update({ where: { id }, data: { lastRunId: run.id, lastRunAt: new Date(), lastError: null } })
@@ -59,7 +59,11 @@ export function automationSlots(automation: { id: string; times?: string[]; hour
 export async function reconcileAutomationSchedules(prisma: PrismaClient, queue: PgBoss) {
   const automations = await prisma.workspaceAutomation.findMany()
   const active = automations.filter(a => a.isActive)
-  const existing = (await queue.getSchedules()).filter(s => s.name === workspaceAutomationQueue)
+  const schedules = await queue.getSchedules()
+  for (const schedule of schedules) {
+    if (schedule.name === 'resmi-gazete-scheduled-scan') await queue.unschedule(schedule.name, schedule.key ?? '')
+  }
+  const existing = schedules.filter(s => s.name === workspaceAutomationQueue)
   const desiredKeys = new Set(active.flatMap(a => automationSlots(a).map(slot => slot.key)))
   for (const schedule of existing) if (!desiredKeys.has(schedule.key ?? '')) await queue.unschedule(workspaceAutomationQueue, schedule.key ?? '')
   for (const automation of active) {

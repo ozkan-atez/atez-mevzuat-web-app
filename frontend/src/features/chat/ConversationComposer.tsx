@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Tag, Typography } from 'antd'
-import { ArrowUpOutlined, GlobalOutlined, DesktopOutlined, StopOutlined } from '@ant-design/icons'
+import { ArrowUpOutlined } from '@ant-design/icons'
 import type { TextAreaRef } from 'antd/es/input/TextArea'
+import { ComposerContext, type SourceOption, type TemplateOption } from './ComposerContext'
 import { ComposerAttachments } from './ComposerAttachments'
 import { AttachmentList, type DocumentAttachment } from '../documents/AttachmentList'
 import { MAX_MESSAGE_LENGTH, type ChatSendOptions } from './types'
@@ -16,8 +17,8 @@ interface Props {
 }
 
 export function ConversationComposer({ isSending, onSend, autoFocus = true, attachmentsEnabled = true, placeholder = "Mevzuatla ilgili bir soru sorun…", onStop }: Props) {
-  const [browserAgent,setBrowserAgent] = useState(false)
-  const [webSearch,setWebSearch] = useState(false)
+  const [sources, setSources] = useState<SourceOption[]>([])
+  const [template, setTemplate] = useState<TemplateOption | null>(null)
   const [value, setValue] = useState('')
   const [attachments, setAttachments] = useState<DocumentAttachment[]>([])
   const [uploading, setUploading] = useState(false)
@@ -31,8 +32,7 @@ export function ConversationComposer({ isSending, onSend, autoFocus = true, atta
     if (!content || isSending || uploading || content.length > MAX_MESSAGE_LENGTH) return
     setAttachmentError(null)
     setValue('')
-    if(browserAgent)onSend(content,[],{browserAgent:true})
-    else if(webSearch)onSend(content,[],{webSearch:true})
+    if (sources.length || template) onSend(content, attachments.map(item => item.id), {...(sources.length ? {sourceIds: sources.map(item => item.id)} : {}), ...(template ? {templateId: template.id} : {})})
     else onSend(content, attachments.map(item => item.id))
     setAttachments([])
   }
@@ -43,6 +43,10 @@ export function ConversationComposer({ isSending, onSend, autoFocus = true, atta
       className="atez-chat-composer"
     >
       <div className="atez-chat-composer-box">
+        {(sources.length > 0 || template) && <div className="atez-chat-context-chips">
+          {sources.map(source => <Tag key={source.id} closable={!isSending} onClose={() => setSources(current => current.filter(item => item.id !== source.id))}>{source.title}</Tag>)}
+          {template && <Tag closable={!isSending} onClose={() => setTemplate(null)}>Şablon: {template.name}</Tag>}
+        </div>}
         {attachments.length>0 && <AttachmentList items={attachments} onRemove={id => setAttachments(current => current.filter(item => item.id !== id))} />}
         {attachmentError && <Alert type="error" title={attachmentError} closable onClose={()=>setAttachmentError(null)} />}
         {uploading && <Typography.Text type="secondary" role="status">Belgeler yükleniyor…</Typography.Text>}
@@ -65,13 +69,12 @@ export function ConversationComposer({ isSending, onSend, autoFocus = true, atta
         />
         <div className="atez-chat-composer-toolbar">
           <div className="atez-chat-composer-tools">
-          {attachmentsEnabled && <ComposerAttachments items={attachments} disabled={isSending || uploading} webSearch={webSearch} browserAgent={browserAgent} onBrowserAgentChange={enabled=>{setBrowserAgent(enabled);if(enabled)setWebSearch(false)}} onWebSearchChange={enabled=>{if(enabled && attachments.length){setAttachmentError('Web araması için ekli belgeleri kaldırın.');return}setWebSearch(enabled);if(enabled)setBrowserAgent(false)}}
+          {attachmentsEnabled && <ComposerAttachments sourcesSelected={sources.length > 0} hasContext={sources.length > 0 || !!template} contextPanel={<ComposerContext sources={sources} template={template} disabled={isSending} sourcesDisabled={attachments.length > 0} onSourcesChange={setSources} onTemplateChange={setTemplate} />} items={attachments} disabled={isSending || uploading}
             onAdd={item=>setAttachments(current=>current.some(value=>value.id===item.id) ? current : [...current,item])}
             onRemove={id=>setAttachments(current=>current.filter(item=>item.id!==id))}
             onBusyChange={setUploading} onError={setAttachmentError} />}
-          {(webSearch||browserAgent) && <Tag className="atez-chat-tool-chip" icon={browserAgent?<DesktopOutlined />:<GlobalOutlined />} closable onClose={()=>{setWebSearch(false);setBrowserAgent(false)}}>{browserAgent?'Tarayıcı ajanı':'Web’de ara'}</Tag>}
           </div>
-        {isSending && onStop ? <Button type="primary" shape="circle" aria-label="Yanıtı durdur" icon={<StopOutlined />} className="atez-chat-send" onClick={onStop}/> : <Button
+        {isSending && onStop ? <Button type="primary" shape="circle" aria-label="Yanıtı durdur" title="Yanıtı durdur" icon={<span className="atez-chat-stop-icon" aria-hidden="true" style={{ display: 'block', width: 14, height: 14, backgroundColor: 'currentColor', borderRadius: 2 }} />} className="atez-chat-send" onClick={onStop}/> : <Button
           htmlType="submit"
           type="primary"
           aria-label="Gönder"

@@ -3,7 +3,6 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, Button, Card, Input } from 'antd'
 import { ArrowRightOutlined } from '@ant-design/icons'
-import { StartScanAction } from '../scans/StartScanAction'
 import { RecentScanRuns } from './RecentScanRuns'
 import { DayActivity } from './DayActivity'
 import { useScanSchedule } from './useScanSchedule'
@@ -49,7 +48,7 @@ export function Dashboard() {
 
 
   return <div className="atez-dashboard" data-purpose="dashboard">
-    <div className="atez-page-heading"><div><h1>Çalışma alanı</h1><p>Mevzuat gündeminiz, tek bir yerde.</p></div><StartScanAction /></div>
+    <div className="atez-page-heading"><div><h1>Çalışma alanı</h1><p>Mevzuat gündeminiz, tek bir yerde.</p></div></div>
     <section className="atez-ai-hero" aria-label="Mevzuat Radar AI">
       <div className="atez-hero-grid" aria-hidden="true" />
       <div className="atez-ai-orb" aria-hidden="true"><span /></div>

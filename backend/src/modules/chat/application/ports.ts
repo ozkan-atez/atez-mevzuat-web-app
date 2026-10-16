@@ -1,3 +1,4 @@
+import type { ChatContext } from './create-chat-report'
 import type { WebResearch } from './web-grounding'
 export type ChatRole = 'USER' | 'ASSISTANT'
 export type ChatMessageStatus = 'COMPLETED' | 'FAILED'
@@ -10,6 +11,12 @@ export interface ChatSessionView {
 }
 
 export interface ChatMessageView {
+  context?: ChatContext
+  authorId?: string | null
+  authorName?: string | null
+  baseVersion?: number | null
+  reportVersion?: number
+  changePaths?: string[]
   research?: WebResearch
   id: string
   role: ChatRole
@@ -40,6 +47,7 @@ export interface ChatHistoryItem {
 }
 
 export interface AppendChatMessageInput {
+  context?: ChatContext
   research?: WebResearch
   sessionId: string
   role: ChatRole
@@ -51,6 +59,9 @@ export interface AppendChatMessageInput {
 }
 
 export interface ChatRepository {
+  getReportThread?(key: string): Promise<{reportId: string; topicId: string | null; title: string; latestVersion: number; messages: ChatMessageView[]; revisions: Array<{version: number; createdAt: string}>} | null>
+  getTitleSeed?(sessionId:string,messageId:string):Promise<string|null>
+  setGeneratedTitle?(sessionId:string,title:string):Promise<void>
   createSession(): Promise<ChatSessionView>
   sessionExists(id: string): Promise<boolean>
   getMessages(sessionId: string): Promise<ChatMessageView[]>

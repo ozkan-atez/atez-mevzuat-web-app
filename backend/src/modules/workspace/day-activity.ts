@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { DateTime } from 'luxon'
-import { chatAccessWhere, getActorContext, privateActorScope, reportAccessWhere } from '../../platform/actor-context'
+import { chatAccessWhere, getActorContext, hasPermission, privateActorScope, reportAccessWhere } from '../../platform/actor-context'
 
 export type ActivityKind = 'REPORT' | 'REVISION' | 'CHAT' | 'SCAN'
 export interface ActivityItem { id: string; kind: ActivityKind; title: string; detail: string; at: string; href: string; version?: number }
@@ -17,8 +17,8 @@ export async function getDayActivity(prisma: PrismaClient, days: 1 | 7, kind?: A
   const local = now.setZone('Europe/Istanbul')
   const range = { gte: local.startOf('day').minus({ days: days - 1 }).toJSDate(), lte: local.toJSDate() }
   const actor = getActorContext()
-  const canReport = !actor || actor.permissions.includes('report.read')
-  const canChat = !actor || actor.permissions.includes('chat.read')
+  const canReport = !actor || hasPermission(actor,'report.read')
+  const canChat = !actor || hasPermission(actor,'chat.read')
   // Keep standalone reports within the same personal scope as their detail route.
   const reportWhere: Prisma.TopicReportWhereInput = { AND: [reportAccessWhere(), { OR: [{ operationTaskId: null }, { actorScope: privateActorScope() }] }] }
   const revisionWhere: Prisma.ReportRevisionWhereInput = { status: 'VALIDATED', report: reportWhere, createdAt: range }

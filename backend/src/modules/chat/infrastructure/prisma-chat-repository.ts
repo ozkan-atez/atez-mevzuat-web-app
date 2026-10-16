@@ -1,3 +1,5 @@
+import { PENDING_CHAT_TITLE } from '../application/generate-chat-title'
+import { listReportThreads, getReportThread } from './report-history'
 import type { WebResearch } from '../application/web-grounding'
 import { getActorContext, privateActorScope, resourceOwnership, chatAccessWhere } from '../../../platform/actor-context'
 import { Prisma, type PrismaClient } from '@prisma/client'
@@ -10,11 +12,22 @@ import {
   type ChatSessionView,
 } from '../application/ports'
 
-const TITLE_LENGTH = 72
 const PREVIEW_LENGTH = 120
 
 export class PrismaChatRepository implements ChatRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  getReportThread(key: string) { return getReportThread(this.prisma, key) }
+
+  async getTitleSeed(sessionId:string,messageId:string):Promise<string|null> {
+    const session=await this.prisma.chatSession.findFirst({where:{id:sessionId,...chatAccessWhere(),title:PENDING_CHAT_TITLE},select:{messages:{where:{role:'USER'},orderBy:[{createdAt:'asc'},{id:'asc'}],take:1,select:{id:true,content:true}}}})
+    const first=session?.messages[0]
+    return first?.id===messageId?first.content:null
+  }
+
+  async setGeneratedTitle(sessionId:string,title:string):Promise<void> {
+    await this.prisma.chatSession.updateMany({where:{id:sessionId,...chatAccessWhere(),title:PENDING_CHAT_TITLE},data:{title}})
+  }
 
   async createSession(): Promise<ChatSessionView> {
     const session = await this.prisma.chatSession.create({ data: {...(getActorContext()?{workspaceId:getActorContext()!.workspaceId,ownerId:getActorContext()!.userId,visibility:'PRIVATE'}:{})} })
@@ -49,6 +62,7 @@ export class PrismaChatRepository implements ChatRepository {
       if (!session) throw new ChatSessionNotFoundError('Sohbet bulunamadı.')
       const message = await tx.generalChatMessage.create({
         data: {
+          ...(input.context ? {context:input.context as unknown as Prisma.InputJsonValue} : {}),
           ...(input.research ? {research:input.research as unknown as Prisma.InputJsonValue} : {}),
           sessionId: input.sessionId,
           role: input.role,
@@ -64,9 +78,8 @@ export class PrismaChatRepository implements ChatRepository {
           ...resourceOwnership(),actorScope:privateActorScope(), documentVersionId, sessionId: input.sessionId, messageId: message.id, role: 'ATTACHMENT',
         })) })
       }
-      // The first thing the user said names the conversation; later messages never
-      // rename it, so the list stays stable as the user reads it.
-      const title = session.title ?? (input.role === 'USER' ? firstLine(input.content, TITLE_LENGTH) : null)
+      // The first message reserves the title; a separate AI call fills it in.
+      const title = session.title ?? (input.role === 'USER' ? PENDING_CHAT_TITLE : null)
       await tx.chatSession.update({
         where: { id: input.sessionId,...chatAccessWhere() },
         data: { updatedAt: new Date(), ...(title && !session.title ? { title } : {}) },
@@ -76,7 +89,7 @@ export class PrismaChatRepository implements ChatRepository {
   }
 
   async listHistory(): Promise<ChatHistoryItem[]> {
-    // Report threads are internal audit records, not user-created conversations.
+    // General sessions remain private; report audit threads are grouped by accessible report.
     const sessions = await this.prisma.chatSession.findMany({
       where:chatAccessWhere(),
       orderBy: { updatedAt: 'desc' },
@@ -94,7 +107,8 @@ export class PrismaChatRepository implements ChatRepository {
       target: `/chat/${session.id}`,
     }))
 
-    return general
+    const reports = await listReportThreads(this.prisma)
+    return [...general, ...reports].sort((a,b) => b.updatedAt.localeCompare(a.updatedAt))
 
   }
 
@@ -112,6 +126,7 @@ export class PrismaChatRepository implements ChatRepository {
 }
 
 function toMessageView(message: {
+  context?: Prisma.JsonValue | null
   research?: Prisma.JsonValue | null
   id: string
   role: 'USER' | 'ASSISTANT'
@@ -123,6 +138,7 @@ function toMessageView(message: {
   operationRequestIds?: string[]
 }): ChatMessageView {
   return {
+    ...(message.context ? {context:message.context as unknown as import('../application/create-chat-report').ChatContext} : {}),
     ...(message.research ? {research:message.research as unknown as WebResearch} : {}),
     id: message.id,
     role: message.role,

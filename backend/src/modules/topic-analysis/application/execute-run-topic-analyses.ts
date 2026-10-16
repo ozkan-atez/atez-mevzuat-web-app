@@ -1,3 +1,5 @@
+import { produceReportDocument } from './produce-report-document'
+import type { AiModelClient } from '../../ai/application/ai-model-client'
 import { AiProviderError } from '../../ai/domain/ai-errors'
 import type { AnalysisResult } from '../domain/analysis-schemas'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
@@ -30,6 +32,8 @@ export interface TopicPublicationRepository {
 }
 
 interface Dependencies {
+  aiModel?: AiModelClient
+  model?: string
   repository: TopicPublicationRepository
   objectStore: TopicObjectStore
   concurrency: number
@@ -143,20 +147,20 @@ export async function publishTopicAnalysis(
   context: RunReportContext,
   output: TopicAnalysisOutput,
   sequence: number,
-  dependencies: { repository: TopicPublicationRepository; objectStore: TopicObjectStore },
+  dependencies: { repository: TopicPublicationRepository; objectStore: TopicObjectStore; aiModel?: AiModelClient; model?: string },
 ): Promise<StoredTopicReport> {
   const topicId = output.analysis.topicId
   await dependencies.repository.markTopicRendering(topicId)
-  const spec = applyAutomationTemplate(buildReportSpec(output.analysis, { sequence,...(context.sourceOrigin?{sourceOrigin:context.sourceOrigin}:{}) }), context.workspaceConfig)
+  const base=buildReportSpec(output.analysis, { sequence,...(context.sourceOrigin?{sourceOrigin:context.sourceOrigin}:{}) })
+  const {spec,html}=await produceReportDocument({base,workspaceConfig:context.workspaceConfig,evidence:output.analysis,sources:output.analysis.evidence.map(e=>{const source=[...output.analysis.officialSources,...output.analysis.supportingSources].find(s=>s.evidenceIds.includes(e.id));return {id:e.id,label:source?.label ?? e.locator,url:source?.url ?? output.analysis.document.sourceUrl,excerpt:e.excerpt ?? ''}}),aiModel:dependencies.aiModel,model:dependencies.model})
   const version = await dependencies.repository.nextReportVersion(context.runId, topicId)
   const revision = `r${String(version).padStart(2, '0')}`
   const basename = `${String(sequence).padStart(2, '0')}-${topicId}.html`
   const root = `runs/${context.targetDate.replaceAll('-', '/')}/${context.runId}/topics/${topicId}/reports/${revision}`
   const specObjectKey = `${root}/report-spec.json`
   const htmlObjectKey = `${root}/report.html`
-  const html = await renderReportHtml(spec)
   await dependencies.repository.markTopicValidating(topicId)
-  validateReportHtml(html, { customized: Boolean(spec.customization && (spec.customization.customHtml || spec.customization.sections.length || Object.keys(spec.customization.headings).length || spec.customization.order.length)), card: spec.card, topicId, basename })
+  validateReportHtml(html, { structuredTemplate: Boolean(spec.customization?.templateReport), customized: Boolean(spec.customization && (spec.customization.customHtml || spec.customization.sections.length || Object.keys(spec.customization.headings).length || spec.customization.order.length)), card: spec.card, topicId, basename })
   await dependencies.objectStore.putRunFile(specObjectKey, Buffer.from(JSON.stringify(spec)), 'application/json')
   await dependencies.objectStore.putRunFile(htmlObjectKey, Buffer.from(html), 'text/html; charset=utf-8')
   return dependencies.repository.createReportRevision({

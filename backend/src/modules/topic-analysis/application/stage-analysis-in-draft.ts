@@ -1,13 +1,19 @@
+import type { AiModelClient } from '../../ai/application/ai-model-client'
+import type { AnalysisResult } from '../domain/analysis-schemas'
+import { reportFromTemplate } from '../../workspace/template-report'
 import { diffReportSpecs } from '../domain/report-patch'
 import { ReportSpecSchema, type ReportSpec } from '../domain/report-spec-schemas'
 import type { ReportDraftRepository, TopicObjectStore } from './ports'
 
 interface Dependencies {
+  aiModel?: AiModelClient
+  model?: string
   repository: ReportDraftRepository
   objectStore: Pick<TopicObjectStore, 'getContent'>
 }
 
 export interface StageAnalysisInput {
+  analysis?: AnalysisResult
   topicId: string
   /** The report spec the analysis revision produced. */
   spec: ReportSpec
@@ -45,7 +51,13 @@ export async function stageAnalysisInDraft(
     : ReportSpecSchema.parse(JSON.parse((await dependencies.objectStore.getContent(base.specObjectKey)).toString('utf8')))
 
   // Analysis revisions retain the user's layout, source evidence and custom sections.
-  const target=ReportSpecSchema.parse({...input.spec,...(input.preserveCustomization!==false?{customization:current.customization}:{})})
+  let customization=current.customization
+  if(customization?.templateReport && input.analysis && input.preserveCustomization!==false) {
+    const analysis=input.analysis
+    const generated=await reportFromTemplate({definition:customization.templateReport.definition,revision:customization.templateReport.revision},analysis,analysis.evidence.map(e=>{const source=[...analysis.officialSources,...analysis.supportingSources].find(s=>s.evidenceIds.includes(e.id));return{id:e.id,label:source?.label ?? e.locator,url:source?.url ?? analysis.document.sourceUrl,excerpt:e.excerpt ?? ''}}),dependencies.aiModel,dependencies.model)
+    customization={...customization,customHtml:null,templateReport:generated!.report}
+  }
+  const target=ReportSpecSchema.parse({...input.spec,...(input.preserveCustomization!==false?{customization}:{})})
   const baseline=input.previousSpec?ReportSpecSchema.parse({...input.previousSpec,...(input.preserveCustomization!==false?{customization:current.customization}:{})}):current
   const revisedSpec=input.previousSpec && baseline.card===target.card?mergeChangedFields(current,baseline,target):target
   const differences = diffReportSpecs(current, revisedSpec)

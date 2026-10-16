@@ -6,6 +6,7 @@ export const customerGroupCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).nullish(),
   emails: emailList.min(1),
+  recipientNames: z.record(z.string().trim().email(), z.string().trim().max(120)).optional(),
   isActive: z.boolean().default(true),
 }).strict()
 

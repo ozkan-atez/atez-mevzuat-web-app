@@ -8,26 +8,17 @@ import { listDocuments, uploadDocument } from '../documents/api'
 vi.mock('../documents/api',()=>({listDocuments:vi.fn(),uploadDocument:vi.fn()}))
 const document={id:'archive1',title:'Arşiv belgesi',origin:'SOURCE',publishedOn:null,latestVersion:{id:'version1',mimeType:'text/plain',extractionStatus:'READY',originalFilename:null,createdAt:''},versions:[]}
 function setup(){const send=vi.fn();render(<ConfigProvider theme={{token:{motion:false}}}><ConversationComposer isSending={false} onSend={send}/></ConfigProvider>);return send}
-beforeEach(()=>{vi.resetAllMocks();vi.mocked(listDocuments).mockResolvedValue({documents:[document],total:1})})
-afterEach(cleanup)
+beforeEach(()=>{vi.resetAllMocks();vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({sources:[{id:'source-1',title:'Resmî kaynak',url:'https://example.com',readable:true}],templates:[{id:'template-1',name:'Yönetici Özeti'}]}))));vi.mocked(listDocuments).mockResolvedValue({documents:[document],total:1})})
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 describe('composer inline attachment menu',()=>{
-  it('puts the selected tool beside plus and switches exclusively to browser research',async()=>{
+  it('offers local sources and archives without public research modes', async () => {
     const send=setup()
     await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
-    await userEvent.click(screen.getByRole('button',{name:'Web’de ara'}))
-    expect(screen.getByText('Web’de ara').closest('.atez-chat-composer-tools')).not.toBeNull()
-    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
-    await userEvent.click(screen.getByRole('button',{name:'Tarayıcı ajanı'}))
-    expect(screen.getByText('Tarayıcı ajanı').closest('.atez-chat-composer-tools')).not.toBeNull()
-    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Sayfayı incele{Enter}')
-    expect(send).toHaveBeenCalledWith('Sayfayı incele',[],{browserAgent:true})
-  })
-  it('sends the selected Web search mode with the message',async()=>{
-    const send=setup()
-    await userEvent.click(screen.getByRole('button',{name:'Belge ekle'}))
-    await userEvent.click(screen.getByRole('button',{name:'Web’de ara'}))
-    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Güncel duyuruları bul{Enter}')
-    expect(send).toHaveBeenCalledWith('Güncel duyuruları bul',[],{webSearch:true})
+    expect(screen.queryByRole('button',{name:'Web’de ara'})).not.toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'Tarayıcı ajanı'})).not.toBeInTheDocument()
+    expect(await screen.findByRole('checkbox',{name:'Resmî kaynak'})).toBeInTheDocument()
+    await userEvent.type(screen.getByRole('textbox',{name:'Mesaj'}),'Otomasyon kayıtlarını özetle{Enter}')
+    expect(send).toHaveBeenCalledWith('Otomasyon kayıtlarını özetle',[])
   })
   it('selects and removes an archive document inside the plus menu without a dialog',async()=>{
     const send=setup()
@@ -100,3 +91,17 @@ describe('composer inline attachment menu',()=>{
     expect(uploadDocument).not.toHaveBeenCalled()
   })
 })
+
+ it('sends selected sources and template, keeps them for follow-up, and prevents public search', async () => {
+    const send = setup()
+    await userEvent.click(screen.getByRole('button', {name: 'Belge ekle'}))
+    await userEvent.click(await screen.findByRole('checkbox', {name: 'Resmî kaynak'}))
+    expect(screen.queryByRole('button', {name: 'Web’de ara'})).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('combobox', {name: 'Rapor şablonu'}))
+    await userEvent.click(await screen.findByText('Yönetici Özeti'))
+    await userEvent.click(screen.getByRole('textbox', {name: 'Mesaj'}))
+    await userEvent.type(screen.getByRole('textbox', {name: 'Mesaj'}), 'Özetle{Enter}')
+    expect(send).toHaveBeenLastCalledWith('Özetle', [], {sourceIds: ['source-1'], templateId: 'template-1'})
+    await userEvent.type(screen.getByRole('textbox', {name: 'Mesaj'}), 'Detaylandır{Enter}')
+    expect(send).toHaveBeenLastCalledWith('Detaylandır', [], {sourceIds: ['source-1'], templateId: 'template-1'})
+  })

@@ -1,0 +1,15 @@
+# Add this override when supplying a service-account JSON to Docker.
+services:
+  backend:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/vertex_credentials
+    secrets:
+      - vertex_credentials
+  worker:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/vertex_credentials
+    secrets:
+      - vertex_credentials
+secrets:
+  vertex_credentials:
+    file: ${GOOGLE_APPLICATION_CREDENTIALS:?Set the host path to the service-account JSON}

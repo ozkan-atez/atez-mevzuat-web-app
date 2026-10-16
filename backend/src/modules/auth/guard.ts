@@ -1,5 +1,5 @@
 import type {FastifyInstance} from 'fastify'
-import {actorContext,type ActorContext} from '../../platform/actor-context'
+import {actorContext,hasPermission,type ActorContext} from '../../platform/actor-context'
 import {AuthRuntime,type AuthRequestContext} from './runtime'
 import {publicAuthRoutes,requiredPermission} from './route-policy'
 import {AuthError,assertCsrf} from './security'
@@ -25,13 +25,13 @@ export async function installAuth(app:FastifyInstance,options:{runtime:AuthRunti
    const session=await runtime.authenticate(request.headers.cookie)
    const actor=options.testActor ?? session.actor
    const permission=requiredPermission(method,route)
-   if(permission===undefined)throw new AuthError(403,'Bu uç için erişim politikası tanımlanmamış.','ROUTE_FORBIDDEN')
-   if(permission && !actor.permissions.includes(permission))throw new AuthError(403,'Bu işlem için yetkiniz bulunmuyor.','PERMISSION_DENIED')
+   if(permission===undefined && actor.role!=='ADMIN')throw new AuthError(403,'Bu uç için erişim politikası tanımlanmamış.','ROUTE_FORBIDDEN')
+   if(permission && !hasPermission(actor,permission))throw new AuthError(403,'Bu işlem için yetkiniz bulunmuyor.','PERMISSION_DENIED')
    if(!['GET','HEAD','OPTIONS'].includes(method))assertCsrf(request.headers.origin,request.headers['x-csrf-token'],session.session.csrfToken,runtime.config.publicOrigin)
    request.authContext={kind:'authenticated',actor,session}
    request.assertSessionActive=async()=>{
     const active=await runtime.authenticate(request.headers.cookie,false,{touch:false})
-    if(permission&&!active.actor.permissions.includes(permission))throw new AuthError(403,'Bu işlem için yetkiniz artık bulunmuyor.','PERMISSION_DENIED')
+    if((permission===undefined && active.actor.role!=='ADMIN') || (permission && !hasPermission(active.actor,permission)))throw new AuthError(403,'Bu işlem için yetkiniz artık bulunmuyor.','PERMISSION_DENIED')
     actor.role=active.actor.role;actor.permissions=active.actor.permissions
    }
    actorContext.run(actor,done)

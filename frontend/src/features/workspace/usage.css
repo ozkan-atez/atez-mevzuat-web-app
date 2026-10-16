@@ -1,0 +1,112 @@
+.atez-usage-filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.atez-usage-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  min-width: 150px;
+}
+.atez-usage-filters .ant-select {
+  width: 100%;
+  min-width: 180px;
+}
+.atez-usage-search {
+  flex: 1;
+}
+.atez-usage-secondary {
+  display: block;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.atez-usage-title.ant-btn {
+  height: auto;
+  padding: 0;
+  white-space: normal;
+  text-align: left;
+  justify-content: start;
+}
+.atez-usage-title.ant-btn > span {
+  white-space: normal;
+}
+.atez-usage-notice {
+  margin-bottom: 20px;
+}
+.atez-usage-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  padding: 12px;
+}
+.atez-usage-page .ant-table-cell {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 700px) {
+  .atez-usage-filters label {
+    flex: 1;
+    min-width: 140px;
+  }
+  .atez-usage-filters .ant-select {
+    min-width: 140px;
+  }
+  .atez-usage-page .ant-card-head {
+    flex-wrap: wrap;
+  }
+  .atez-usage-page .ant-card-extra {
+    font-size: 11px;
+  }
+}
+@media (max-width: 700px) {
+  .atez-usage-page .ant-card-head-wrapper {
+    align-items: start;
+    gap: 6px;
+    flex-direction: column;
+  }
+  .atez-usage-page .ant-card-head {
+    padding-block: 12px;
+  }
+  .atez-usage-page .ant-card-head-title {
+    white-space: normal;
+  }
+}
+
+.usage-summary .ant-card {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--atez-accent) 9%, var(--atez-surface)),
+    var(--atez-surface)
+  );
+  border-color: color-mix(in srgb, var(--atez-accent) 20%, var(--atez-border));
+  border-radius: 16px;
+}
+.usage-summary .atez-metric-value {
+  font-size: 42px;
+  font-weight: 500;
+  letter-spacing: -1.5px;
+  margin: 14px 0;
+}
+.atez-usage-page .atez-demo-heading {
+  align-items: center;
+}
+.atez-usage-page .ant-progress {
+  margin: 0;
+}
+.usage-footnote {
+  font-size: 12px;
+  margin-top: 18px !important;
+}
+.atez-usage-filters {
+  padding: 16px;
+  border: 1px solid var(--atez-border);
+  border-radius: 12px;
+  background: var(--atez-surface);
+}

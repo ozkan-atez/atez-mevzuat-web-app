@@ -1,4 +1,5 @@
-import { GeminiBrowserResearch } from './modules/chat/infrastructure/gemini-browser-research'
+import { backgroundUsageModel } from './modules/usage/background-usage'
+import { PrismaUsageRecorder } from './modules/usage/prisma-usage-recorder'
 import { GeminiAiModelClient } from './modules/ai/infrastructure/gemini-ai-model-client'
 import { operationQueueName } from './platform/rabbitmq'
 import { rabbitQueue } from './platform/rabbitmq'
@@ -8,7 +9,8 @@ import { prisma } from './platform/database'
 import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-store'
 import { GotenbergPdfRenderer } from './modules/delivery/infrastructure/gotenberg-pdf-renderer'
 import { GraphMailSender } from './modules/delivery/infrastructure/graph-mail-sender'
-import { GoogleGenAI } from '@google/genai'
+import type { GoogleGenAI } from '@google/genai'
+import { createGoogleAi } from './config/google-ai'
 import { GeminiChatModelClient, UnavailableChatModelClient, type GeminiChatChunk } from './modules/chat/infrastructure/gemini-chat-model-client'
 import type { ChatModelClient } from './modules/chat/application/chat-model-client'
 import { tariffCredentialsFromEnv } from './modules/managed-sources/tariff-auth'
@@ -16,19 +18,19 @@ import { SingleWindowTariffLookup } from './modules/tariff/tariff-lookup'
 
 async function start() {
   const env = loadEnv()
+  const ai = createGoogleAi()
   const objectStore = new S3ObjectStore(env.s3)
   const tariffCredentials = tariffCredentialsFromEnv()
   const app = await buildApp({
     objectStore,
     documentStore: objectStore,
     timezone: env.timezone,
-    chatModel: createChatModel(env.gemini.apiKey, env.gemini.timeoutMs),
+    chatModel: createChatModel(ai, env.gemini.timeoutMs),
     chatModelName: env.gemini.model,
-    ...(env.gemini.apiKey?{browserResearch:new GeminiBrowserResearch(new GoogleGenAI({apiKey:env.gemini.apiKey}),process.env.GEMINI_BROWSER_MODEL ?? env.gemini.model)}:{}),
-    ...(env.gemini.apiKey ? {revisionModel: new GeminiAiModelClient({generateContent: async request => {
-      const response = await new GoogleGenAI({apiKey:env.gemini.apiKey!}).models.generateContent(request)
+    ...(ai ? {revisionModel: backgroundUsageModel(new GeminiAiModelClient({generateContent: async request => {
+      const response = await ai.models.generateContent(request)
       return {...(response.text ? {text:response.text} : {}),...(response.responseId ? {responseId:response.responseId} : {}),...(response.usageMetadata ? {usageMetadata:response.usageMetadata} : {})}
-    }}, {timeoutMs:env.gemini.timeoutMs})} : {}),
+    }}, {timeoutMs:env.gemini.timeoutMs}), new PrismaUsageRecorder(prisma), {conversationType:'TEMPLATE', mode:'TEMPLATE', usageLabel:'Şablon oluşturma / düzenleme'})} : {}),
     ...(tariffCredentials ? { tariffLookup: new SingleWindowTariffLookup(tariffCredentials) } : {}),
     pdfRenderer: new GotenbergPdfRenderer({ url: env.gotenberg.url, timeoutMs: env.gotenberg.timeoutMs }),
     mailSender: new GraphMailSender(env.graph),
@@ -53,9 +55,8 @@ async function start() {
   }
 }
 
-function createChatModel(apiKey: string | undefined, timeoutMs: number): ChatModelClient {
-  if (!apiKey) return new UnavailableChatModelClient('Gemini API anahtarı yapılandırılmamış.')
-  const client = new GoogleGenAI({ apiKey })
+function createChatModel(client: GoogleGenAI | undefined, timeoutMs: number): ChatModelClient {
+  if (!client) return new UnavailableChatModelClient('AI bağlantısı yapılandırılmamış.')
   return new GeminiChatModelClient({
     async generateContentStream(request) {
       const stream = await client.models.generateContentStream(request as never)

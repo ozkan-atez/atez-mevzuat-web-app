@@ -35,7 +35,7 @@ describe('executeTopicRevision', () => {
   })
   afterAll(() => prisma.$disconnect())
 
-  it('stages the revised analysis in the draft instead of publishing a report revision', async () => {
+  it('stores the revised analysis without changing the report or draft', async () => {
     const object = await prisma.storedObject.create({ data: { sha256: 'a'.repeat(64), bucket: 'test', objectKey: 'objects/current.html', mediaType: 'text/html', byteSize: 20n } })
     const run = await prisma.scanRun.create({ data: {
       requestKey: crypto.randomUUID(), targetDate: new Date('2026-09-11T00:00:00.000Z'), indexSourceUrl: 'https://www.resmigazete.gov.tr/11.09.2026', indexObjectKey: 'index.html', indexSha256: 'b'.repeat(64),
@@ -69,12 +69,11 @@ describe('executeTopicRevision', () => {
     await executeTopicRevision({ topicId: topic.id, messageId: request.messageId }, { repository, objectStore: store, aiModel: ai, model: 'gemini-3.7-flash', maxContextBytes: 1_000_000, draftRepository })
 
     expect(await prisma.analysisRevision.count({ where: { topicId: topic.id } })).toBe(2)
-    // No revision without the user's approval: the result waits in the draft.
+    // Analysis and report editing are independent user requests.
     expect(await prisma.reportRevision.count({ where: { report: { topicId: topic.id } } })).toBe(1)
     expect(aiCalls).toBe(1)
     const draft = await draftRepository.getOpenDraft(topic.id)
-    expect(draft?.edits.length).toBeGreaterThan(0)
-    expect(draft?.analysisRevisionId).not.toBeNull()
+    expect(draft).toBeNull()
     const detail = await repository.getTopicDetail(topic.id)
     expect(detail?.thread.messages.at(-1)).toMatchObject({ role: 'ASSISTANT', kind: 'REVISION_RESULT' })
     expect(detail?.thread.messages.filter((message: { kind: string }) => message.kind === 'REVISION_RESULT')).toHaveLength(1)

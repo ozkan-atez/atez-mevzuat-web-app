@@ -1,3 +1,10 @@
+import { extractDocumentVersion } from './modules/documents/application/extract-document'
+import { getActorContext as chatActor, hasPermission as chatPermission, privateActorScope as chatScope } from './platform/actor-context'
+import { ReportAnalysisService } from './modules/operations/report-analysis-service'
+import { PrismaChatReportCreator } from './modules/chat/infrastructure/prisma-chat-report-creator'
+import { connectorRoutes } from './modules/managed-sources/connector.routes'
+import { templateAiRoutes } from './modules/workspace/template-ai.routes'
+import { PrismaUsageRecorder } from './modules/usage/prisma-usage-recorder'
 import type { BrowserResearch } from './modules/chat/application/browser-research'
 import type { AiModelClient } from './modules/ai/application/ai-model-client'
 import { StandaloneReportsService, standaloneReportRoutes } from './modules/operations/standalone-reports'
@@ -57,6 +64,7 @@ interface BuildAppOptions {
   mailSenderIdentity?: { address: string | undefined; name: string }
   timezone?: string
   chatRepository?: ChatRepository
+  usageRecorder?: import('./modules/usage/measurement').UsageRecorder
   browserResearch?:BrowserResearch
   chatModel?: ChatModelClient
   chatModelName?: string
@@ -125,6 +133,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const chatModel = options.chatModel ?? new UnavailableChatModelClient('Gemini API anahtarı yapılandırılmamış.')
   app.register(chatRoutes, {
     prefix: '/api/v1/chat',
+    ...(options.documentStore && options.revisionModel ? {prepareDocument:async (versionId:string)=>{
+      const actor=chatActor()
+      if(actor && !chatPermission(actor,'analysis.run'))throw new Error('Belge işleme yetkisi gerekli.')
+      await extractDocumentVersion({prisma,objectStore:options.documentStore!,aiModel:options.revisionModel!,model:options.chatModelName??'gemini-3.7-flash'},versionId,chatScope())
+    }} : {}),
+    ...(modularOperationsEnabled && options.documentStore?.putRunFile && options.revisionModel ? {reportCreator:new PrismaChatReportCreator(prisma,{getContent:key=>options.documentStore!.getContent(key),putRunFile:(key,body,type)=>options.documentStore!.putRunFile!(key,body,type)},options.revisionModel,options.chatModelName??'gemini-3.7-flash')}:{}),
+    ...((options.usageRecorder || !options.chatRepository) ? {usageRecorder: options.usageRecorder ?? new PrismaUsageRecorder(prisma)} : {}),
     repository: options.chatRepository ?? new PrismaChatRepository(prisma),
     model: chatModel,
     ...(options.browserResearch?{browserResearch:options.browserResearch}:{}),
@@ -152,6 +167,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   })
   app.register(topicAnalysisRoutes, {
     prefix: '/api/v1/topics',
+    ...(options.objectStore ? {reportAnalysis:new ReportAnalysisService(prisma,options.objectStore,options.revisionModel,options.chatModelName)} : {}),
+    ...((options.usageRecorder || !options.topicRepository) ? {usageRecorder: options.usageRecorder ?? new PrismaUsageRecorder(prisma)} : {}),
     ...(options.revisionModel ? { revisionModel: options.revisionModel } : {}),
     ...(options.chatModelName ? { revisionModelName: options.chatModelName } : {}),
     repository: topicRepository,
@@ -178,6 +195,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.register(sourceProfileRoutes, { prefix: '/api/v1/source-profiles', prisma })
   app.register(workspaceRoutes, { prisma, modularOperationsEnabled })
+  app.register(templateAiRoutes, { prisma, ...(options.revisionModel ? {aiModel:options.revisionModel} : {}), modelName:options.chatModelName ?? 'gemini-3.7-flash' })
+  app.register(connectorRoutes, { prefix: '/api/v1/connectors', prisma })
   app.register(managedSourceRoutes, { prefix: '/api/v1/managed-sources', prisma })
   app.register(sourceDiscoveryRoutes, { prefix: '/api/v1/source-sites', prisma, model: chatModel, modelName: options.chatModelName ?? 'gemini-3.7-flash' })
   app.register(sourceScanRunRoutes, { prefix: '/api/v1/source-scan-runs', prisma, ...(operations ? { operations } : {}), tariffCredentials: tariffCredentialsFromEnv(), ...(options.objectStore ? { objectStore: options.objectStore } : {}) })

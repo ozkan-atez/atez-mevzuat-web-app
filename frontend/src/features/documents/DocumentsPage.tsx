@@ -1,104 +1,99 @@
-import { Can } from '../auth/Can'
-import { useCan } from '../auth/AuthProvider'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Empty, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd'
-import { ExportOutlined, FileTextOutlined, LinkOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
-import { getDocumentContent, importDocument, documentStatusLabel, listDocuments, uploadDocument, type ArchiveDocument } from './api'
-import { AnalysisInputs, resolveDocumentRoles, type DocumentRole } from './AnalysisInputs'
-import { AttachmentList } from './AttachmentList'
-import { OperationModeSelect, type OperationMode } from '../operations/OperationModeSelect'
-import { startOperation, type OperationInput, type OperationRequest } from '../operations/api'
-import { OperationTaskCard } from '../operations/OperationTaskCard'
+import { Alert, Button, Drawer, Empty, Input, Modal, Pagination, Select, Spin, Typography } from 'antd'
+import { DownloadOutlined, ExportOutlined, FilterOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons'
+import { Can } from '../auth/Can'
+import { listDocuments, uploadDocument, type ArchiveDocument } from './api'
 import './documents.css'
-function documentSourceUrl(value: string | null | undefined): string | null {
-  if (!value) return null
-  try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) ? url.href : null } catch { return null }
-}
 
+function sourceUrl(value?: string | null) {
+  try { const url = new URL(value ?? ''); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : null } catch { return null }
+}
+function dateLabel(value?: string | null) {
+  return value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' }) : 'Belirtilmemiş'
+}
+function format(doc: ArchiveDocument) {
+  const filename=doc.latestVersion?.originalFilename || (sourceUrl(doc.canonicalUrl) ? new URL(doc.canonicalUrl!).pathname : '')
+  const extension=filename.match(/\.(pdf|html?|docx?|xlsx?|csv|txt|png|jpe?g|gif|webp|zip)$/i)?.[1]
+  if(extension)return extension.toUpperCase()
+  const mime = doc.latestVersion?.mimeType ?? ''
+  return ({ 'application/pdf': 'PDF', 'text/html': 'HTML', 'text/plain': 'TXT', 'text/csv': 'CSV', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX' } as Record<string,string>)[mime] ?? (mime.startsWith('image/') ? mime.slice(6).toUpperCase() : 'Belge')
+}
+function originLabel(doc: ArchiveDocument) { if(doc.source) return doc.source.name || (sourceUrl(doc.source.baseUrl) ? new URL(doc.source.baseUrl).hostname : doc.source.key); const url=sourceUrl(doc.canonicalUrl); if(url)return new URL(url).hostname.replace(/^www\./,''); return doc.origin === 'SOURCE' ? 'Web kaynağı' : doc.origin === 'USER_TEXT' ? 'Eklenen metin' : 'Yüklenen belge' }
 export function DocumentsPage() {
-  const canAnalyze=useCan('analysis.run')
-  const [documents, setDocuments] = useState<ArchiveDocument[]>([])
-  const [page,setPage] = useState(1)
-  const [total,setTotal] = useState(0)
-  const [query,setQuery] = useState('')
-  const [from,setFrom] = useState('')
-  const [to,setTo] = useState('')
-  const [knownTitles,setKnownTitles] = useState<Record<string,string>>({})
-  const [selected, setSelected] = useState<string[]>([])
-  const [mode, setMode] = useState<OperationMode>('REUSE_ONLY')
-  const [operation, setOperation] = useState<OperationInput['operation']>('EXTRACT')
-  const [code, setCode] = useState('')
-  const [date, setDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()))
-  const [previousDate, setPreviousDate] = useState('')
-  const [origin, setOrigin] = useState('')
-  const [instruction, setInstruction] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [roles, setRoles] = useState<Record<string,DocumentRole>>({})
-  const [evidenceTaskIds,setEvidenceTaskIds] = useState<string[]>([])
-  const [completedOperations,setCompletedOperations] = useState<OperationRequest[]>([])
-  const [requestId, setRequestId] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{ title: string; text: string } | null>(null)
-  const [textOpen, setTextOpen] = useState(false)
-  const [title, setTitle] = useState('')
-  const [text, setText] = useState('')
-  const [importKind, setImportKind] = useState<'TEXT' | 'URL'>('TEXT')
-  const file = useRef<HTMLInputElement>(null)
-  const refresh = async () => { setLoading(true); try { const result=await listDocuments(query,{page,limit:30,from,to}); setDocuments(result.documents); setTotal(result.total); setKnownTitles(current=>({...current,...Object.fromEntries(result.documents.filter(doc=>doc.latestVersion).map(doc=>[doc.latestVersion!.id,doc.title]))})); setError(null) } catch (e) { setError((e as Error).message) } finally { setLoading(false) } }
-  useEffect(() => { void refresh() }, [page,query,from,to])
-  const execute = async (work: () => Promise<unknown>) => { setLoading(true); setError(null); try { await work() } catch (e) { setError((e as Error).message) } finally { setLoading(false) } }
-  const sourceLabel = (doc: ArchiveDocument) => doc.origin === 'UPLOAD' || doc.origin === 'USER_TEXT' ? 'Kullanıcı belgesi' : 'Kaynak belgesi'
-  const statusTag = (doc: ArchiveDocument) => <Tag color={['READY', 'EXTRACTED'].includes(doc.latestVersion?.extractionStatus ?? '') ? 'success' : doc.latestVersion?.extractionStatus === 'FAILED' ? 'error' : 'warning'}>{documentStatusLabel(doc.latestVersion?.extractionStatus)}</Tag>
-  const openDocument = (doc: ArchiveDocument) => {
-    const sourceUrl = documentSourceUrl(doc.canonicalUrl)
-    return sourceUrl ? <Button size="small" href={sourceUrl} target="_blank" rel="noopener noreferrer" icon={<ExportOutlined aria-hidden />} title={sourceUrl}>Kaynağı aç</Button> : <Button size="small" disabled={!doc.latestVersion} onClick={() => void execute(async () => { const result = await getDocumentContent(doc.latestVersion!.id); setPreview({ title: doc.title, text: result.text ?? 'Bu belge için okunabilir metin henüz yok.' }) })}>Metni incele</Button>
+  const [documents,setDocuments] = useState<ArchiveDocument[]>([])
+  const [page,setPage] = useState(1), [total,setTotal] = useState(0)
+  const [query,setQuery] = useState(''), [search,setSearch] = useState('')
+  const [from,setFrom] = useState(''), [to,setTo] = useState(''), [origin,setOrigin] = useState('')
+  const [sourceId,setSourceId] = useState(''), [sort,setSort] = useState('OLDEST')
+  const [sources,setSources] = useState<Array<{id:string;name:string|null;key:string;baseUrl:string}>>([])
+  const [classification,setClassification] = useState('IN')
+  const [filtersOpen,setFiltersOpen] = useState(false), [reload,setReload] = useState(0)
+  const [loading,setLoading] = useState(true), [loaded,setLoaded] = useState(false), [error,setError] = useState<string|null>(null)
+  const [detail,setDetail] = useState<ArchiveDocument|null>(null)
+  const [uploadOpen,setUploadOpen] = useState(false), [selectedFile,setSelectedFile] = useState<File|null>(null)
+  const [uploading,setUploading] = useState(false), [uploadError,setUploadError] = useState<string|null>(null), [dragging,setDragging] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+  const invalidDates = !!(from && to && from > to)
+  const activeFilters = Number(!!from) + Number(!!to) + Number(!!origin) + Number(!!sourceId)
+  useEffect(() => {
+    if (invalidDates) { setLoading(false); return }
+    let current = true
+    setLoading(true); setError(null)
+    listDocuments(query,{page,limit:30,from,to,origin,classification,sourceId,sort}).then(result => {
+      if (current) { setDocuments(result.documents); setSources(result.sources ?? []); setTotal(result.total); setLoaded(true) }
+    }).catch(e => { if (current) setError((e as Error).message) }).finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  },[query,page,from,to,origin,classification,sourceId,sort,reload,invalidDates])
+  function choose(files: FileList | File[]) {
+    if (files.length !== 1) { setUploadError('Her seferinde bir belge ekleyin.'); return }
+    const file = files[0]!
+    if (!/\.(pdf|docx|xlsx|csv|txt|png|jpe?g|webp)$/i.test(file.name)) { setUploadError('Bu dosya biçimi desteklenmiyor.'); return }
+    if (!file.size || file.size > 20*1024*1024) { setUploadError('Boş olmayan, en fazla 20 MB bir dosya seçin.'); return }
+    setSelectedFile(file); setUploadError(null)
   }
-  return <div className="atez-page-stack atez-documents-page">
-    <div className="atez-page-heading">
-      <div><Typography.Title level={2}>Belgeler</Typography.Title><Typography.Text type="secondary">Belgelerinizi arşivleyin, inceleyin ve seçerek işleyin.</Typography.Text></div>
-      <Space wrap className="atez-document-add-actions">
-        <input hidden ref={file} aria-label="Arşive belge yükle" type="file" onChange={event => { const current = event.target.files?.[0]; if (current) void execute(async () => { await uploadDocument(current); await refresh(); if (file.current) file.current.value = '' }) }} />
-        <Can permission="document.upload"><Button icon={<FileTextOutlined />} onClick={() => { setImportKind('TEXT'); setTextOpen(true) }}>Metin ekle</Button></Can>
-        <Can permission="document.upload"><Button icon={<LinkOutlined />} onClick={() => { setImportKind('URL'); setTextOpen(true) }}>Bağlantıdan ekle</Button></Can>
-        <Can permission="document.upload"><Button type="primary" icon={<UploadOutlined />} loading={loading} onClick={() => file.current?.click()}>Belge yükle</Button></Can>
-      </Space>
-    </div>
-    {error && <Alert type="error" showIcon title={error} />}
-    {canAnalyze && <Card className="atez-surface-card atez-document-operation" title="Seçili belgelerle işlem"><Typography.Paragraph type="secondary">Belge eklemek analiz başlatmaz. Seçili belgeler için işlem adımını belirleyip ayrıca başlatabilirsiniz.</Typography.Paragraph><Space orientation="vertical" style={{ width: '100%' }}><AttachmentList items={selected.map(id => ({ id, title: knownTitles[id] ?? id }))} onRemove={id => setSelected(current => current.filter(item => item !== id))} /><Select aria-label="İşlem adımı" value={operation} onChange={setOperation} options={[{ value: 'EXTRACT', label: 'Belgeden metin çıkar' }, { value: 'ANALYZE', label: 'Belgeleri analiz et' }, { value: 'FILTER', label: 'Belgeleri kapsam için filtrele' }, { value: 'PREVIOUS_SOURCES', label: 'Önceki düzenleme kaynaklarını bul' }, { value: 'TARIFF_LOOKUP', label: 'GTİP tarife sorgula' }]} />{operation === 'PREVIOUS_SOURCES' && <Input type="date" aria-label="Önceki kaynak son tarihi" value={date} onChange={e => setDate(e.target.value)} style={{maxWidth:220}} />}{operation === 'TARIFF_LOOKUP' && <Space wrap><Input aria-label="GTİP kodu" placeholder="GTİP kodu" value={code} onChange={e => setCode(e.target.value)} /><Input type="date" aria-label="Tarife tarihi" value={date} onChange={e => setDate(e.target.value)} /><Input type="date" aria-label="Karşılaştırma tarihi" value={previousDate} onChange={e => setPreviousDate(e.target.value)} /><Input aria-label="Menşe" placeholder="Menşe (isteğe bağlı)" value={origin} onChange={e => setOrigin(e.target.value)} /></Space>}{operation === 'ANALYZE' && <AnalysisInputs documents={selected.map(id=>({id,title:knownTitles[id]??id}))} roles={roles} onRolesChange={setRoles} evidenceTasks={completedOperations.flatMap(request=>request.tasks)} evidenceTaskIds={evidenceTaskIds} onEvidenceChange={setEvidenceTaskIds} />}<OperationModeSelect value={mode} onChange={setMode} /><Input.TextArea aria-label="Analiz isteği" placeholder="Analizde odaklanılacak konu (isteğe bağlı)" value={instruction} onChange={e => setInstruction(e.target.value)} /><Button type="primary" loading={loading} disabled={operation === 'TARIFF_LOOKUP' ? !code.trim() || !date : selected.length === 0} onClick={() => void execute(async () => { const request = await startOperation({ operation, mode, documentVersionIds: operation === 'TARIFF_LOOKUP' ? [] : selected, ...(operation === 'ANALYZE' ? {documentRoles:resolveDocumentRoles(selected.map(id=>({id,title:id})),roles),...(evidenceTaskIds.length?{evidenceTaskIds}:{})} : {}), ...(operation === 'PREVIOUS_SOURCES' ? {date} : {}), ...(operation === 'TARIFF_LOOKUP' ? { code: code.trim(), date, ...(previousDate ? { previousDate } : {}), ...(origin.trim() ? { origin: origin.trim() } : {}) } : {}), ...(instruction.trim() ? { instruction: instruction.trim() } : {}) }); setRequestId(request.id) })}>İşlemi başlat</Button></Space></Card>}
-    {requestId && <OperationTaskCard requestId={requestId} onUpdated={updated=>setCompletedOperations(current=>[...current.filter(request=>request.id!==updated.id),updated])} />}
-    <Card className="atez-surface-card atez-document-archive">
-      <div className="atez-document-archive-heading">
-        <div><Typography.Title level={4}>Belge arşivi</Typography.Title><Typography.Text type="secondary">{total} belge{query || from || to ? ' · Filtrelenmiş sonuçlar' : ''}</Typography.Text></div>
-        <Button icon={<ReloadOutlined />} onClick={() => void refresh()} loading={loading}>Yenile</Button>
-      </div>
-      <div className="atez-document-filters">
-        <label className="atez-document-search"><span>Belge ara</span><Input.Search aria-label="Belge ara" placeholder="Başlık veya anahtar kelime" allowClear onSearch={value => { setQuery(value); setPage(1) }} /></label>
-        <label><span>Yayın başlangıç tarihi</span><Input type="date" aria-label="Belge yayın başlangıç tarihi" value={from} onChange={event => { setFrom(event.target.value); setPage(1) }} /></label>
-        <label><span>Yayın bitiş tarihi</span><Input type="date" aria-label="Belge yayın bitiş tarihi" value={to} onChange={event => { setTo(event.target.value); setPage(1) }} /></label>
-      </div>
-      <div className="atez-document-selection-bar">
-        <Typography.Text type="secondary">{selected.length ? `${selected.length} belge seçildi` : 'İşlem yapmak için listeden belge seçin.'}<span className="atez-document-selection-limit"> · En fazla 10 belge</span></Typography.Text>
-        {selected.length > 0 && <Button type="text" size="small" onClick={() => setSelected([])}>Seçimi temizle</Button>}
-      </div>
-      <Table<ArchiveDocument>
-        rowKey="id"
-        className="atez-document-table"
-        dataSource={documents}
-        loading={loading}
-        tableLayout="fixed"
-        rowClassName={doc => selected.includes(doc.latestVersion?.id ?? '') ? 'atez-document-row-selected' : ''}
-        pagination={{ current: page, pageSize: 30, total, onChange: setPage, showSizeChanger: false, hideOnSinglePage: true, showTotal: count => `${count} belge` }}
-        locale={{ emptyText: <Empty description={query || from || to ? 'Bu filtrelere uygun belge bulunamadı.' : 'Henüz belge yok. Belge yükleyerek arşivinizi oluşturun.'} /> }}
-        columns={[
-          { title: '', key: 'select', width: 44, render: (_value, doc) => <Checkbox aria-label={doc.title} checked={selected.includes(doc.latestVersion?.id ?? '')} disabled={!doc.latestVersion || (selected.length >= 10 && !selected.includes(doc.latestVersion.id))} onChange={event => { const id = doc.latestVersion!.id; setSelected(current => event.target.checked ? [...current, id] : current.filter(value => value !== id)) }} /> },
-          { title: 'Belge', key: 'title', render: (_value, doc) => <div className="atez-document-title"><Typography.Text strong>{doc.title}</Typography.Text><div className="atez-document-mobile-meta"><Typography.Text type="secondary">{sourceLabel(doc)}</Typography.Text>{statusTag(doc)}{openDocument(doc)}</div></div> },
-          { title: 'Tür', key: 'origin', width: 155, responsive: ['lg'], render: (_value, doc) => <Tag>{sourceLabel(doc)}</Tag> },
-          { title: 'Durum', key: 'status', width: 185, responsive: ['md'], render: (_value, doc) => statusTag(doc) },
-          { title: 'İşlemler', key: 'actions', width: 145, align: 'right', responsive: ['md'], render: (_value, doc) => openDocument(doc) },
-        ]}
-      />
-    </Card>
-    <Modal title={preview?.title} open={!!preview} onCancel={() => setPreview(null)} footer={null}><pre style={{ whiteSpace: 'pre-wrap', maxHeight: 480, overflowY: 'auto' }}>{preview?.text}</pre></Modal>
-    <Modal title={importKind === 'TEXT' ? 'Metin belgesi ekle' : 'Bağlantıdan belge ekle'} open={textOpen} onCancel={() => setTextOpen(false)} confirmLoading={loading} okButtonProps={{ disabled: (importKind === 'TEXT' && !title.trim()) || !text.trim() }} okText="Arşive kaydet" cancelText="Vazgeç" onOk={() => void execute(async () => { await importDocument(importKind === 'TEXT' ? { kind: 'TEXT', title, text } : { kind: 'URL', url: text.trim(), ...(title.trim() ? { title: title.trim() } : {}) }); setTextOpen(false); setText(''); setTitle(''); await refresh() })}><Space orientation="vertical" style={{ width: '100%' }}><Input aria-label="Belge başlığı" placeholder="Başlık" value={title} onChange={e => setTitle(e.target.value)} />{importKind === 'TEXT' ? <Input.TextArea aria-label="Belge metni" rows={8} value={text} onChange={e => setText(e.target.value)} /> : <Input aria-label="Belge bağlantısı" placeholder="https://…" value={text} onChange={e => setText(e.target.value)} />}<Typography.Text type="secondary">Belge arşive alınır; analiz ayrıca başlatılır.</Typography.Text></Space></Modal>
+  async function save() {
+    if (!selectedFile) return
+    setUploading(true); setUploadError(null)
+    try { await uploadDocument(selectedFile,true); setUploadOpen(false); setSelectedFile(null); setPage(1); setReload(value=>value+1) }
+    catch(e) { setUploadError((e as Error).message) } finally { setUploading(false) }
+  }
+  const reset = () => { setFrom(''); setTo(''); setOrigin(''); setSourceId(''); setClassification('ALL'); setQuery(''); setSearch(''); setPage(1) }
+  const groups = new Map<string,{label:string;documents:ArchiveDocument[]}>()
+  for(const doc of documents){
+    const day=doc.publishedOn?.slice(0,10) ?? 'undated'
+    const key=`${day}:${doc.source?.id ?? originLabel(doc)}`
+    const group=groups.get(key) ?? {label:`${day==='undated'?'Yayın tarihi belirtilmemiş':dateLabel(doc.publishedOn)} · ${originLabel(doc)}`,documents:[]}
+    group.documents.push(doc);groups.set(key,group)
+  }
+  return <div className="atez-page-stack document-library">
+    <header className="document-library-heading"><div><Typography.Title level={2}>Belgeler</Typography.Title><p>Kaynaklardan gelen ve eklediğiniz belgeler, tek bir arşivde.</p></div><Can permission="document.upload"><Button type="primary" icon={<PlusOutlined aria-hidden />} onClick={()=>{setUploadError(null);setUploadOpen(true)}}>Belge ekle</Button></Can></header>
+    <div className="document-library-toolbar"><Input.Search aria-label="Belge ara" placeholder="Belgelerde ara…" prefix={<SearchOutlined aria-hidden />} value={search} onChange={e=>{setSearch(e.target.value);if(!e.target.value){setQuery('');setPage(1)}}} allowClear onSearch={value=>{setQuery(value.trim());setPage(1)}} /><Select className="document-scope-select" aria-label="Kapsam filtresi" value={classification} onChange={value=>{setClassification(value);setPage(1)}} options={[{value:'IN',label:'IN · Kapsamda'},{value:'ALL',label:'Tüm belgeler'},{value:'OUT',label:'OUT · Kapsam dışı'},{value:'MAYBE',label:'Kontrol gerekli'},{value:'UNREVIEWED',label:'Değerlendirilmemiş'}]} /><Select className="document-sort-select" aria-label="Belge sıralaması" value={sort} onChange={value=>{setSort(value);setPage(1)}} options={[{value:'OLDEST',label:'Tarih · Eski → yeni'},{value:'NEWEST',label:'Tarih · Yeni → eski'}]} /><Button icon={<FilterOutlined aria-hidden />} aria-expanded={filtersOpen} aria-controls="document-filters" onClick={()=>setFiltersOpen(value=>!value)}>Filtreler{activeFilters ? ` · ${activeFilters}` : ''}</Button><Button icon={<ReloadOutlined aria-hidden />} aria-label="Arşivi yenile" loading={loading} onClick={()=>setReload(value=>value+1)} /></div>
+    {filtersOpen && <section id="document-filters" className="document-library-filters" aria-label="Belge filtreleri"><label>Web kaynağı<Select aria-label="Web kaynağı" value={sourceId} onChange={value=>{setSourceId(value);setPage(1)}} options={[{value:'',label:'Tüm web kaynakları'},...sources.map(source=>({value:source.id,label:source.name || source.key}))]} /></label><label>Belge türü<Select aria-label="Belge türü" value={origin} onChange={value=>{setOrigin(value);setPage(1)}} options={[{value:'',label:'Tüm belgeler'},{value:'SOURCE',label:'Web kaynakları'},{value:'UPLOAD',label:'Yüklenen belgeler'},{value:'USER_TEXT',label:'Eklenen metinler'}]} /></label><label>Yayın başlangıcı<Input aria-label="Yayın başlangıcı" type="date" value={from} onChange={e=>{setFrom(e.target.value);setPage(1)}} /></label><label>Yayın bitişi<Input aria-label="Yayın bitişi" type="date" value={to} onChange={e=>{setTo(e.target.value);setPage(1)}} /></label><Button type="text" onClick={reset}>Temizle</Button><small>Yayın tarihi filtreleri, tarihi belirtilmiş belgelerde uygulanır.</small></section>}
+    {invalidDates && <Alert type="warning" title="Başlangıç tarihi bitiş tarihinden sonra olamaz." showIcon />}
+    {error && <Alert type="error" title={error} showIcon action={<Button onClick={()=>setReload(value=>value+1)}>Tekrar dene</Button>} />}
+    <div className="document-library-caption"><span>{loaded ? `${total} belge` : 'Belge arşivi'}{query || activeFilters || classification!=='ALL' ? ' · Filtrelenmiş sonuçlar' : ''}</span>{(query || activeFilters > 0 || classification!=='ALL') && <Button type="link" size="small" onClick={reset}>Tüm belgeleri göster</Button>}</div>
+    <Spin spinning={loading}><section className="document-library-list" aria-label="Belge arşivi" aria-busy={loading}>
+      <div className="document-library-columns"><span>Belge</span><span>Uzantı</span><span>Kapsam</span><span /></div>
+      {!error && !invalidDates && [...groups.entries()].map(([key,group])=><section className="document-library-group" key={key} aria-label={group.label}>
+        <h3>{group.label}<small>{group.documents.length} belge · bu sayfada</small></h3>
+        {group.documents.map(doc=><article className="document-library-row" key={doc.id}>
+          <button className="document-library-identity" onClick={()=>setDetail(doc)}><strong>{doc.title}</strong></button>
+          <span className="document-extension">{format(doc)}</span><span className={`document-classification is-${doc.classification ?? 'UNREVIEWED'}`}>{({IN:'IN',OUT:'OUT',MAYBE:'Kontrol gerekli'} as Record<string,string>)[doc.classification ?? ''] ?? 'Bekliyor'}</span><div className="document-row-actions">{sourceUrl(doc.canonicalUrl) && <Button type="text" size="small" icon={<ExportOutlined aria-hidden />} href={sourceUrl(doc.canonicalUrl)!} target="_blank" rel="noopener noreferrer" aria-label={`${doc.title} kaynağını aç`} title="Kaynağa git" />}<Button type="text" size="small" onClick={()=>setDetail(doc)}>İncele</Button></div>
+        </article>)}
+      </section>)}
+      {loaded && !loading && !error && !invalidDates && !documents.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query || activeFilters || classification!=='ALL' ? 'Bu filtrelere uygun belge bulunamadı. Tüm belgeler görünümüne geçebilirsiniz.' : 'Henüz belge yok. İlk belgenizi ekleyin.'} />}
+    </section></Spin>
+    <Pagination current={page} pageSize={30} total={total} onChange={setPage} showSizeChanger={false} hideOnSinglePage />
+    <Drawer title="Belge ayrıntıları" open={!!detail} onClose={()=>setDetail(null)} size="min(560px, 100vw)" className="document-library-detail">
+      {detail && <div className="document-detail-content"><header className="document-detail-heading"><span className="document-library-format">{format(detail)}</span><h2>{detail.title}</h2></header><dl><dt>Kaynak</dt><dd>{originLabel(detail)}</dd><dt>Yayın tarihi</dt><dd>{dateLabel(detail.publishedOn)}</dd><dt>Arşive eklenme</dt><dd>{dateLabel(detail.latestVersion?.createdAt)}</dd><dt>Dosya adı</dt><dd>{detail.latestVersion?.originalFilename || 'Belirtilmemiş'}</dd><dt>Kayıtlı sürüm</dt><dd>{detail.versions.length || (detail.latestVersion ? 1 : 0)}</dd></dl>
+      <div className="document-library-detail-actions">{sourceUrl(detail.canonicalUrl) && <Button icon={<ExportOutlined aria-hidden />} href={sourceUrl(detail.canonicalUrl)!} target="_blank" rel="noopener noreferrer">Kaynağı aç</Button>}{detail.latestVersion?.hasOriginal && <Button icon={<DownloadOutlined aria-hidden />} href={`/api/v1/document-versions/${encodeURIComponent(detail.latestVersion.id)}/original`}>Özgün dosyayı indir</Button>}</div>
+      <section className="document-library-note"><h3>İçerik ve analiz</h3><p>Bu görünüm belgenin arşiv bilgilerini gösterir. Ayrıntılı analiz için Sohbetler sayfasında bu belgeyi ekleyebilirsiniz.</p><p>Arşiv kaydı, analiz veya kapsam değerlendirmesinin tamamlandığı anlamına gelmez.</p></section></div>}
+    </Drawer>
+    <Modal title="Belge ekle" open={uploadOpen} onCancel={()=>{if(!uploading)setUploadOpen(false)}} closable={!uploading} mask={{closable:!uploading}} keyboard={!uploading} okText="Arşive ekle" cancelText="Vazgeç" confirmLoading={uploading} cancelButtonProps={{disabled:uploading}} okButtonProps={{disabled:!selectedFile}} onOk={()=>void save()}>
+      <p className="document-library-upload-description">Özgün dosyanız arşivlenir. Analiz için daha sonra sohbetinize ekleyebilirsiniz.</p>
+      <input hidden ref={input} type="file" aria-label="Arşive belge yükle" accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp" disabled={uploading} onChange={e=>{if(e.target.files?.length)choose(e.target.files);e.target.value=''}} />
+      <button type="button" disabled={uploading} className={`document-library-drop ${dragging?'is-dragging':''}`} onClick={()=>input.current?.click()} onDragOver={e=>{e.preventDefault();setDragging(true)}} onDragLeave={()=>setDragging(false)} onDrop={e=>{e.preventDefault();setDragging(false);if(!uploading)choose(e.dataTransfer.files)}}><UploadOutlined aria-hidden /><strong>{selectedFile ? selectedFile.name : 'Belgenizi buraya sürükleyin'}</strong><span>{selectedFile ? `${(selectedFile.size/1024/1024).toFixed(2)} MB · Değiştirmek için tıklayın` : 'veya dosya seçmek için tıklayın'}</span><small>PDF, Word, Excel, CSV, metin ve görsel · En fazla 20 MB</small></button>
+      {uploadError && <Alert showIcon type="error" title={uploadError} />}
+    </Modal>
   </div>
 }

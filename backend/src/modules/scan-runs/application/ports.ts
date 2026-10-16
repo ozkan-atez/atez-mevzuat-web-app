@@ -147,6 +147,7 @@ export interface ScanRunDetailDto {
 }
 
 export interface ScanRunSummaryDto {
+  automationId?: string | null
   automationName?: string | null
   scheduleLabel?: string | null
   id: string
@@ -174,6 +175,8 @@ export interface AiJobRecord {
 }
 
 export interface FilterDocumentRecord {
+  requireContentReview?: boolean
+  assets?: Array<{sourceUrl:string;objectKey:string;sha256:string;mediaType:string;byteSize:bigint}>
   id: string
   title: string
   sourceUrl: string

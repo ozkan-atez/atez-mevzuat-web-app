@@ -35,6 +35,11 @@ export function ConversationMessages({ messages, isSending, activity }: Props) {
               <span className="atez-chat-orb atez-chat-message-orb" aria-hidden="true" />
             )}
             <div className="atez-chat-message-body">
+              {(message.authorId !== undefined || message.baseVersion != null || message.reportVersion != null) && <div className="atez-chat-header-subtitle">
+                {isUser ? message.authorName ?? 'Kullanıcı bilgisi kaydedilmemiş' : 'Asistan'} · {new Date(message.createdAt).toLocaleString('tr-TR')}
+                {message.baseVersion != null && ` · r${message.baseVersion} üzerinden`}{message.reportVersion != null && ` → r${message.reportVersion}`}
+                {message.changePaths?.length ? ` · ${message.changePaths.length} alan değişikliği` : ''}
+              </div>}
               {/* The user's own words verbatim; the model's Markdown as React
                   elements, so untrusted output is never injected as HTML. */}
               {isUser ? message.content : renderMarkdown(message.content)}

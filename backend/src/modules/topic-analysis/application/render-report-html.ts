@@ -1,3 +1,4 @@
+import { renderTemplateReport } from '../../workspace/template-renderer'
 import { load } from 'cheerio'
 import { sanitizeReportFragment } from '../domain/sanitize-report-fragment'
 import { readFile } from 'node:fs/promises'
@@ -7,6 +8,7 @@ import { renderPageSkeleton } from '../templates/bulten-v2'
 let logoDataUri: string | undefined
 
 export async function renderReportHtml(spec: ReportSpec): Promise<string> {
+  if(spec.customization?.templateReport && !spec.customization.customHtml) return renderTemplateReport(spec.customization.templateReport,{title:spec.documentTitle,reportId:spec.reportId,date:spec.displayDate,issueNumber:spec.issueNumber,topicId:spec.topicId ?? 'degisiklik-yok'})
   const cardHtml = customizeCard(renderCard(spec), spec)
   return renderPageSkeleton({
     topicId: spec.topicId ?? 'degisiklik-yok',

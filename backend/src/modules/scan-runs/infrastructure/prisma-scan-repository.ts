@@ -1,3 +1,4 @@
+import { backfillDocumentArchive } from '../../documents/application/backfill-document-archive'
 import {getActorContext,privateActorScope,jobInitiatorFields,reportAccessWhere,topicAccessWhere} from '../../../platform/actor-context'
 import {createHash} from 'node:crypto'
 import { Prisma, type PrismaClient } from '@prisma/client'
@@ -193,7 +194,7 @@ export class PrismaScanRepository {
 
   async startStage(runId: string, stage: ScanStage, totalItems: number): Promise<void> {
     await this.prisma.$transaction([
-      this.prisma.scanRun.update({ where: { id: runId }, data: { currentStage: stage, totalItems, completedItems: 0, failedItems: 0 } }),
+      this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'RUNNING', currentStage: stage, totalItems, completedItems: 0, failedItems: 0, errorSummary: null } }),
       this.prisma.stageExecution.upsert({
         where: { scanRunId_stage: { scanRunId: runId, stage } },
         create: { scanRunId: runId, stage, status: 'RUNNING', totalItems, startedAt: new Date() },
@@ -223,6 +224,10 @@ export class PrismaScanRepository {
 
   async saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      const current=await tx.scanRun.findUniqueOrThrow({where:{id:runId},select:{automationId:true,workspaceId:true,createdAt:true}})
+      // Only completed earlier runs of this automation can establish processed publications.
+      const prior=current.automationId ? await tx.collectedDocument.findMany({where:{edition:{publicationDate:new Date(`${targetDate}T00:00:00.000Z`),scanRun:{automationId:current.automationId,workspaceId:current.workspaceId,status:'COMPLETED',id:{not:runId},createdAt:{lt:current.createdAt}}}},select:{sourceUrl:true}}) : []
+      const processed=new Set(prior.map(document=>document.sourceUrl))
       for (const edition of editions) {
         const storedEdition = await tx.gazetteEdition.upsert({
           where: { scanRunId_indexUrl: { scanRunId: runId, indexUrl: edition.indexUrl } },
@@ -238,7 +243,7 @@ export class PrismaScanRepository {
           select: { id: true },
         })
         await tx.collectedDocument.createMany({
-          data: edition.documents.map((document) => ({
+          data: edition.documents.filter(document=>!processed.has(document.sourceUrl)).map((document) => ({
             editionId: storedEdition.id,
             title: document.title,
             documentType: document.documentType ?? null,
@@ -276,6 +281,7 @@ export class PrismaScanRepository {
   async attachDocumentObject(documentId: string, object: StoredBlob): Promise<void> {
     const storedObjectId = await this.upsertObject(object)
     await this.prisma.collectedDocument.update({ where: { id: documentId }, data: { storedObjectId, validationStatus: 'VALID' } })
+    await backfillDocumentArchive(this.prisma,{apply:true,collectedDocumentId:documentId})
   }
 
   async attachAssetObject(assetId: string, object: StoredBlob): Promise<void> {
@@ -465,6 +471,7 @@ export class PrismaScanRepository {
     return runs.map((run) => ({
       id: run.id,
       trigger: run.trigger,
+      automationId: run.automationId,
       automationName: run.workspaceConfig && typeof run.workspaceConfig === 'object' && !Array.isArray(run.workspaceConfig) && typeof run.workspaceConfig.automationName === 'string'
         ? run.workspaceConfig.automationName : run.automationId ? names.get(run.automationId) ?? null : null,
       scheduleLabel: run.scheduleSlot ? findScheduleSlot(run.scheduleSlot)?.label ?? null : null,
@@ -511,10 +518,12 @@ export class PrismaScanRepository {
     const documents = await this.prisma.collectedDocument.findMany({
       where: { edition: { scanRunId: runId } },
       orderBy: [{ edition: { discoveryOrder: 'asc' } }, { publicationOrder: 'asc' }],
-      include: { edition: true, storedObject: true },
+      include: { edition: true, storedObject: true, assets:{include:{storedObject:true}} },
     })
     return documents.map((document) => ({
       id: document.id,
+      requireContentReview:document.edition.type==='EXTERNAL',
+      assets:document.edition.type==='EXTERNAL'?document.assets.filter(a=>a.storedObject&&a.storedObjectId!==document.storedObjectId).map(a=>({sourceUrl:a.sourceUrl,objectKey:a.storedObject!.objectKey,sha256:a.storedObject!.sha256,mediaType:a.storedObject!.mediaType,byteSize:a.storedObject!.byteSize})):[],
       title: document.title,
       sourceUrl: document.sourceUrl,
       publicationOrder: document.publicationOrder,
@@ -957,6 +966,9 @@ export class PrismaScanRepository {
 
   async markPreviousSourceStageAwaitingRetry(runId: string, message: string): Promise<void> {
     const progress = await this.getPreviousSourceProgress(runId)
+    const failures = await this.prisma.previousSourceJob.findMany({ where: { scanRunId: runId, status: 'AWAITING_RETRY' },
+      select: { lastErrorCategory: true, lastErrorMessage: true, document: { select: { title: true } } }, orderBy: { createdAt: 'asc' } })
+    message += ' ' + failures.map(job => `${job.document.title}: ${job.lastErrorCategory ?? 'UNKNOWN'} — ${job.lastErrorMessage ?? 'Neden kaydedilmedi.'}`).join(' | ')
     await this.prisma.$transaction([
       this.prisma.scanRun.update({ where: { id: runId }, data: { status: 'AWAITING_RETRY', currentStage: 'DISCOVERING_PREVIOUS_SOURCES', completedItems: progress.completed, failedItems: progress.awaitingRetry, errorSummary: message } }),
       this.prisma.stageExecution.update({

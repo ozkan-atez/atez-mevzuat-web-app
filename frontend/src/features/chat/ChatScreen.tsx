@@ -1,3 +1,5 @@
+import { ReportConversation } from './ReportConversation'
+import { StandaloneReportCorrection } from '../reports/StandaloneReportCorrection'
 import { ReportCorrectionDrawer } from '../revision/ReportCorrectionDrawer'
 import { Can } from '../auth/Can'
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
@@ -14,7 +16,7 @@ import './chat-workspace.css'
 import { getTopic } from '../analysis/api'
 import { ReportWorkspace } from '../revision/ReportWorkspace'
 
-interface ChatLocationState {
+interface ChatLocationState extends ChatSendOptions {
   browserAgent?:boolean
   webSearch?:boolean
   initialMessage?: string
@@ -25,8 +27,12 @@ export function ChatScreen() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const topicId = searchParams.get('topic')
+  const reportChatId = searchParams.get('report')
+  const [standaloneReport, setStandaloneReport] = useState<string | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
+  const initialSourceIds = (location.state as ChatLocationState | null)?.sourceIds
+  const initialTemplateId = (location.state as ChatLocationState | null)?.templateId
   const initialBrowserAgent=(location.state as ChatLocationState | null)?.browserAgent
   const initialWebSearch = (location.state as ChatLocationState | null)?.webSearch
   const initialDocumentVersionIds = (location.state as ChatLocationState | null)?.documentVersionIds
@@ -37,6 +43,7 @@ export function ChatScreen() {
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  useEffect(() => { setReportOpen(false) }, [reportChatId])
   const [selectedReport, setSelectedReport] = useState<string | null>(null)
   const [reportOptions, setReportOptions] = useState<ChatReportOption[]>([])
   const [reportLoading, setReportLoading] = useState(false)
@@ -51,7 +58,7 @@ export function ChatScreen() {
     setIsHistoryLoading(true)
     setHistoryError(null)
     try {
-      setHistory((await listChatHistory()).filter(item => item.type === 'GENERAL'))
+      setHistory(await listChatHistory())
     } catch (caught: unknown) {
       setHistoryError(caught instanceof Error ? caught.message : 'Sohbet geçmişi alınamadı.')
     } finally {
@@ -60,6 +67,28 @@ export function ChatScreen() {
   }, [])
 
   useEffect(() => { void loadHistory() }, [loadHistory])
+
+  const firstUserMessageId = conversation.messages.find(message=>message.role==='USER')?.id
+  useEffect(() => {
+    if(!sessionId || !firstUserMessageId)return
+    let cancelled=false,loading=false
+    const deadline=Date.now()+25000
+    const refreshTitle=async()=>{
+      if(loading || cancelled)return
+      loading=true
+      try {
+        const next=await listChatHistory()
+        if(cancelled)return
+        setHistory(next)
+        const title=next.find(item=>item.id===sessionId)?.title
+        if(Date.now()>=deadline || title && !['Yeni sohbet','Başlık hazırlanıyor…'].includes(title))clearInterval(timer)
+      }catch { if(Date.now()>=deadline)clearInterval(timer) }
+      finally {loading=false}
+    }
+    const timer=setInterval(()=>{void refreshTitle()},1500)
+    void refreshTitle()
+    return ()=>{cancelled=true;clearInterval(timer)}
+  },[sessionId,firstUserMessageId])
 
   const loadReports = useCallback(async () => {
     setReportLoading(true); setReportError(null)
@@ -103,7 +132,7 @@ export function ChatScreen() {
     creating.current = true
     setHandoffError(null)
     createChatSession()
-      .then((session) => navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage: content.trim(), documentVersionIds,...(options.webSearch?{webSearch:true}:{}),...(options.browserAgent?{browserAgent:true}:{}) }, viewTransition: true }))
+      .then((session) => navigate(`/chat/${session.id}`, { replace: true, state: { initialMessage: content.trim(), documentVersionIds,...options,...(options.webSearch?{webSearch:true}:{}),...(options.browserAgent?{browserAgent:true}:{}) }, viewTransition: true }))
       .catch((caught: unknown) => {
         creating.current = false
         setHandoffError(caught instanceof Error ? caught.message : 'Sohbet başlatılamadı.')
@@ -112,8 +141,8 @@ export function ChatScreen() {
 
   useEffect(() => {
     if (sessionId || !initialMessage) return
-    startConversation(initialMessage, initialDocumentVersionIds,initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})
-  }, [initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, sessionId, startConversation])
+    startConversation(initialMessage, initialDocumentVersionIds,{sourceIds: initialSourceIds, templateId: initialTemplateId, browserAgent: initialBrowserAgent, webSearch: initialWebSearch})
+  }, [initialMessage, initialDocumentVersionIds, initialSourceIds, initialTemplateId, initialWebSearch, initialBrowserAgent, sessionId, startConversation])
 
   // The handed-over message is sent exactly once, and the router state is cleared
   // so a refresh or a back-navigation cannot resend it.
@@ -129,10 +158,10 @@ export function ChatScreen() {
       if (cancelled || handedOff.current === key) return
       handedOff.current = key
       navigate(`/chat/${sessionId}`, { replace: true, state: null })
-      void conversation.send(initialMessage, initialDocumentVersionIds,initialBrowserAgent?{browserAgent:true}:initialWebSearch?{webSearch:true}:{})
+      void conversation.send(initialMessage, initialDocumentVersionIds,{sourceIds: initialSourceIds, templateId: initialTemplateId, browserAgent: initialBrowserAgent, webSearch: initialWebSearch})
     })
     return () => { cancelled = true }
-  }, [conversation.send, initialMessage, initialDocumentVersionIds, initialWebSearch, initialBrowserAgent, navigate, sessionId])
+  }, [conversation.send, initialMessage, initialDocumentVersionIds, initialSourceIds, initialTemplateId, initialWebSearch, initialBrowserAgent, navigate, sessionId])
 
 
   const handleDelete = useCallback(async (id: string) => {
@@ -180,7 +209,7 @@ export function ChatScreen() {
   const historyPanel = (
     <ConversationHistory
       items={history}
-      activeId={sessionId}
+      activeId={reportChatId ? history.find(item => item.target === `/chat?report=${encodeURIComponent(reportChatId)}`)?.id : sessionId}
       isLoading={isHistoryLoading}
       error={historyError}
       onRetry={() => void loadHistory()}
@@ -200,7 +229,7 @@ export function ChatScreen() {
         {historyPanel}
       </Drawer>
 
-      <section className="atez-chat-main">
+      {reportChatId ? <ReportConversation key={reportChatId} id={reportChatId} onChanged={() => void loadHistory()} onOpenHistory={() => setIsDrawerOpen(true)} onOpenReport={(key, standalone) => { setStandaloneReport(standalone ? key : null); if (!standalone) setSelectedReport(key); setReportOpen(true) }} /> : <section className="atez-chat-main">
         <header className="atez-chat-header">
           <Button aria-label="Sohbet geçmişini aç" icon={<MenuOutlined />} onClick={() => setIsDrawerOpen(true)} className="atez-chat-menu-button" />
           <div><Typography.Text strong>{history.find((item) => item.id === sessionId)?.title ?? 'Mevzuat Asistanı'}</Typography.Text><Typography.Text type="secondary" className="atez-chat-header-subtitle">Genel mevzuat soruları</Typography.Text></div>
@@ -218,15 +247,15 @@ export function ChatScreen() {
         )}
 
         <Can permission="chat.write"><ConversationComposer isSending={conversation.isSending} onStop={conversation.stop} onSend={send} /></Can>
-      </section>
-      <ReportCorrectionDrawer open={reportOpen} onClose={closeReport} extra={<Button size="small" onClick={() => void loadReports()} loading={reportLoading}>Raporları yenile</Button>}>
+      </section>}
+      <ReportCorrectionDrawer open={reportOpen} onClose={() => { closeReport(); void loadHistory() }} extra={<Button size="small" onClick={() => void loadReports()} loading={reportLoading}>Raporları yenile</Button>}>
         <div className="atez-report-correction-content">
           {reportError && <Alert type="warning" showIcon title={reportError} action={<Button size="small" onClick={() => void loadReports()}>Yeniden dene</Button>} />}
           <Select aria-label="Düzeltilecek rapor" placeholder="Yayımlanmış bir rapor seçin" showSearch optionFilterProp="label" loading={reportLoading} value={selectedReport ?? undefined} style={{ width: '100%' }} options={reportOptions.map(report => ({ value: report.topicId, label: `${report.title.replace(/^\s*(?:[-–—−•]\s*)+/u, '').trim()} · r${report.version} · ${report.gazetteDate}` }))} onChange={id => {
-            setSelectedReport(id); setReportNotice(null)
+            setSelectedReport(id); setStandaloneReport(null); setReportNotice(null)
             setSearchParams(params => { const next = new URLSearchParams(params); next.set('topic', id); next.delete('revision'); return next }, { replace: true })
           }} />
-          {selectedReport ? <ReportWorkspace key={selectedReport} topicId={selectedReport} popup onRevisionSaved={() => void loadReports()} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Önizleme, düzeltme ve yayımlama için bir rapor seçin." />}
+          {standaloneReport ? <StandaloneReportCorrection reportId={standaloneReport} /> : selectedReport ? <ReportWorkspace key={selectedReport} topicId={selectedReport} popup onOpenConversation={() => {setReportOpen(false); navigate(`/chat?report=${encodeURIComponent(selectedReport)}`)}} onRevisionSaved={() => { void loadReports(); void loadHistory() }} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Önizleme, düzeltme ve yayımlama için bir rapor seçin." />}
         </div>
       </ReportCorrectionDrawer>
     </div>

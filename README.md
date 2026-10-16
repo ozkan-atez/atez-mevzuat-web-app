@@ -19,6 +19,16 @@ Raporlar sohbet ekranındaki **Rapor düzelt** açılır panelinde seçilir; `/c
 
 Varsayılan günlük taramalar İstanbul saatine göre **05:00, 10:00, 15:00 ve 23:00** çalışır. Otomasyonlar ekranından farklı kaynaklar, şablon ve dağıtım gruplarıyla görev oluşturulabilir; birden fazla tekrar saati (ör. 08:00, 12:30, 18:00) ve haftanın günleri seçilebilir. Görevler düzenlenebilir, duraklatılabilir, silinebilir ve elle çalıştırılabilir. Dağıtım grupları raporda önerilir; e-posta kullanıcı gönderdiğinde iletilir. Makine ve Docker altyapısı çalışıyor olmalıdır.
 
+## Uygulama genelinde AI kullanımı
+
+`/usage` ekranında ay seçimi, dört özet kartı ve işlem bazında token/model/pay tablosu bulunur. Tarih, işlem türü, kullanıcı ve başlık filtreleri isteğe bağlı açılır. Ayrıntı panelinde her çağrının girdi, çıktı, sağlayıcı toplamı, önbellek, düşünme tokenları ve durumu gösterilir. Tarihler Türkiye saatine göre uygulanır. Kullanıcı kendi tüketimini; yönetim yetkilileri aynı çalışma alanının tüketimini görür. Özel sohbet/rapor başlıkları ve bağlantıları yetkisiz kullanıcılara açılmaz.
+
+Genel sohbet, web/tarayıcı araştırması, revizyon, otomasyon, manuel tarama/analiz/rapor üretimi ve şablon AI çağrıları `ChatUsageEvent` tablosunda tekil çağrı başına tutulur. İşçi süreçlerinde işlem/tarama bağlamı çağrıya aktarılır; otomasyon servis çağrıları insan kullanıcıya yazılmaz. Resmî Gazete araştırma betiği de açık veritabanı bağlantısı ve servis aktörü üzerinden yeni model çağrılarını kaydeder; önbellekten kullanılan analizler yeni tüketim oluşturmaz.
+
+Kümülatif akış ölçümleri aynı kaydı günceller; her yeniden deneme ve yeni model turu ayrı çağrıdır. Başarısız veya kesilen çağrının bildirilmiş tüketimi korunur. Merkezi olarak ölçülen revizyonlar eski `TopicAiExecution` kaydıyla tekrar toplanmaz. Sağlayıcı toplamına önbellek/düşünme tokenları yeniden eklenmez; toplam eksikse bilinen girdi/çıktı/düşünme kalemleri kısmi tüketimdir. Eski ölçülmemiş kayıtlar ana listeden çıkarılır ve tahminle doldurulmaz. Parasal maliyet hesabı yapılmaz.
+
+Yeni ölçüm için `20261013180000_all_ai_usage` migration’ını uyguladıktan sonra API ve worker yeniden başlatılmalıdır. Yeni AI sağlayıcılarını ortak kullanım kaydedicisine bağlamak gerekir. Testler gerçek sağlayıcı çağrısı yapmadan ölçüm, tekrar, hata, yetki ve toplamları doğrular.
+
 ## Bu Mac üzerinde kalıcı çalıştırma
 
 Docker ağ erişiminin kısıtlı olduğu bu makinede API ve görev işçisi Mac üzerinde, veritabanı/nesne deposu/PDF servisi Docker içinde çalışır. Mevcut `.env` korunur; `LOCAL_DATABASE_URL` varsa yerel bağlantı için kullanılır. Kurulumdan sonra servisler kullanıcı oturumu açıldığında yeniden başlar.
@@ -42,7 +52,7 @@ docker compose ps
 docker compose logs -f backend worker
 ```
 
-İlk taramadan önce `.env` içinde geçerli bir `GEMINI_API_KEY` bulunmalıdır. Varsayılan geliştirme modeli `gemini-3.7-flash` olup topic analizleri `TOPIC_ANALYSIS_CONCURRENCY` sınırıyla birbirinden bağımsız çalışır.
+İlk taramadan önce AI bağlantısı yapılandırılmalıdır. Vertex AI için aşağıdaki ayarları kullanın; Developer API için `GOOGLE_GENAI_USE_VERTEXAI=false` ve geçerli `GEMINI_API_KEY` gerekir. Varsayılan geliştirme modeli `gemini-3.7-flash` olup topic analizleri `TOPIC_ANALYSIS_CONCURRENCY` sınırıyla birbirinden bağımsız çalışır.
 
 İlk açılışta backend veritabanı migration'larını otomatik uygular. Gerekirse elle tekrar çalıştırılabilir:
 
@@ -83,3 +93,43 @@ RabbitMQ entegrasyon testi yalnızca `RABBITMQ_TEST_URL` verilirse çalışır. 
 İş akışı testleri gerçek PostgreSQL, RabbitMQ ve MinIO ile ayrı test ortamında çalışır. `job-workflow.test.ts` gerçek cron saatinin tetiklemesini, manuel otomasyon ve bağımsız kaynak işlerinin rapor üretmesini kontrol eder; Resmî Gazete kabul testi manuel/cron işlerini RabbitMQ üzerinden worker işleyicisine gönderir. Dış kaynak içerikleri ve AI yanıtları test verisidir. Kuyruk testi gerçek 30 saniyelik gecikmeyle yeniden denemeleri, eksik hedef kuyruğunun yayını reddetmesini ve kapanışta aktif teslimin tamamlanmasını doğrular. Eşzamanlı aynı istek tek iş/outbox oluşturur; kaynak seçimi iş/outbox ile aynı işlemde yazılır. Arayüz, bağlantı hatası sonrası tekrar denemede aynı istek anahtarını korur.
 
 Sohbetin günlük/son rapor listesi ve tarama durumu sorguları doğrudan kayıtlı verilerden yanıtlanır; model servisi kullanılamasa da bu sorgular çalışır. Genel AI yanıtları, analiz ve revizyon için erişimi açık bir Gemini projesi gerekir. `PERMISSION_DENIED` / “Your project has been denied access” yanıtı Google projesinin erişim engelidir; uygulama bu yetkiyi kendiliğinden açamaz. Sağlayıcı hataları kullanıcıya güvenli Türkçe mesajlarla gösterilir.
+
+## Dağıtım grupları ve dosya aktarımı
+
+`/groups` sayfası grup/alıcı araması, durum filtresi, kişi adı düzenleme ve seçili grupları dışa aktarmayı destekler. XLSX, UTF-8 CSV ve TSV dosyaları veya Excel’den yapıştırılan tablolar; çalışma sayfası ve sütun eşleştirme adımlarından sonra önizlenir. Eski XLS dosyaları önce XLSX olarak kaydedilmelidir.
+
+Dosya limiti 5 MB, tablo limiti 10.000 veri satırı/100 sütun, tek aktarım limiti 50 grup ve grup başına toplam 200 alıcıdır. Tekrarlar grup içinde ayıklanır; aynı kişi farklı gruplarda bulunabilir. Hatalı satırlar önizlemede gösterilir ve indirilebilir. Aktarım mevcut alıcıları korur; çoklu grup kaydı tek veritabanı işlemiyle uygulanır. Grup düzenleyicisindeki toplu ekleme önce taslağa ekler, `Grubu kaydet` ile kalıcılaşır.
+
+CSV/XLSX şablon ve dışa aktarma sütunları `Grup`, `Ad Soyad`, `E-posta` şeklindedir. Excel formül hücreleri içe alınmaz; önce değer olarak yapıştırılmalıdır. Dosya işlemleri `config.manage` yetkisi gerektirir. `20261013170000_group_recipient_names` migration’ı kişi adlarını ekler; mevcut `emails` dizisi ve gönderim/otomasyon bağlantıları korunur.
+
+## Vertex AI bağlantısı
+
+API ve worker ortak `createGoogleAi` bağlantısını kullanır. Yerel `.env` ayarları:
+
+```dotenv
+GOOGLE_GENAI_USE_VERTEXAI=true
+GOOGLE_CLOUD_PROJECT=your-company-project
+GOOGLE_CLOUD_LOCATION=global
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
+GEMINI_MODEL=gemini-3.8-flash
+GEMINI_BROWSER_MODEL=gemini-3.8-flash
+```
+
+Bölge şirketin veri politikası ve model desteğine göre seçilmelidir. Yerel servis çalıştırıcısı kök `.env` dosyasını okur; ayar değişince API/worker yeniden başlatılır. Google Cloud üzerinde bağlı servis hesabı veya yerel ADC kullanılıyorsa `GOOGLE_APPLICATION_CREDENTIALS` gerekmez. Vertex seçiliyken eksik proje/bölge hatadır; eski API anahtarına otomatik dönüş yapılmaz.
+
+JSON anahtarı Git'e veya Docker imajına eklemeyin. Docker ile JSON kullanırken:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.vertex.yml up --build -d
+# Üretimde ilk dosya yerine docker-compose.prod.yml kullanın.
+```
+
+Override, host üzerindeki `GOOGLE_APPLICATION_CREDENTIALS` dosyasını API ve worker'a salt okunur secret olarak bağlar. Google Cloud bağlı kimlik kullanımında bu override gerekmez.
+
+Yeni uygulama çağrıları `provider=vertex` ile mevcut kullanım tablosuna kaydedilir. Girdi, çıktı, toplam, önbellek ve düşünme tokenları sağlayıcının bildirdiği değerlerdir; akış ara toplamları tekrar eklenmez. Eksik tüketim sıfır kabul edilmez. Token ekranı parasal fatura hesabı değildir; arama gibi ek hizmet ücretleri Cloud Billing'den izlenmelidir. Eski kayıtlar değiştirilmez.
+
+## Sohbet kaynak kapsamı
+
+Google Search ve genel tarayıcı ajanı şu anda kapalıdır. Sohbet menüsünde bu seçenekler sunulmaz; eski istemcilerden gelen `webSearch=true` veya `browserAgent=true` istekleri API'de reddedilir. Sohbet uygulama katmanı da model veya tarayıcı çağrısı yapmadan bu istekleri engeller.
+
+Seçili tanımlı kaynaklardan içerik toplama, arşiv belgeleri, kayıtlı rapor/analizler, otomasyon ve işlem kayıtları kullanılabilir. Kanıt bulunmadığında asistanın eksikliği belirtmesi istenir. Kaynak toplama otomasyonları ve yetkili Tariff bağlantısı devam eder; genel internette model tabanlı araştırma açılmaz.

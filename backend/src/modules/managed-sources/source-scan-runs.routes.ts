@@ -1,3 +1,4 @@
+import { sourceDocumentPackage } from './source-document-package'
 import {privateResourceWhere,jobInitiatorFields} from '../../platform/actor-context'
 import { enforceLocalWorkspace, isLocalWorkspaceRequest } from '../../platform/local-workspace-access'
 import { OperationError, type OperationService } from '../operations/operation-service'
@@ -64,7 +65,7 @@ export async function sourceScanRunRoutes(app: FastifyInstance, options: { prism
     } })
     if (!run) return reply.code(404).send({ message: 'Tarama bulunamadı.' })
     const counters = sourceCounters(run.documents)
-    return { ...run, counters, hasReport: counters.readyReports > 0, canAnalyze: options.operations ? !['QUEUED','RUNNING'].includes(run.status) && run.documents.some(document => document.contentText?.trim() || document.captureStatus === 'COMPLETED') : run.status === 'COMPLETED' && run.documents.some(document => document.processingStatus === 'PENDING') }
+    return { ...run, documents:run.documents.map(document=>({...document,package:sourceDocumentPackage(document)})), counters, hasReport: counters.readyReports > 0, canAnalyze: options.operations ? !['QUEUED','RUNNING'].includes(run.status) && run.documents.some(document => document.contentText?.trim() || document.captureStatus === 'COMPLETED') : run.status === 'COMPLETED' && run.documents.some(document => document.processingStatus === 'PENDING') }
   })
 
   app.get('/:id/documents/:documentId/files/:index', async (request, reply) => {

@@ -47,9 +47,14 @@ describe('parseChatEventStream', () => {
       },
     }))
 
-    expect(await collect(parseChatEventStream(response))).toEqual([{ type: 'delta', content: 'ğ' }])
+    const events:ChatStreamEvent[]=[]
+    await expect((async()=>{for await(const event of parseChatEventStream(response))events.push(event)})()).rejects.toThrow('bağlantı kesildi')
+    expect(events).toEqual([{type:'delta',content:'ğ'}])
   })
 
+  it('does not treat a clean EOF without a completion event as success',async()=>{
+    await expect(collect(parseChatEventStream(streamResponse([': heartbeat\n\n'])))).rejects.toThrow('bağlantı kesildi')
+  })
   it('raises the server message for a failed response', async () => {
     const response = new Response(JSON.stringify({ message: 'Sohbet bulunamadı.' }), { status: 404 })
 

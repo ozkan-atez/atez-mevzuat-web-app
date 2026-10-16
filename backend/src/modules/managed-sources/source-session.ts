@@ -1,3 +1,4 @@
+import { SourceSizeLimitError } from './capture-error'
 import { gunzipSync, inflateSync, brotliDecompressSync } from 'node:zlib'
 import { request } from 'node:https'
 import { lookup } from 'node:dns/promises'
@@ -16,7 +17,8 @@ export async function safeSourceRequest(value:string, hosts:string[], options:{m
     const headers={...options.headers};for(const key of Object.keys(headers))if(['host','connection','content-length','accept-encoding'].includes(key.toLowerCase()))delete headers[key]
     const req=request(url,{method:options.method??'GET',headers:{'User-Agent':'ATEZ-Mevzuat-Radari/1.0',...headers,'Accept-Encoding':'identity'},timeout:20000,lookup:(_h,o,cb)=>{if(typeof o==='object'&&o.all)cb(null,[address]);else cb(null,address.address,address.family)}},res=>{
       let size=0;const chunks:Buffer[]=[];const limit=options.maxBytes??4_000_000
-      res.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>limit)res.destroy(new Error('Kaynak dosyası boyut sınırını aşıyor.'));else chunks.push(chunk)})
+      if(Number(res.headers['content-length'])>limit){const error=new SourceSizeLimitError(url.toString(),limit,Number(res.headers['content-length']));res.on('error',()=>{});res.destroy();reject(error);return}
+      res.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>limit)res.destroy(new SourceSizeLimitError(url.toString(),limit,size));else chunks.push(chunk)})
       res.on('error',reject);res.on('end',()=>resolve({body:Buffer.concat(chunks),contentType:String(res.headers['content-type']??''),finalUrl:url.toString(),status:res.statusCode??0,headers:Object.fromEntries(Object.entries(res.headers).filter(([,v])=>v!==undefined).map(([k,v])=>[k,Array.isArray(v)?v.join('\n'):String(v)]))}))
     });req.on('error',()=>reject(new Error('Kaynak bağlantısı kurulamadı.')));req.on('timeout',()=>req.destroy(new Error('Kaynak bağlantısı zaman aşımına uğradı.')));if(options.body)req.write(options.body);req.end()
   })

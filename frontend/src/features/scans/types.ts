@@ -96,6 +96,7 @@ export interface ScanRunDetail {
 }
 
 export interface ScanRunSummary {
+  automationId?: string | null
   automationName?: string | null
   scheduleLabel?: string | null
   id: string

@@ -3,6 +3,7 @@ export type AiInputPart =
   | { inlineData: { mimeType: string; data: string } }
 
 export interface StructuredAiRequest {
+  onUsage?: (usage: import('../../usage/measurement').TokenUsage) => Promise<void>
   model: string
   systemInstruction: string
   parts: AiInputPart[]
@@ -13,6 +14,9 @@ export interface StructuredAiResult {
   json: unknown
   providerRequestId: string | null
   usage: {
+    totalTokens?: number | null
+    cachedTokens?: number | null
+    reasoningTokens?: number | null
     inputTokens: number | null
     outputTokens: number | null
   }

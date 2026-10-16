@@ -1,0 +1,1 @@
+ALTER TABLE "GeneralChatMessage" ADD COLUMN IF NOT EXISTS "context" JSONB;

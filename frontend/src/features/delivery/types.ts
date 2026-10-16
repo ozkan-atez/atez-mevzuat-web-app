@@ -1,4 +1,6 @@
 export interface CustomerGroup {
+  recipientNames?: Record<string, string>
+  recipientCount?: number
   id: string
   name: string
   description: string | null

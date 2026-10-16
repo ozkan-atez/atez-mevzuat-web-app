@@ -16,6 +16,9 @@ import { ReportSpecSchema, type ReportSpec } from './report-spec-schemas'
 export const EDITABLE_PATH_PATTERNS = [
   'customization',
   'customization.customHtml',
+  'customization.templateReport.content.sections.#.fields.#.text',
+  'customization.templateReport.content.sections.#.fields.#.items.#',
+  'customization.templateReport.content.sections.#.fields.#.rows.#.#',
   'title',
   'typeLabel',
   'summary',

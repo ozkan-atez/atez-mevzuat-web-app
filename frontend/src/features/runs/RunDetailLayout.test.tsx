@@ -43,9 +43,10 @@ describe('RunDetail overview layout', () => {
     const overview = await screen.findByTestId('run-overview')
     const summary = within(overview).getByRole('region', { name: 'Operasyon özeti' })
 
-    expect(within(overview).getByRole('heading', { name: 'Tarama İnceleme Masası' })).toBeVisible()
+    expect(within(overview).getByRole('heading', { name: 'Çalışma özeti' })).toBeVisible()
     expect(within(summary).getByText('4')).toBeVisible()
     expect(within(summary).getByText('2')).toBeVisible()
-    expect(screen.getByText('Resmî Gazete yayınları bulunuyor')).toBeVisible()
+    expect(screen.getByRole('region',{name:'İşlem akışı'})).toBeVisible()
+    expect(screen.getByText('İşlem ayrıntıları ve yeniden deneme').closest('details')).not.toHaveAttribute('open')
   })
 })

@@ -87,7 +87,7 @@ export async function applyReportTemplate(topicId: string, templateId: string, e
   return response.json() as Promise<ReportDraftView>
 }
 
-export interface SavedReportRevision { version: number; createdAt: string; edits: ReportFieldEditRecord[] }
+export interface SavedReportRevision { createdBy?: string | null; createdByName?: string | null; version: number; createdAt: string; edits: ReportFieldEditRecord[] }
 export async function getReportDraftHistory(topicId: string): Promise<{ revisions: SavedReportRevision[] }> {
   const response = await apiFetch(`/api/v1/topics/${topicId}/draft/history`)
   if (!response.ok) await readError(response, 'Kaydedilmiş değişiklikler alınamadı.')

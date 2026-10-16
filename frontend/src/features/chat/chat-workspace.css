@@ -84,7 +84,13 @@
 }
 .atez-conversation-history .atez-chat-new-link.ant-btn:hover,
 .atez-conversation-history .atez-chat-report-button.ant-btn:hover { background: var(--atez-accent-soft); color: var(--atez-text); }
-.atez-history-heading { margin: 20px 10px 6px; color: var(--atez-muted); font-size: 11px; font-weight: 500; }
+.atez-history-groups { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.atez-history-group { display: flex; flex-direction: column; min-height: 0; }
+.atez-history-reports { flex: 0 1 auto; max-height: min(260px, 40%); }
+.atez-history-conversations { flex: 1; }
+.atez-history-group .atez-history-list { flex: 1 1 auto; overscroll-behavior-y: contain; }
+.atez-history-empty { padding: 4px 10px; color: var(--atez-muted); font-size: 12px; }
+.atez-history-heading { flex: none; margin: 20px 10px 6px; color: var(--atez-muted); font-size: 11px; font-weight: 500; }
 .atez-chat-composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .atez-chat-composer-toolbar .atez-chat-send { margin-left: auto; }
 .atez-chat-add.ant-btn { width: 34px; height: 34px; font-size: 20px; color: var(--atez-text); }
@@ -117,3 +123,19 @@
 
 .atez-chat-composer-tools { display:flex; align-items:center; gap:8px; min-width:0; }
 .atez-chat-composer-tools .atez-chat-tool-chip.ant-tag { display:inline-flex; align-items:center; gap:6px; height:30px; margin:0; padding:0 9px; border:1px solid var(--atez-border); border-radius:9px; background:var(--atez-accent-soft); color:var(--atez-text); font-size:11px; white-space:nowrap; }
+
+.atez-chat-context-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+.atez-chat-context-chips .ant-tag { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+.atez-report-preview-trigger { flex: none; padding: 10px 24px 0; }
+.atez-report-preview-trigger .ant-btn { color: var(--atez-accent); border-color: var(--atez-border); background: var(--atez-surface); }
+.atez-report-preview-modal iframe { display: block; width: 100%; height: 75dvh; border: 0; border-radius: 8px; background: white; }
+.atez-report-preview-modal .ant-modal-title { padding-right: 24px; overflow-wrap: anywhere; }
+.atez-report-preview-status { display: grid; place-items: center; min-height: 200px; color: var(--atez-muted); }
+@media (max-width: 700px) { .atez-report-preview-trigger { padding: 8px 14px 0; } .atez-report-preview-modal iframe { height: 70dvh; } }
+
+.atez-chat-stop-icon { transition: transform 160ms ease; }
+.atez-chat-send:hover .atez-chat-stop-icon { transform: scale(.82); }
+@media (prefers-reduced-motion: reduce) {
+  .atez-chat-stop-icon { transition: none; }
+}

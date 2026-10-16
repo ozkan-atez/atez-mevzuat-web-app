@@ -41,17 +41,20 @@ export async function processSourceDocuments(prisma: PrismaClient, sourceRunId: 
       await prisma.sourceScanDocument.update({where:{id:document.id},data:{processingStatus:'FAILED',processingError:reason}})
       failures.push(reason); continue
     }
-    if (!document.contentText?.trim()) {
+    const originalFiles=(Array.isArray(document.capturedFiles)?document.capturedFiles:[]) as unknown as CapturedSourceFile[]
+    if (!document.contentText?.trim()&&!originalFiles.some(f=>f.status==='STORED'&&f.objectKey&&f.mediaType==='application/pdf')) {
       const reason='Belge metni okunamadığı için AI analizi yapılamadı.'
       await prisma.sourceScanDocument.update({where:{id:document.id},data:{processingStatus:'FAILED',processingError:reason}})
       failures.push(reason);continue
     }
-    const bytes=Buffer.from(`Yayın tarihi: ${document.publishedOn?.toISOString().slice(0,10)??'bilinmiyor; tarama tarihi yayın tarihi değildir'}.\n\n${document.contentText}`)
+    const bytes=Buffer.from(`Yayın tarihi: ${document.publishedOn?.toISOString().slice(0,10)??'bilinmiyor; tarama tarihi yayın tarihi değildir'}.\n\n${document.contentText??'Özgün belge metin çıkarımı yapılmadan ek olarak sunulmuştur; eklerin tamamını okuyun.'}`)
+    const primaryPdf=originalFiles.find(f=>f.role==='DOCUMENT'&&f.status==='STORED'&&f.mediaType==='application/pdf'&&f.objectKey&&f.sha256)
     const stored=await dependencies.objectStore.putRunFile(`external-sources/${run.id}/${document.id}.txt`,bytes,'text/plain')
     const sha256=createHash('sha256').update(bytes).digest('hex')
-    const object=await prisma.storedObject.upsert({where:{sha256},update:{},create:{sha256,bucket:stored.bucket,objectKey:stored.objectKey,mediaType:'text/plain',byteSize:BigInt(bytes.length)}})
+    const primary=primaryPdf?{sha256:primaryPdf.sha256!,bucket:primaryPdf.bucket!,objectKey:primaryPdf.objectKey!,mediaType:primaryPdf.mediaType!,byteSize:BigInt(primaryPdf.byteSize!)}:{sha256,bucket:stored.bucket,objectKey:stored.objectKey,mediaType:'text/plain',byteSize:BigInt(bytes.length)}
+    const object=await prisma.storedObject.upsert({where:{sha256:primary.sha256},update:{},create:primary})
     // Content deduplication may reuse an object key from an earlier capture. Restore missing bytes at that canonical key.
-    if (!await dependencies.objectStore.exists(object.objectKey)) await dependencies.objectStore.putRunFile(object.objectKey,bytes,'text/plain')
+    if (!await dependencies.objectStore.exists(object.objectKey)) await dependencies.objectStore.putRunFile(object.objectKey,primaryPdf?await dependencies.objectStore.getContent(primaryPdf.objectKey!):bytes,object.mediaType)
     const editionUrl=`${run.source.baseUrl}#publication=${document.publishedOn?.toISOString().slice(0,10)??'unknown'}`
     const edition=await prisma.gazetteEdition.upsert({where:{scanRunId_indexUrl:{scanRunId:pipeline.id,indexUrl:editionUrl}},update:{},create:{scanRunId:pipeline.id,indexUrl:editionUrl,publicationDate:document.publishedOn??run.targetDate,type:'EXTERNAL',discoveryOrder:index}})
     const collected = await prisma.collectedDocument.upsert({where:{externalSourceDocumentId:document.id},update:{},create:{externalSourceDocumentId:document.id,sourceAuthority:run.source.authorityType,sourceName:run.source.name??run.source.key,editionId:edition.id,title:document.title,sourceUrl:document.url,publicationOrder:index,storedObjectId:object.id,validationStatus:'VALID'}})
@@ -124,7 +127,7 @@ export async function processSourceDocuments(prisma: PrismaClient, sourceRunId: 
         await prisma.sourceScanDocument.update({where:{id:documentId},data:{processingStatus:'EXCLUDED',filterReason:'AI analizi raporlanabilir değişiklik bulamadı.'}});continue
       }
       const sequence=await topicRepository.getTopicSequence(topic.id)
-      const report=await publishTopicAnalysis({runId:parentRunId,targetDate:run.targetDate.toISOString().slice(0,10),indexSourceUrl:run.source.baseUrl,indexObjectKey:'',inspectedDocumentCount:run.documents.length,workspaceConfig:parent.workspaceConfig,sourceOrigin:{name:run.source.name??run.source.key,authority:run.source.authorityType,...(!run.documents.find(d=>d.id===documentId)?.publishedOn?{publicationDateKnown:false}:{})}},output,sequence,{repository:topicRepository,objectStore:dependencies.objectStore})
+      const report=await publishTopicAnalysis({runId:parentRunId,targetDate:run.targetDate.toISOString().slice(0,10),indexSourceUrl:run.source.baseUrl,indexObjectKey:'',inspectedDocumentCount:run.documents.length,workspaceConfig:parent.workspaceConfig,sourceOrigin:{name:run.source.name??run.source.key,authority:run.source.authorityType,...(!run.documents.find(d=>d.id===documentId)?.publishedOn?{publicationDateKnown:false}:{})}},output,sequence,{repository:topicRepository,objectStore:dependencies.objectStore,aiModel:dependencies.aiModel,model:dependencies.model})
       await topicRepository.markTopicCompleted(topic.id)
       await prisma.sourceScanDocument.update({where:{id:documentId},data:{processingStatus:'COMPLETED',reportVersion:report.version,processingError:null}})
       readyReports++

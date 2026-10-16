@@ -1,3 +1,4 @@
+import { BackgroundTaskError } from './background-error'
 import amqp, { type ChannelModel, type ConfirmChannel, type Channel } from 'amqplib'
 import { randomUUID } from 'node:crypto'
 import { prisma } from './database'
@@ -6,9 +7,10 @@ import { manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName } f
 export const operationQueueName = 'atez-operation-task'
 export const automationQueueName = 'atez-workspace-daily-automation'
 export const sourceQueueName = 'atez-source-scan'
+export const connectorQueueName = 'atez-connector-setup'
 export const refreshQueueName = 'atez-source-refresh'
-export const backgroundQueues = [manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName, automationQueueName, sourceQueueName, refreshQueueName, operationQueueName]
-export interface BackgroundCommand { id: string; data: any; retryCount: number }
+export const backgroundQueues = [manualScanQueueName, scheduledScanQueueName, topicAnalysisQueueName, automationQueueName, sourceQueueName, refreshQueueName, operationQueueName, connectorQueueName]
+export interface BackgroundCommand { id: string; data: any; retryCount: number; failure?: {code:string;message:string;retryable:boolean;details:Record<string,unknown>} }
 export class RabbitQueue {
   private connection: ChannelModel | undefined
   private publisher: ConfirmChannel | undefined
@@ -108,10 +110,10 @@ export class RabbitQueue {
           channel.ack(message)
         } catch (error) {
           clearInterval(heartbeat)
-          const failed = command.retryCount >= 2 || claimed[0]!.attempts >= 3
+          const failed = (error instanceof BackgroundTaskError&&!error.retryable) || command.retryCount >= 2 || claimed[0]!.attempts >= 3
           // Keep the lease until the retry/failure message is durably routed. A duplicate
           // publication must not take over in the gap between failure and confirmation.
-          await this.publish(`${name}.${failed ? 'failed' : 'retry'}`, { ...command, retryCount: command.retryCount + 1 })
+          await this.publish(`${name}.${failed ? 'failed' : 'retry'}`, { ...command, retryCount: command.retryCount + 1, failure:{code:error instanceof BackgroundTaskError?error.code:'TASK_FAILED',message:(error instanceof Error?error.message:'İş başarısız').slice(0,1000),retryable:error instanceof BackgroundTaskError?error.retryable:true,details:error instanceof BackgroundTaskError?error.details:{}} })
           const released = await prisma.backgroundJob.updateMany({ where: owner, data: { status: failed ? 'FAILED' : 'RETRY', leaseUntil: new Date(0), lastError: (error instanceof Error ? error.message : 'İş başarısız').slice(0, 1000) } })
           if (!released.count) throw new Error('İş kilidi başka bir çalışana devredildi.')
           channel.ack(message)

@@ -26,6 +26,7 @@ interface Dependencies {
 }
 
 interface MaterializedDocument {
+  assets?: Array<{sourceUrl:string;bytes:Buffer;mediaType:string;sha256:string}>
   document: FilterDocumentRecord
   bytes: Buffer
   mediaType: string
@@ -69,7 +70,7 @@ export async function executeDocumentFilter(runId: string, dependencies: Depende
         dependencies,
         parse: parseTitleFilterResponse,
       })
-      await repository.saveTitleDecisions(job.id, decisions)
+      await repository.saveTitleDecisions(job.id, decisions.map(d=>documents.find(doc=>doc.id===d.documentId)?.requireContentReview?{...d,decision:'MAYBE' as const,reason:'Özgün belge ve ekleri içerik aşamasında okunmalı.'}:d))
       progress = await repository.getFilterProgress(job.id)
     }
 
@@ -107,13 +108,13 @@ async function resolveAmbiguousDocuments(
       materialized.push(await materializeDocument(runId, document, tempDirectory, dependencies))
     }
     for (const batch of createBatches(materialized, dependencies.maxContentBytes)) {
-      const batchKey = createHash('sha256').update(batch.map((item) => `${item.document.id}:${item.sha256}`).join('|')).digest('hex')
-      const parts = batch.flatMap((item) => normalizeDocumentContent({
+      const batchKey = createHash('sha256').update(batch.map((item) => `${item.document.id}:${item.sha256}:${item.assets?.map(a=>a.sha256).join(',')??''}`).join('|')).digest('hex')
+      const parts = batch.flatMap((item) => [...normalizeDocumentContent({
         id: item.document.id,
         title: item.document.title,
         mediaType: item.mediaType,
         bytes: item.bytes,
-      }))
+      }),...(item.assets??[]).flatMap(asset=>normalizeDocumentContent({id:item.document.id,title:`${item.document.title} — Ek: ${asset.sourceUrl}`,mediaType:asset.mediaType,bytes:asset.bytes}))])
       const decisions = await generateWithAudit({
         jobId,
         phase: 'CONTENT',
@@ -142,6 +143,7 @@ async function materializeDocument(
       bytes: await dependencies.objectStore.getContent(document.storedObject.objectKey),
       mediaType: document.storedObject.mediaType,
       sha256: document.storedObject.sha256,
+      assets:await Promise.all((document.assets??[]).map(async asset=>({...asset,bytes:await dependencies.objectStore.getContent(asset.objectKey)}))),
     }
   }
   const file = await dependencies.http.download(document.sourceUrl, tempDirectory)
@@ -160,16 +162,17 @@ function createBatches(documents: MaterializedDocument[], maximumBytes: number):
   let current: MaterializedDocument[] = []
   let currentBytes = 0
   for (const document of documents) {
-    if (document.bytes.byteLength > maximumBytes) {
+    const documentBytes=document.bytes.byteLength+(document.assets??[]).reduce((n,a)=>n+a.bytes.length,0)
+    if (documentBytes > maximumBytes) {
       throw new AiProviderError('CONTENT_REJECTED', false, `Belge Gemini içerik sınırını aşıyor: ${document.document.id}`)
     }
-    if (current.length > 0 && currentBytes + document.bytes.byteLength > maximumBytes) {
+    if (current.length > 0 && currentBytes + documentBytes > maximumBytes) {
       batches.push(current)
       current = []
       currentBytes = 0
     }
     current.push(document)
-    currentBytes += document.bytes.byteLength
+    currentBytes += documentBytes
   }
   if (current.length > 0) batches.push(current)
   return batches

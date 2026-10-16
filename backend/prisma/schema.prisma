@@ -638,6 +638,7 @@ model AnalysisRevision {
 }
 
 model TopicReport {
+  conversations ReportConversation[]
   workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
   ownerUser User? @relation("TopicReportOwner",fields:[ownerUserId],references:[id],onDelete:Restrict)
 
@@ -667,6 +668,10 @@ model TopicReport {
 }
 
 model ReportRevision {
+  baseVersion Int?
+  conversationId String?
+  createdBy String?
+  createdByName String?
   id                 String               @id @default(uuid())
   reportId           String
   report             TopicReport          @relation(fields: [reportId], references: [id], onDelete: Cascade)
@@ -688,6 +693,9 @@ model ReportRevision {
 }
 
 model TopicAiExecution {
+  totalTokens Int?
+  cachedTokens Int?
+  reasoningTokens Int?
   id                 String               @id @default(uuid())
   topicId            String
   topic              TopicProcess         @relation(fields: [topicId], references: [id], onDelete: Cascade)
@@ -882,6 +890,7 @@ model GeneralChatMessage {
   role        GeneralChatRole
   content     String
   status      GeneralChatMessageStatus @default(COMPLETED)
+  context Json?
   research Json?
   errorDetail String?
   documentVersionIds String[] @default([])
@@ -899,6 +908,7 @@ enum EmailDispatchStatus {
 }
 
 model CustomerGroup {
+  recipientNames Json     @default("{}")
   id          String   @id @default(uuid())
   name        String   @unique
   description String?
@@ -974,6 +984,11 @@ model ReportDraft {
 }
 
 model ReportFieldEdit {
+  actorId String?
+  actorName String?
+  baseVersion Int?
+  conversationId String?
+  requestedBy String?
   id            String           @id @default(uuid())
   draftId       String
   draft         ReportDraft      @relation(fields: [draftId], references: [id], onDelete: Cascade)
@@ -995,6 +1010,7 @@ model ReportFieldEdit {
 }
 
 model ReportTemplate {
+  definition Json?
   revision Int @default(1)
   id        String   @id @default(uuid())
   name      String   @unique
@@ -1490,4 +1506,79 @@ model LogoutReplay {
  createdAt DateTime @default(now())
  @@unique([issuer,jtiHash])
  @@index([expiresAt])
+}
+
+model ReportConversation {
+  id String @id @default(uuid())
+  reportId String
+  report TopicReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  title String
+  createdBy String?
+  createdByName String?
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages ReportConversationMessage[]
+  @@index([reportId, updatedAt])
+}
+model ReportConversationMessage {
+  id String @id @default(uuid())
+  conversationId String
+  conversation ReportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role String
+  content String
+  authorId String?
+  authorName String?
+  requestKey String? @unique
+  status String @default("COMPLETED")
+  proposal Json?
+  baseVersion Int?
+  draftRevision Int?
+  model String?
+  inputTokens Int?
+  outputTokens Int?
+  appliedPaths Json?
+  createdAt DateTime @default(now())
+  @@index([conversationId, createdAt, id])
+}
+
+/// Immutable call identity, retained even if the conversation is deleted.
+/// Token fields are provider snapshots; null means unreported, never zero.
+model ChatUsageEvent {
+  usageLabel String?
+  id String @id
+  workspaceId String?
+  actorUserId String?
+  conversationId String
+  conversationType String
+  messageId String
+  provider String?
+  model String?
+  mode String
+  status String
+  inputTokens Int?
+  outputTokens Int?
+  totalTokens Int?
+  cachedTokens Int?
+  reasoningTokens Int?
+  startedAt DateTime
+  completedAt DateTime?
+  @@index([workspaceId, actorUserId, startedAt])
+  @@index([conversationType, conversationId, startedAt])
+  @@index([messageId])
+}
+
+model TemplateAiRequest {
+  id String @id @default(uuid())
+  actorScope String
+  requestKey String
+  inputHash String
+  status String @default("RUNNING")
+  model String
+  result Json?
+  usage Json?
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([actorScope, requestKey])
 }

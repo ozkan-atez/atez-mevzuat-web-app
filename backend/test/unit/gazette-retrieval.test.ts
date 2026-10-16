@@ -1,0 +1,29 @@
+import { describe,it,expect,vi } from 'vitest'
+import { selectTariffFields,type RetrievalRequest,type RetrievalResult } from '../../src/modules/gazette-prototype/tariff-retrieval'
+import { executeResearch } from '../../src/modules/gazette-prototype/execute-research'
+import { buildResearchPlan } from '../../src/modules/gazette-prototype/research-plan'
+const request:RetrievalRequest={gtip:'691090000000',queryDate:'2026-10-10',fields:['measure_value','duty_components','legal_basis'],measureKind:'SURVEILLANCE_VALUE_THRESHOLD',origins:[]}
+const measure={id:1,measureType:{measure_type_code:'TRC057'},effective_start_date:'2026-08-10',effective_end_date:'4000-01-01',is_import:true,base_duty:'5500 USD / 1000 kg',dutyExpr:[{amount:5500,currencyCode:'USD',quantity:1000,uom:'KGM G'}],areaDetails:{geographical_area_code:'1011'},legalActViews:[{regulation_url:'https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31.htm'}]}
+const commodity={declarable:true,commodity_code:'691090000000',commodity_start_date:'2020-01-01',commodity_end_date:null,description:'Diğerleri'}
+const payload=()=>({commodities:[commodity],measures:[structuredClone(measure)]})
+const plan=()=>buildResearchPlan([{id:'need',purpose:'PREVIOUS_VALUE',fields:['measure_value'],measureKind:'SURVEILLANCE_VALUE_THRESHOLD',gtips:['691090000000'],origins:[],effectiveRuleId:'r',provision:'Madde 1',searchTerms:['2018/5'],reason:'Önceki değer'}],{publicationDate:'2026-07-11',currentUrl:'https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31.htm',effectiveRules:[{id:'r',resolvedDate:'2026-08-10',previousSnapshotDate:'2026-08-09'}],legalIdentifiers:[]})[0]!
+describe('Tariff alan eşleştirmesi',()=>{
+ it('tarih filtresi uygular, kaynağı ve ham alan konumunu korur',()=>{const p=payload();p.measures.push({...measure,id:2,effective_start_date:'2026-11-01'});const r=selectTariffFields(p,request);expect(r.status).toBe('FOUND');expect(r.selectedMeasureIds).toEqual([1]);expect(r.fields.measure_value?.values[0]?.path).toBe('$.measures[0].base_duty');expect(r.legalSources).toHaveLength(1)})
+ it('geçerlilik başlangıcı olmayan kayıt kesin değer sayılmaz',()=>{const p=payload();p.measures[0]!.effective_start_date='';expect(selectTariffFields(p,request).status).toBe('NOT_FOUND')})
+ it('aynı tarihte birden fazla kayıt varsa ilkini seçmez',()=>{const p=payload();p.measures.push({...measure,id:2});expect(selectTariffFields(p,request).status).toBe('AMBIGUOUS')})
+ it('ülke grubu üyeliğini tahmin etmez',()=>{expect(selectTariffFields(payload(),{...request,origins:['CN']}).status).toBe('AMBIGUOUS')})
+ it('ürün bağlamını önlem bulunmasa da ürünün kendisinden getirir',()=>{const r=selectTariffFields({...payload(),measures:[]},{...request,fields:['product_description'],measureKind:'OTHER'});expect(r.status).toBe('FOUND');expect(r.fields.product_description?.values[0]?.value).toBe('Diğerleri')})
+ it('başka GTİPin önlemlerini kabul etmez',()=>{const p=payload();p.commodities[0]={...commodity,commodity_code:'690721000000'};expect(selectTariffFields(p,request).status).toBe('NOT_FOUND')})
+ it('eksik kodları sıfırla tamamlamaz',()=>{expect(()=>selectTariffFields(payload(),{...request,gtip:'6910'})).toThrow()})
+ it('katalogdaki her alanı döndürmüş gibi davranmaz',()=>{const r=selectTariffFields(payload(),{...request,fields:['measure_value','quota_reference','required_documents']});expect(r.status).toBe('PARTIAL');expect(r.unresolvedFields).toEqual(['quota_reference','required_documents'])})
+ it('üst pozisyon sonekini beyan edilebilir ürün ile karıştırmaz',()=>{const p=payload();p.commodities.push({...commodity,declarable:false,description:'Üst pozisyon'});expect(selectTariffFields(p,request).status).toBe('FOUND')})
+ it('para birimi ve brüt ağırlık uyuşmazlığını kabul etmez',()=>{const r=selectTariffFields(payload(),{...request,expected:[{currency:'EUR',unit:'Ton',grossWeight:true}]});expect(r.status).toBe('NOT_FOUND');expect(r.issues.join(' ')).toContain('Birim/para')})
+ it('USD / brüt ton bağlamını kg bileşeniyle eşleştirir',()=>{expect(selectTariffFields(payload(),{...request,expected:[{currency:'ABD Doları',unit:'Ton',grossWeight:true}]}).status).toBe('FOUND')})
+ it('aynı önlem türündeki farklı temel mevzuatı kullanmaz',()=>{const p=payload();expect(selectTariffFields(p,{...request,legalReferences:['2018/5']}).status).toBe('NOT_FOUND')})
+ it('sayısal sıfırı eksik değer sanmaz',()=>{const p=payload();p.measures[0]!.dutyExpr[0]!.amount=0;expect(selectTariffFields(p,request).fields.duty_components?.status).toBe('FOUND')})
+})
+describe('Araştırma yürütücüsü',()=>{
+ it('yalnız eksik alanları RGye aktarır ve başarılı değerleri korur',async()=>{const result:RetrievalResult={...selectTariffFields(payload(),request),source:null,status:'PARTIAL',unresolvedFields:['legal_basis']};const tariff={retrieve:vi.fn().mockResolvedValue(result)},official={research:vi.fn().mockResolvedValue({status:'REVIEW',analysis:null,sources:[],issues:[],search:{}})};const r=await executeResearch(plan(),tariff,official);expect(tariff.retrieve.mock.calls[0]![0].queryDate).toBe('2026-08-09');expect(official.research.mock.calls[0]![1]).toEqual(['legal_basis']);expect(r.status).toBe('REVIEW');expect(r.tariffResults[0]?.fields.measure_value?.status).toBe('FOUND')})
+ it('tam eşleşmede gereksiz RG/model isteği atmaz',async()=>{const tariff={retrieve:vi.fn().mockResolvedValue({...selectTariffFields(payload(),request),source:null})},official={research:vi.fn()};expect((await executeResearch(plan(),tariff,official)).status).toBe('FOUND');expect(official.research).not.toHaveBeenCalled()})
+ it('yürürlük bilinmiyorsa sorgu atmaz',async()=>{const p=plan();p.executionStatus='NEEDS_EFFECTIVE_DATE';const tariff={retrieve:vi.fn()},official={research:vi.fn()};expect((await executeResearch(p,tariff,official)).status).toBe('REVIEW');expect(tariff.retrieve).not.toHaveBeenCalled()})
+})

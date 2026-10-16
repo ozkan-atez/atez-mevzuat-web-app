@@ -1,3 +1,6 @@
+import { downloadFilename } from './application/download-filename'
+import { archiveClassifications } from './application/archive-classification'
+import { createHash } from 'node:crypto'
 import { getActorContext, privateActorScope, documentAccessWhere } from '../../platform/actor-context'
 import { isLocalWorkspaceRequest } from '../../platform/local-workspace-access'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
@@ -12,7 +15,7 @@ import { fetchSourceBinary, normalizeManagedSourceUrl } from '../managed-sources
 import { DOCUMENT_MAX_BYTES, DocumentError } from './domain/document-content'
 import { importDocument, publicVersion, type DocumentDependencies } from './application/import-document'
 
-const metadata = z.object({title:z.string().trim().min(1).max(300).optional(),documentId:z.string().uuid().optional(),publishedOn:z.iso.date().optional()})
+const metadata = z.object({title:z.string().trim().min(1).max(300).optional(),documentId:z.string().uuid().optional(),publishedOn:z.iso.date().optional(),originalOnly:z.enum(['true','false']).optional()})
 export interface DocumentRouteOptions extends DocumentDependencies { resolveActorScope?: (request:FastifyRequest)=>Promise<string>; fetchBinary?: typeof fetchSourceBinary }
 export async function documentsRoutes(app: FastifyInstance, options: DocumentRouteOptions) {
   await app.register(multipart,{limits:{fileSize:DOCUMENT_MAX_BYTES,files:1,fields:4,parts:5},throwFileSizeLimit:true})
@@ -33,10 +36,19 @@ export async function documentsRoutes(app: FastifyInstance, options: DocumentRou
     return reply.code(500).send({message:'Belge işlemi tamamlanamadı.'})
   })
   app.get('/documents',async (request,reply) => {
-    const parsed=z.object({query:z.string().max(200).optional(),origin:z.enum(['SOURCE','UPLOAD','USER_TEXT']).optional(),from:z.iso.date().optional(),to:z.iso.date().optional(),page:z.coerce.number().int().min(1).default(1),limit:z.coerce.number().int().min(1).max(100).default(30)}).refine(value=>!value.from || !value.to || value.from<=value.to).safeParse(request.query)
+    const parsed=z.object({query:z.string().max(200).optional(),origin:z.enum(['SOURCE','UPLOAD','USER_TEXT']).optional(),sourceId:z.string().min(1).max(100).optional(),sort:z.enum(['OLDEST','NEWEST']).optional(),classification:z.enum(['ALL','IN','OUT','MAYBE','UNREVIEWED']).optional(),from:z.iso.date().optional(),to:z.iso.date().optional(),page:z.coerce.number().int().min(1).default(1),limit:z.coerce.number().int().min(1).max(100).default(30)}).refine(value=>!value.from || !value.to || value.from<=value.to).safeParse(request.query)
     if(!parsed.success)return reply.code(400).send({message:'Belge arama bilgileri geçersiz.'})
     const actorScope=await scope(request)
     const where={...documentAccessWhere(actorScope),...(parsed.data.origin ? {origin:parsed.data.origin}:{}),...(parsed.data.query ? {title:{contains:parsed.data.query,mode:'insensitive' as const}}:{}),...((parsed.data.from || parsed.data.to) ? {publishedOn:{...(parsed.data.from ? {gte:new Date(`${parsed.data.from}T00:00:00Z`)}:{}),...(parsed.data.to ? {lte:new Date(`${parsed.data.to}T00:00:00Z`)}:{})}}:{})}
+    if(parsed.data.classification){
+      // Filter before pagination so IN results and totals span the entire archive.
+      const rows=await options.prisma.document.findMany({where,orderBy:[{publishedOn:{sort:parsed.data.sort==='NEWEST'?'desc':'asc',nulls:'last'}},{sourceId:'asc'},{createdAt:parsed.data.sort==='NEWEST'?'desc':'asc'},{id:'asc'}],include:{source:{select:{id:true,name:true,key:true,baseUrl:true}},versions:{orderBy:{createdAt:'desc'},select:{id:true,mimeType:true,extractionStatus:true,originalFilename:true,createdAt:true,storedObjectId:true,contentHash:true}}}})
+      const classifications=await archiveClassifications(options.prisma,rows,actorScope)
+      const sources=[...new Map(rows.flatMap(row=>row.source?[[row.source.id,row.source] as const]:[])).values()]
+      const filtered=rows.filter(row=>(!parsed.data.sourceId || row.sourceId===parsed.data.sourceId) && (parsed.data.classification==='ALL'||(classifications.get(row.id)?.decision ?? 'UNREVIEWED')===parsed.data.classification))
+      const start=(parsed.data.page-1)*parsed.data.limit
+      return {documents:filtered.slice(start,start+parsed.data.limit).map(({versions,...document})=>({...document,classification:classifications.get(document.id)?.decision ?? 'UNREVIEWED',versions:versions.map(publicVersion),latestVersion:versions[0]?publicVersion(versions[0]):null})),total:filtered.length,sources}
+    }
     const [rows,total]=await Promise.all([options.prisma.document.findMany({where,orderBy:{createdAt:'desc'},skip:(parsed.data.page-1)*parsed.data.limit,take:parsed.data.limit,include:{versions:{orderBy:{createdAt:'desc'}}}}),options.prisma.document.count({where})])
     return {documents:rows.map(({versions,...document})=>({...document,versions:versions.map(publicVersion),latestVersion:versions[0] ? publicVersion(versions[0]):null})),total}
   })
@@ -45,6 +57,15 @@ export async function documentsRoutes(app: FastifyInstance, options: DocumentRou
     const document=await options.prisma.document.findFirst({where:{id,...documentAccessWhere(await scope(request))},include:{versions:{orderBy:{createdAt:'desc'}}}})
     if(!document)throw new DocumentError('Belge bulunamadı.',404)
     return {...document,versions:document.versions.map(publicVersion)}
+  })
+  app.get('/document-versions/:id/original',async (request,reply) => {
+    const {id}=request.params as {id:string}
+    const version=await options.prisma.documentVersion.findFirst({where:{id,document:documentAccessWhere(await scope(request))},include:{storedObject:true,document:{select:{canonicalUrl:true}}}})
+    if(!version?.storedObject)throw new DocumentError('Özgün dosya bulunamadı.',404)
+    const bytes=await options.objectStore.getContent(version.storedObject.objectKey)
+    if(createHash('sha256').update(bytes).digest('hex')!==version.contentHash)throw new DocumentError('Dosya bütünlüğü doğrulanamadı.')
+    const disposition=downloadFilename(version.originalFilename,version.document?.canonicalUrl,version.mimeType || version.storedObject.mediaType)
+    return reply.header('Content-Type','application/octet-stream').header('X-Content-Type-Options','nosniff').header('Cache-Control','private, no-store').header('Content-Disposition',disposition).send(bytes)
   })
   app.get('/document-versions/:id/content',async request => {
     const {id}=request.params as {id:string}
@@ -60,6 +81,14 @@ export async function documentsRoutes(app: FastifyInstance, options: DocumentRou
     const record=await options.prisma.documentImport.findFirst({where:{id,actorScope:await scope(request)}})
     if(!record)throw new DocumentError('Belge ekleme işlemi bulunamadı.',404)
     return {id:record.id,status:record.status,error:record.error,documentVersionId:record.documentVersionId}
+  })
+  app.post('/documents/:id/test',async request=>{
+    const {id}=request.params as {id:string}
+    const version=await options.prisma.documentVersion.findFirst({where:{documentId:id,document:documentAccessWhere(await scope(request))},orderBy:{createdAt:'desc'},include:{storedObject:true}})
+    if(!version?.storedObject)throw new DocumentError('Özgün dosya bulunamadı.',404)
+    const bytes=await options.objectStore.getContent(version.storedObject.objectKey)
+    if(createHash('sha256').update(bytes).digest('hex')!==version.contentHash)throw new DocumentError('Dosya bütünlüğü doğrulanamadı.')
+    return {status:'VERIFIED',message:'Özgün dosya erişimi ve bütünlüğü doğrulandı. AI analizi ayrı bir adımdır.'}
   })
   app.post('/documents/uploads',async (request,reply)=>{
     const actorScope=await scope(request)
@@ -78,7 +107,7 @@ export async function documentsRoutes(app: FastifyInstance, options: DocumentRou
       if(!file)throw new DocumentError('Bir dosya seçin.',400)
       const parsed=metadata.safeParse(fields)
       if(!parsed.success)throw new DocumentError('Belge bilgileri geçersiz.',400)
-      const result=await importDocument(options,{...parsed.data,bytes:await readFile(file.path),filename:file.filename,mediaType:file.mediaType,tempPath:file.path,actorScope,...(typeof request.headers['idempotency-key']==='string' ? {idempotencyKey:request.headers['idempotency-key']}: {})})
+      const result=await importDocument(options,{...parsed.data,originalOnly:parsed.data.originalOnly==='true',bytes:await readFile(file.path),filename:file.filename,mediaType:file.mediaType,tempPath:file.path,actorScope,...(typeof request.headers['idempotency-key']==='string' ? {idempotencyKey:request.headers['idempotency-key']}: {})})
       return reply.code(201).send(result)
     } finally {await rm(temporary,{recursive:true,force:true})}
   })
@@ -95,7 +124,7 @@ export async function documentsRoutes(app: FastifyInstance, options: DocumentRou
       try {fetched=await (options.fetchBinary ?? fetchSourceBinary)(canonicalUrl,DOCUMENT_MAX_BYTES)} catch {throw new DocumentError('Bağlantı güvenli biçimde alınamadı; erişimi ve dosya boyutunu kontrol edin.',422)}
       bytes=fetched.body;mediaType=fetched.contentType;filename=decodeURIComponent(new URL(canonicalUrl).pathname.split('/').pop() || 'baglanti-belgesi')
     }
-    const result=await importDocument(options,{bytes,filename,mediaType,actorScope,origin:data.kind==='TEXT'?'USER_TEXT':'UPLOAD',allowHtml:data.kind==='URL',...(canonicalUrl ? {canonicalUrl}:{}),...(data.title ? {title:data.title}:{}),...(data.documentId ? {documentId:data.documentId}:{}),...(data.publishedOn ? {publishedOn:data.publishedOn}:{}),...(typeof request.headers['idempotency-key']==='string'?{idempotencyKey:request.headers['idempotency-key']}:{})})
+    const result=await importDocument(options,{bytes,filename,mediaType,actorScope,origin:data.kind==='TEXT'?'USER_TEXT':'UPLOAD',originalOnly:data.originalOnly==='true',allowHtml:data.kind==='URL',...(canonicalUrl ? {canonicalUrl}:{}),...(data.title ? {title:data.title}:{}),...(data.documentId ? {documentId:data.documentId}:{}),...(data.publishedOn ? {publishedOn:data.publishedOn}:{}),...(typeof request.headers['idempotency-key']==='string'?{idempotencyKey:request.headers['idempotency-key']}:{})})
     return reply.code(201).send(result)
   })
 }

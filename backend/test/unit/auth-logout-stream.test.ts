@@ -11,6 +11,23 @@ import {permissionsForRole,actorContext,type ActorContext} from '../../src/platf
 const config=loadAuthConfig({AUTH_PROFILE:'local',APP_PUBLIC_ORIGIN:'http://localhost:5173',OIDC_ISSUER_URL:'http://localhost:45881/realms/test',OIDC_CLIENT_ID:'client',OIDC_CLIENT_SECRET:'fixture-secret',OIDC_REDIRECT_URI:'http://localhost:5173/api/auth/callback',OIDC_POST_LOGOUT_REDIRECT_URI:'http://localhost:5173/login',SESSION_ENCRYPTION_KEY:Buffer.alloc(32,3).toString('hex')})
 const actor=(role:'EDITOR'|'VIEWER'='EDITOR'):ActorContext=>({userId:'user',identityId:'identity',workspaceId:'workspace',issuer:config.issuer,subject:'subject',role,permissions:permissionsForRole(role)})
 describe('logout and long-running request boundaries',()=>{
+ it('allows admin context and new operations, still checks CSRF and current role',async()=>{
+  const csrf=randomHandle(),runtime=new AuthRuntime({} as PrismaClient,config,{} as AuthProvider)
+  let current:ActorContext={...actor(),role:'ADMIN',permissions:[]}
+  vi.spyOn(runtime,'authenticate').mockImplementation(async()=>({actor:{...current},session:{csrfToken:csrf} as any,user:{id:'user',email:'u@test',name:null},workspace:{id:'workspace',name:'ATEZ'}}))
+  const app=Fastify();await installAuth(app,{runtime})
+  app.get('/api/v1/chat/context',async()=>({ok:true}))
+  app.post('/api/v1/admin-new-operation',async request=>{await request.assertSessionActive!();return{ok:true}})
+  app.get('/api/v1/admin-demotion',async request=>{current=actor('VIEWER');await request.assertSessionActive!();return{ok:true}})
+  const headers={host:'localhost:5173',cookie:`${config.sessionCookie}=${randomHandle()}`,origin:config.publicOrigin,'x-csrf-token':csrf}
+  try {
+   expect((await app.inject({method:'GET',url:'/api/v1/chat/context',headers})).statusCode).toBe(200)
+   expect((await app.inject({method:'POST',url:'/api/v1/admin-new-operation',headers})).statusCode).toBe(200)
+   expect((await app.inject({method:'POST',url:'/api/v1/admin-new-operation',headers:{...headers,'x-csrf-token':'invalid'}})).statusCode).toBe(403)
+   expect((await app.inject({method:'GET',url:'/api/v1/admin-demotion',headers})).statusCode).toBe(403)
+   expect((await app.inject({method:'POST',url:'/api/v1/admin-new-operation',headers})).statusCode).toBe(403)
+  } finally {await app.close()}
+ })
  it('accepts a CSRF-proven expired revoked-member logout without refreshing or loading membership',async()=>{
   const handle=randomHandle(),csrf=randomHandle(),row={idHash:digest(handle),issuer:config.issuer,clientId:config.clientId,csrfToken:csrf,encryptedTokens:null,idleExpiresAt:new Date(0),absoluteExpiresAt:new Date(0),revoked:true}
   const prisma={authSession:{findUnique:vi.fn(async()=>row),updateMany:vi.fn(async()=>({count:0}))},externalIdentity:{findFirst:vi.fn()},workspaceMembership:{findFirst:vi.fn()}} as unknown as PrismaClient

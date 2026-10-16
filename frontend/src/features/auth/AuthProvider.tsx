@@ -43,6 +43,6 @@ export function AuthProvider({ children }: {children:ReactNode}) {
     generation.current++;request.current?.abort();setSessionMemory(null);setSession(null);setStatus('anonymous');setExpired(false)
     if(typeof result.logoutUrl==='string'){const target=new URL(result.logoutUrl,window.location.origin);if(['http:','https:'].includes(target.protocol))window.location.assign(target.href)}
   },[])
-  const can=useCallback((permission:string)=>!!session&&session.permissions.includes(permission),[session])
+  const can=useCallback((permission:string)=>!!session&&(session.role==='ADMIN'||session.permissions.includes(permission)),[session])
   return <AuthContext.Provider value={{status,session,error,expired,can,reload,logout,clearForbidden:()=>{setError(null);setStatus(session?'authenticated':'anonymous')}}}>{children}</AuthContext.Provider>
 }

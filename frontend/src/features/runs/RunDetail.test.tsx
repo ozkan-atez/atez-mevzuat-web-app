@@ -33,7 +33,9 @@ describe('RunDetail', () => {
     vi.stubGlobal('EventSource', SilentEventSource)
     renderDetail()
 
-    expect(await screen.findByText('Varlıklar indiriliyor')).toBeVisible()
+    await userEvent.click(await screen.findByText('İşlem ayrıntıları ve yeniden deneme'))
+    await userEvent.click(screen.getByText('Belgeler ve kapsam sonuçları · 1'))
+    expect(screen.getByText('Varlıklar indiriliyor')).toBeVisible()
     expect(screen.getByText('Gümrük ve dış ticaret ilgisi belirleniyor')).toBeVisible()
     expect(screen.getByText('Önceki kaynaklar hazırlanıyor')).toBeVisible()
     expect(screen.getByText('Mevzuat değişiklikleri analiz ediliyor')).toBeVisible()
@@ -58,7 +60,7 @@ describe('RunDetail', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(run), { status: 200 })))
     renderDetail()
     expect(await screen.findByText('Değişiklik bulunmadı')).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Değişiklik yok raporunu aç' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Değişiklik yok raporunu aç/ })).toBeInTheDocument()
     expect(screen.queryByText('Topic analizi')).not.toBeInTheDocument()
   })
 

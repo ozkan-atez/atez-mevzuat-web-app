@@ -1,3 +1,4 @@
+import { backfillDocumentArchive } from '../documents/application/backfill-document-archive'
 import {jobInitiatorFields} from '../../platform/actor-context'
 import { captureSourceDocument } from './source-attachments'
 import { createHash } from 'node:crypto'
@@ -54,25 +55,27 @@ export async function executeSourceRun(prisma: PrismaClient, runId: string, tari
     await stage('DISCOVERY',collected.warnings.length?'PARTIAL':'COMPLETED',collected.observed,collected.observed)
     await stage('CAPTURE','RUNNING',items.length)
     if (!processing) throw new Error('Kaynak AI filtreleme ve rapor servisi yapılandırılmamış.')
-    let budget=Math.min(Number(processing.maxRunBytes),100_000_000);let completed=0
+    let budget=Math.min(Number(processing.maxRunBytes),100_000_000);let completed=0;let unchanged=0
     const scope=run.scanRun?.automationId??`manual:${run.sourceId}`
     for(const item of items) {
       try {
         const existing=await prisma.sourceScanDocument.findUnique({where:{runId_url:{runId,url:item.url}}})
-        const capture=existing?.captureStatus==='COMPLETED'?null:await captureSourceDocument(item.url,run.source.baseUrl,processing.objectStore,item.attachments??[],budget,item.capturedHtml?async(url,maxBytes)=>url===item.url?{body:Buffer.from(item.capturedHtml!),contentType:'text/html'}:session!.binary(url,maxBytes):session.binary)
+        const capture=existing?.captureStatus==='COMPLETED'?null:await captureSourceDocument(item.url,run.source.baseUrl,processing.objectStore,item.attachments??[],budget,item.capturedHtml?async(url,maxBytes)=>url===item.url?{body:Buffer.from(item.capturedHtml!),contentType:'text/html'}:session!.binary(url,maxBytes):session.binary,{extractPdfText:false,maxFileBytes:profile.config.maxFileBytes??25_000_000})
         const files=capture?.files??(Array.isArray(existing?.capturedFiles)?existing.capturedFiles:[])
         budget-=files.reduce((sum:number,file:any)=>sum+(file.status==='STORED'?Number(file.byteSize??0):0),0)
         const contentText=item.capturedContent??capture?.contentText??existing?.contentText??null
-        const hash=contentText?createHash('sha256').update(JSON.stringify({text:contentText,files:files.map((file:any)=>({url:file.url,sha256:file.sha256})).sort((a:any,b:any)=>a.url.localeCompare(b.url))})).digest('hex'):null
-        const receipt=datePolicy==='NEW_OR_CHANGED'?await prisma.sourceObservation.findUnique({where:{sourceId_scope_url:{sourceId:run.sourceId,scope,url:item.url}}}):null
-        if(!existing&&hash&&receipt?.contentHash===hash&&capture?.status==='COMPLETED'){completed++;continue}
+        const hash=(contentText||files.some((f:any)=>f.sha256))?createHash('sha256').update(JSON.stringify({text:contentText,files:files.map((file:any)=>({url:file.url,sha256:file.sha256})).sort((a:any,b:any)=>a.url.localeCompare(b.url))})).digest('hex'):null
+        const receipt=(run.scanRun?.automationId || datePolicy==='NEW_OR_CHANGED')?await prisma.sourceObservation.findUnique({where:{sourceId_scope_url:{sourceId:run.sourceId,scope,url:item.url}}}):null
+        if(!existing&&hash&&receipt?.contentHash===hash&&capture?.status==='COMPLETED'){completed++;unchanged++;continue}
         if(capture?.errors.length)failures.push(...capture.errors)
         await prisma.sourceScanDocument.upsert({where:{runId_url:{runId,url:item.url}},create:{runId,url:item.url,title:item.title,publishedOn:item.publishedOn?new Date(item.publishedOn):null,dateBasis:item.publishedOn?'PUBLISHED':'FIRST_SEEN',contentText,contentHash:hash,feedUrl:item.feedUrl,captureStatus:capture?.status??'COMPLETED',capturedFiles:files as Prisma.InputJsonValue,captureError:capture?.errors.join('; ').slice(0,1000)||null},update:existing?.captureStatus==='COMPLETED'?{}:{contentText,contentHash:hash,captureStatus:capture?.status??'FAILED',capturedFiles:files as Prisma.InputJsonValue,captureError:capture?.errors.join('; ').slice(0,1000)||null}})
         completed++
       }catch(error){failures.push(`${item.title}: ${error instanceof Error?error.message:'Belge okunamadı.'}`)}
       await stage('CAPTURE','RUNNING',items.length,completed)
     }
+    await backfillDocumentArchive(prisma,{apply:true,sourceRunId:runId})
     await stage('CAPTURE',failures.length?'PARTIAL':'COMPLETED',items.length,completed)
+    if(unchanged)await prisma.sourceScanRun.update({where:{id:runId},data:{coverage:{notes:[...(collected.notes??[]),`${unchanged} belge önceki çalışmayla aynı; yeniden analiz edilmedi.`],pages:collected.pages,warnings:collected.warnings,observed:collected.observed,oldestDate:collected.oldestDate,newestDate:collected.newestDate}}})
     const documents=await prisma.sourceScanDocument.findMany({where:{runId}})
     const valid=documents.filter(d=>d.captureStatus==='COMPLETED'&&d.contentText)
     await stage('VALIDATION',valid.length===documents.length?'COMPLETED':'PARTIAL',documents.length,valid.length)

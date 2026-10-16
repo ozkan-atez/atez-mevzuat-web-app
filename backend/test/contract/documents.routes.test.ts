@@ -1,4 +1,5 @@
 import Fastify from 'fastify'
+import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 import { documentsRoutes } from '../../src/modules/documents/documents.routes'
@@ -11,6 +12,37 @@ function createApp(prisma:any, options:Record<string,unknown>={}){
   return app
 }
 describe('document HTTP boundary',()=>{
+  it('downloads original bytes only within the actor scope as an attachment',async()=>{
+    const bytes=Buffer.from('original content')
+    const findFirst=vi.fn(async()=>({storedObject:{objectKey:'private/key'},contentHash:createHash('sha256').update(bytes).digest('hex'),originalFilename:'örnek.txt',mimeType:'text/plain'}))
+    const getContent=vi.fn(async()=>bytes)
+    const response=await createApp({documentVersion:{findFirst}},{actorScope:'trusted',objectStore:{getContent}}).inject({method:'GET',url:'/api/v1/document-versions/v/original'})
+    expect(response.statusCode).toBe(200);expect(response.body).toBe('original content')
+    expect(response.headers['content-disposition']).toContain('attachment;')
+    expect(response.headers['x-content-type-options']).toBe('nosniff')
+    expect(findFirst).toHaveBeenCalledWith({where:{id:'v',document:{actorScope:'trusted'}},include:{storedObject:true,document:{select:{canonicalUrl:true}}}})
+  })
+  it('does not read storage for an inaccessible original',async()=>{
+    const getContent=vi.fn()
+    const response=await createApp({documentVersion:{findFirst:vi.fn(async()=>null)}},{actorScope:'trusted',objectStore:{getContent}}).inject({method:'GET',url:'/api/v1/document-versions/v/original'})
+    expect(response.statusCode).toBe(404);expect(getContent).not.toHaveBeenCalled()
+  })
+  it('filters before pagination and returns real source metadata',async()=>{
+    const rows=Array.from({length:4},(_,i)=>({id:`d${i}`,title:`Document ${i}`,canonicalUrl:null,source:{id:'s',name:'Resmî Gazete',key:'resmi-gazete',baseUrl:'https://www.resmigazete.gov.tr'},versions:[{id:`v${i}`,storedObjectId:null,contentHash:`h${i}`,createdAt:new Date(),mimeType:'text/html',extractionStatus:'READY',originalFilename:null}]}))
+    const prisma={document:{findMany:vi.fn(async()=>rows)},documentLink:{findMany:vi.fn(async()=>[])},operationArtifact:{findMany:vi.fn(async()=>[{createdAt:new Date(),data:{decisions:rows.map((_,i)=>({documentVersionId:`v${i}`,decision:i===0?'OUT':'IN'}))}}])}}
+    const response=await createApp(prisma,{actorScope:'trusted'}).inject({method:'GET',url:'/api/v1/documents?classification=IN&page=2&limit=2'})
+    expect(response.statusCode).toBe(200);expect(response.json().total).toBe(3)
+    expect(response.json().documents).toHaveLength(1);expect(response.json().documents[0]).toMatchObject({id:'d3',classification:'IN',source:{name:'Resmî Gazete'}})
+  })
+  it('filters named sources and orders publication dates with undated records last',async()=>{
+    const findMany=vi.fn(async()=>[{id:'d',sourceId:'s',source:{id:'s',name:'Resmî Gazete',key:'rg',baseUrl:'https://www.resmigazete.gov.tr'},versions:[]}])
+    const app=createApp({document:{findMany},documentLink:{findMany:vi.fn(async()=>[])},operationArtifact:{findMany:vi.fn(async()=>[])}})
+    const response=await app.inject({method:'GET',url:'/api/v1/documents?classification=ALL&sourceId=other&sort=NEWEST'})
+    expect(response.statusCode).toBe(200);expect(response.json()).toMatchObject({total:0,documents:[],sources:[{id:'s',name:'Resmî Gazete'}]})
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({orderBy:[{publishedOn:{sort:'desc',nulls:'last'}},{sourceId:'asc'},{createdAt:'desc'},{id:'asc'}]}))
+    await app.inject({method:'GET',url:'/api/v1/documents?classification=ALL&sourceId=s&sort=OLDEST'})
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({orderBy:[{publishedOn:{sort:'asc',nulls:'last'}},{sourceId:'asc'},{createdAt:'asc'},{id:'asc'}]}))
+  })
   it('fails closed for remote clients without a trusted scope resolver',async()=>{
     const prisma={document:{findMany:vi.fn(),count:vi.fn()}}
     const response=await createApp(prisma).inject({method:'GET',url:'/api/v1/documents',remoteAddress:'192.168.10.10'})

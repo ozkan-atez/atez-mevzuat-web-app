@@ -1,3 +1,5 @@
+import { getReportThread } from '../../chat/infrastructure/report-history'
+import { reportActor, recordReportMessage } from '../../chat/infrastructure/report-audit'
 import { getActorContext, resourceOwnership, reportAccessWhere, privateActorScope,jobInitiatorFields, topicAccessWhere } from '../../../platform/actor-context'
 import {ReportDraftConflictError,ReportDraftBusyError,ReportDraftChangedError} from '../application/apply-report-field-edits'
 import { sourcePriority } from '../../managed-sources/source-priority'
@@ -181,7 +183,14 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     })
   }
 
+  async recordTopicAiUsage(id: string, usage: import('../../usage/measurement').TokenUsage): Promise<void> {
+    await this.prisma.topicAiExecution.update({where: {id}, data: usage})
+  }
+
   async completeTopicAiExecution(id: string, input: {
+    totalTokens?: number | null
+    cachedTokens?: number | null
+    reasoningTokens?: number | null
     analysisRevisionId?: string
     providerRequestId: string | null
     latencyMs: number
@@ -281,13 +290,13 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         const previous=await tx.reportRevision.findUnique({where:{draftId:input.draftId,report:reportAccessWhere()},include:{report:true}})
         if(previous)return {id:previous.report.id,revisionId:previous.id,topicId:previous.report.topicId,version:previous.version,basename:previous.report.basename,card:previous.card,specObjectKey:previous.specObjectKey,htmlObjectKey:previous.htmlObjectKey}
         const draft=await tx.reportDraft.findUnique({where:{id:input.draftId,...reportAccessWhere()},include:{edits:{select:{sequence:true}}}})
-        const current=await tx.topicReport.findFirst({where:{AND:[reportAccessWhere()],OR:[{topicId:input.topicId!},{id:input.topicId!,topicId:null,card:'K6'}]}})
+        const current=await tx.topicReport.findFirst({where:{AND:[reportAccessWhere()],OR:[{topicId:input.topicId!},{id:input.topicId!,topicId:null}]}})
         if(!draft || draft.status!=='OPEN' || (draft.topicId ?? draft.reportId)!==input.topicId || draft.baseVersion!==(current?.latestVersion ?? 0) || input.version!==draft.baseVersion+1)throw new ReportDraftConflictError(current?.latestVersion ?? 0,'Rapor veya taslak bu arada değişti; güncel taslağı kontrol edin.')
         if((input.draftUpdatedAt!==undefined && draft.updatedAt.toISOString()!==input.draftUpdatedAt) || (input.draftSequence!==undefined && Math.max(0,...draft.edits.map(e=>e.sequence))!==input.draftSequence))throw new ReportDraftChangedError('Kaydet sırasında taslağa yeni değişiklik eklendi; güncel değişiklikleri inceleyin.')
         if(await this.hasPendingReportRevisionWork(input.topicId!,tx))throw new ReportDraftBusyError('Rapor düzeltmesi hâlâ hazırlanıyor; tamamlandıktan sonra Kaydet ile sürüm oluşturabilirsiniz.')
       }
       let report = input.topicId
-        ? await tx.topicReport.findFirst({ where: { AND: [reportAccessWhere()], OR: [{ topicId: input.topicId }, { id: input.topicId, topicId: null, card: 'K6' }] } })
+        ? await tx.topicReport.findFirst({ where: { AND: [reportAccessWhere()], OR: [{ topicId: input.topicId }, { id: input.topicId, topicId: null }] } })
         : await tx.topicReport.findFirst({ where: { scanRunId: input.scanRunId, topicId: null, card: 'K6' } })
       report ??= await tx.topicReport.create({
         data: {
@@ -299,8 +308,10 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
           card: input.card,
         },
       })
+      const publisher = await reportActor(tx)
       const revision = await tx.reportRevision.create({
         data: {
+          createdBy: publisher.id, createdByName: publisher.name, baseVersion: input.version - 1, conversationId: `report:${report.id}`,
           reportId: report.id,
           analysisRevisionId: input.analysisRevisionId,
           version: input.version,
@@ -390,12 +401,18 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
         reports: { where:reportAccessWhere(),include: { revisions: { orderBy: { version: 'asc' } } } },
       },
     })
-    if (topic) return mapTopicDetail(getActorContext() && !topic.reports.length ? {...topic,thread:null,analyses:[]} : topic)
-    // Empty-day bulletins belong to a scan rather than a single gazette document.
-    const report = await this.prisma.topicReport.findFirst({where:{id:topicId,topicId:null,card:'K6',...reportAccessWhere()},include:{revisions:{where:{status:'VALIDATED'},orderBy:{version:'desc'}}}})
-    if (!report || !report.scanRunId || !report.revisions.length) return null
+    if (topic) {
+      const detail = mapTopicDetail(getActorContext() && !topic.reports.length ? {...topic,thread:null,analyses:[]} : topic)
+      const history = await getReportThread(this.prisma,topicId)
+      if(history) detail.thread.messages = history.messages.map(m=>({...m,kind:'REVISION_RESULT',revisionKind:null,...detail.thread.messages.find((original:{id:string})=>original.id===m.id)})) as typeof detail.thread.messages
+      return detail
+    }
+    // Source and empty-day reports share the same report workspace without a gazette topic.
+    const report = await this.prisma.topicReport.findFirst({where:{id:topicId,topicId:null,...reportAccessWhere()},include:{revisions:{where:{status:'VALIDATED'},orderBy:{version:'desc'}}}})
+    if (!report || !report.revisions.length) return null
+    const history = await getReportThread(this.prisma,report.id)
     const revisions = report.revisions.map(r=>({id:r.id,version:r.version,card:r.card,basename:report.basename,createdAt:r.createdAt.toISOString()}))
-    return {id:report.id,documentId:'',runId:report.scanRunId,title:report.title,sourceUrl:'',status:'COMPLETED' as const,retryAvailable:false,errorCategory:null,errorMessage:null,analysisVersion:null,reportVersion:revisions[0]!.version,reportCard:report.card,reportBasename:report.basename,latestAnalysis:null,latestReport:revisions[0]!,analyses:[],reports:revisions,thread:{id:null,messages:[]}}
+    return {id:report.id,documentId:'',runId:report.scanRunId ?? '',title:report.title,sourceUrl:'',status:'COMPLETED' as const,retryAvailable:false,errorCategory:null,errorMessage:null,analysisVersion:null,reportVersion:revisions[0]!.version,reportCard:report.card,reportBasename:report.basename,latestAnalysis:null,latestReport:revisions[0]!,analyses:[],reports:revisions,thread:{id:null,messages:(history?.messages ?? []).map(m=>({...m,kind:'REVISION_RESULT',revisionKind:null}))}}
 
   }
 
@@ -427,6 +444,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
       const message = await tx.chatMessage.create({
         data: { ...(getActorContext()?{workspaceId:getActorContext()!.workspaceId,initiatorUserId:getActorContext()!.userId}:{}),threadId: thread.id, role: 'USER', kind: 'REVISION_REQUEST', revisionKind: input.revisionKind, requestKey: input.requestKey, content: input.message },
       })
+      await recordReportMessage(tx, input.topicId, message)
       await tx.topicOutbox.create({
         data: {
           ...jobInitiatorFields(),
@@ -476,7 +494,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
 
   async getTopicReportHtmlKey(topicId: string, version: number): Promise<string | null> {
     const revision = await this.prisma.reportRevision.findFirst({
-      where: { report: { AND: [reportAccessWhere()], OR: [{ topicId }, { id: topicId, topicId: null, card: 'K6' }] }, version, status: 'VALIDATED' },
+      where: { report: { AND: [reportAccessWhere()], OR: [{ topicId }, { id: topicId, topicId: null }] }, version, status: 'VALIDATED' },
       select: { htmlObjectKey: true },
     })
     return revision?.htmlObjectKey ?? null
@@ -499,7 +517,7 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
       }
   > {
     const revision = await this.prisma.reportRevision.findFirst({
-      where: { report: { AND: [reportAccessWhere()], OR: [{ topicId }, { id: topicId, topicId: null, card: 'K6' }] }, version, status: 'VALIDATED' },
+      where: { report: { AND: [reportAccessWhere()], OR: [{ topicId }, { id: topicId, topicId: null }] }, version, status: 'VALIDATED' },
       select: {
         version: true,
         htmlObjectKey: true,
@@ -639,14 +657,24 @@ export class PrismaTopicAnalysisRepository implements RunTopicAnalysisRepository
     return message ?? null
   }
 
+  async getLatestAnalysisKey(topicId:string) {
+    const analysis=await this.prisma.analysisRevision.findFirst({where:{topicId,topic:topicAccessWhere()},orderBy:{version:'desc'},select:{markdownObjectKey:true}})
+    return analysis?.markdownObjectKey ?? null
+  }
+
+  async recordRunReportMessage(reportId: string, input: {id: string; role: 'USER' | 'ASSISTANT'; content: string}) {
+    await this.prisma.$transaction(tx => recordReportMessage(tx, reportId, {...input, createdAt: new Date()}))
+  }
+
   async appendRevisionResult(topicId: string, input: { role: 'ASSISTANT' | 'SYSTEM'; kind: 'REVISION_RESULT' | 'ERROR'; revisionKind: RevisionKind; content: string; requestKey?: string }): Promise<void> {
     const thread = await this.prisma.analysisThread.findUnique({ where: { topicId } })
     if (!thread) throw new TopicNotFoundError('Topic konuşması bulunamadı.')
-    if (input.requestKey) {
-      await this.prisma.chatMessage.upsert({ where: { requestKey: input.requestKey }, create: { threadId: thread.id, ...input }, update: {} })
-    } else {
-      await this.prisma.chatMessage.create({ data: { threadId: thread.id, ...input } })
-    }
+    await this.prisma.$transaction(async tx => {
+      const message = input.requestKey
+        ? await tx.chatMessage.upsert({where: {requestKey: input.requestKey}, create: {threadId: thread.id, ...input}, update: {}})
+        : await tx.chatMessage.create({data: {threadId: thread.id, ...input}})
+      await recordReportMessage(tx, topicId, message)
+    })
   }
 
   async claimPendingTopicOutbox(limit: number) {

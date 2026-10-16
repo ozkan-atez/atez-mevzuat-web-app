@@ -34,6 +34,33 @@ describe('ResmiGazeteSearch', () => {
     expect(fetchFn.mock.calls[1]![0]).toBe('https://www.resmigazete.gov.tr/eskiler/2025/12/20251231M4.htm')
   })
 
+  it('resolves a grouped communiqué PDF using both the exact identifier and title family', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(`<a href="wrong.pdf">Başka Tebliğler (Tebliğ No: 2018/7)’de Değişiklik Yapılmasına Dair Tebliğler</a><a href="20200607-3.pdf">İthalatta Gözetim Uygulanmasına İlişkin Tebliğler (Tebliğ No: 2018/6), (Tebliğ No: 2018/7), (Tebliğ No: 2018/8)’de Değişiklik Yapılmasına Dair Tebliğler</a>`))
+    const gateway = new ResmiGazeteSearch(new SourcePolicy(['www.resmigazete.gov.tr']), { fetch: fetchFn, timeoutMs: 5000 })
+    await expect(gateway.resolveDocumentUrl({ query: '2018/7', title: 'İTHALATTA GÖZETİM UYGULANMASINA İLİŞKİN TEBLİĞ (TEBLİĞ NO: 2018/7)’DE DEĞİŞİKLİK YAPILMASINA DAİR TEBLİĞ', publicationDate: '2020-06-07', gazetteNo: null, mukerrer: null, regulationType: 'TEBLİĞLER', url: 'https://www.resmigazete.gov.tr/fihrist?tarih=2020-06-07' }, { targetRegulationIdentifier: '2018/7', targetRegulationTitle: null })).resolves.toBe('https://www.resmigazete.gov.tr/eskiler/2020/06/20200607-3.pdf')
+  })
+
+  it('opens legacy archive indexes rather than archiving them as the regulation', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response('<a href="20180503-4.htm">İthalatta Gözetim Uygulanmasına İlişkin Tebliğ (No: 2018/7)</a>'))
+    const gateway = new ResmiGazeteSearch(new SourcePolicy(['www.resmigazete.gov.tr']), { fetch: fetchFn, timeoutMs: 5000 })
+    await expect(gateway.resolveDocumentUrl({ query: '', title: 'İthalatta Gözetim Uygulanmasına İlişkin Tebliğ (No: 2018/7)', publicationDate: '2018-05-03', gazetteNo: null, mukerrer: null, regulationType: null, url: 'https://www.resmigazete.gov.tr/eskiler/2018/05/20180503.htm' }, { targetRegulationIdentifier: '2018/7', targetRegulationTitle: null })).resolves.toBe('https://www.resmigazete.gov.tr/eskiler/2018/05/20180503-4.htm')
+  })
+
+  it('automatically retries a transient timeout, including timeouts reading the body', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValueOnce({ ok: true, json: async () => { throw new DOMException('timed out', 'TimeoutError') } } as unknown as Response)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })))
+    const gateway = new ResmiGazeteSearch(new SourcePolicy(['www.resmigazete.gov.tr']), { fetch: fetchFn, timeoutMs: 5000 })
+    await expect(gateway.search({ query: '10781', endDate: '2026-07-10', limit: 10 })).resolves.toEqual([])
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry permanent HTTP failures', async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 403 }))
+    const gateway = new ResmiGazeteSearch(new SourcePolicy(['www.resmigazete.gov.tr']), { fetch: fetchFn, timeoutMs: 5000 })
+    await expect(gateway.search({ query: '10781', endDate: '2026-07-10', limit: 10 })).rejects.toMatchObject({ retryable: false, providerStatus: 403 })
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
   it('uses the legacy HTML meta charset when the server header omits it', async () => {
     const html = '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1254"></head><body><a href="20251231M4-39.pdf">İthalatta Gözetim Uygulanmasına İlişkin Tebliğ (Tebliğ No: 2018/5)</a></body></html>'
     const cp1254 = Buffer.from(html.replace(/[İıŞşĞğ]/g, (character) => String.fromCharCode(({ İ: 0xdd, ı: 0xfd, Ş: 0xde, ş: 0xfe, Ğ: 0xd0, ğ: 0xf0 } as Record<string, number>)[character]!)), 'latin1')

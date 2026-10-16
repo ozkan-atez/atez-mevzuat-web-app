@@ -175,6 +175,7 @@ export async function executeScanRun(
     await repository.completeStage(runId, currentStage)
 
     const analysisResult = await executeRunTopicAnalyses(runId, {
+      aiModel: dependencies.aiModel, model: dependencies.gemini.model,
       repository: dependencies.topicRepository,
       objectStore,
       concurrency: dependencies.gemini.topicConcurrency,

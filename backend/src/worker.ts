@@ -1,3 +1,7 @@
+import { dispatchConnectorTests, executeConnectorTest } from './modules/managed-sources/connector-setup'
+import { connectorQueueName } from './platform/rabbitmq'
+import { backgroundUsageModel, withUsageContext } from './modules/usage/background-usage'
+import { PrismaUsageRecorder } from './modules/usage/prisma-usage-recorder'
 import { createPreviousSourceExecutor } from './modules/operations/previous-source-executor'
 import { runWithActorContext } from './platform/actor-context'
 import { withJobActor, workerServiceActor, WorkerAuthorizationError } from './platform/worker-actor'
@@ -27,10 +31,7 @@ import { S3ObjectStore } from './modules/scan-runs/infrastructure/s3-object-stor
 import { OfficialHttpClient } from './modules/scan-runs/infrastructure/official-http-client'
 import { SourcePolicy } from './modules/scan-runs/domain/source-policy'
 import { executeScanRun } from './modules/scan-runs/application/execute-scan-run'
-import { registerScanSchedules, resolveScheduledTargetDate } from './modules/scan-runs/application/register-scan-schedules'
-import { findScheduleSlot, type ScanScheduleSlotKey } from './modules/scan-runs/domain/scan-schedule'
-import { DateTime } from 'luxon'
-import { GoogleGenAI } from '@google/genai'
+import { createGoogleAi } from './config/google-ai'
 import type { AiModelClient } from './modules/ai/application/ai-model-client'
 import { AiProviderError } from './modules/ai/domain/ai-errors'
 import { GeminiAiModelClient, type GeminiTransport } from './modules/ai/infrastructure/gemini-ai-model-client'
@@ -43,6 +44,7 @@ import { executePromptPatch } from './modules/topic-analysis/application/execute
 import { PrismaReportDraftRepository } from './modules/topic-analysis/infrastructure/prisma-report-draft-repository'
 import { retryTopicAnalysis } from './modules/topic-analysis/application/retry-topic-analysis'
 
+const usageOperationLabels:Record<string,string>={ANALYZE:'Etki analizi',AI_FILTER:'Belge eleme',FILTER:'Belge eleme',PREVIOUS_SOURCES:'Önceki kaynak araştırması',BUILD_REPORT:'Rapor üretimi',REVISE_REPORT:'Rapor revizyonu',EXTRACT:'Belge okuma',SCAN:'Kaynak taraması'}
 async function startWorker() {
   const queue = await startQueue()
   await rabbitQueue.start()
@@ -62,7 +64,7 @@ async function startWorker() {
   })
   const tariffCredentials = tariffCredentialsFromEnv()
   const tariffLookup = tariffCredentials ? new SingleWindowTariffLookup(tariffCredentials) : undefined
-  const aiModel = createAiModel(env.gemini.apiKey, env.gemini.timeoutMs)
+  const aiModel = createAiModel(env.gemini.timeoutMs)
   const previousSourceSearch = new ResmiGazeteSearch(new SourcePolicy(env.sourceHosts), { timeoutMs: env.sourceTimeoutMs })
   const sourceProcessing: SourceProcessingDependencies = {
     aiModel, http, objectStore, previousSourceSearch, model: env.gemini.model,
@@ -76,7 +78,7 @@ async function startWorker() {
       scope: 'local-workspace', versions: { ANALYZE: `standalone-v2.1-roles:${env.gemini.model}`, EXTRACT: 'document-extractor-v2', BUILD_REPORT: 'corporate-draft-v1' },
       executors: {
         ...createOperationExecutors({ prisma, objectStore, aiModel, model: env.gemini.model, maxContextBytes: env.gemini.maxContentBytes,
-          ...(tariffLookup ? { tariffLookup } : {}), extract: (id, scope) => extractDocumentVersion({ prisma, objectStore }, id, scope) }),
+          ...(tariffLookup ? { tariffLookup } : {}), extract: (id, scope) => extractDocumentVersion({ prisma, objectStore, aiModel, model: env.gemini.model }, id, scope) }),
         ...createSourceOperationExecutors({ prisma, objectStore }),
         PREVIOUS_SOURCES: createPreviousSourceExecutor({ prisma, objectStore, aiModel, model: env.gemini.model, search: previousSourceSearch }),
       },
@@ -85,7 +87,7 @@ async function startWorker() {
       const taskId = (job.data as { taskId: string }).taskId
       const task = await prisma.operationTask.findUnique({ where: { id: taskId }, include: { request: true } })
       if (!task) continue
-      try { await withJobActor(prisma, { workspaceId: task.workspaceId, initiatorUserId: task.ownerUserId }, task.operation === 'BUILD_REPORT' || task.operation === 'REVISE_REPORT' ? 'report.edit' : 'analysis.run', () => operations.execute(taskId)) }
+      try { await withJobActor(prisma, { workspaceId: task.workspaceId, initiatorUserId: task.ownerUserId }, task.operation === 'PUBLISH_REPORT' ? 'report.publish' : task.operation === 'BUILD_REPORT' || task.operation === 'REVISE_REPORT' ? 'report.edit' : 'analysis.run', () => withUsageContext({conversationId:(task.parameters as any)?.executionSnapshot?.conversationId ?? task.requestId,conversationType:(task.parameters as any)?.executionSnapshot?.conversationId ? 'GENERAL' : (task.parameters as any)?.automationId ? 'AUTOMATION':'OPERATION',mode:'ANALYSIS',usageLabel:(task.parameters as any)?.executionSnapshot?.automation?.name ? `${(task.parameters as any).executionSnapshot.automation.name} · ${usageOperationLabels[task.operation] ?? 'AI işlemi'}` : `Belge işlemi · ${usageOperationLabels[task.operation] ?? 'AI işlemi'}`}, () => operations.execute(taskId))) }
       catch (error) {
         if (!(error instanceof WorkerAuthorizationError)) throw error
         await prisma.operationTask.updateMany({ where: { id: taskId, status: { in: ['QUEUED', 'RUNNING'] } }, data: { status: 'BLOCKED', errorCategory: 'AUTHORIZATION_REVOKED', errorMessage: 'İşi başlatan kullanıcının işlem yetkisi etkin değil.' } })
@@ -141,13 +143,17 @@ async function startWorker() {
     for (const job of jobs) {
       const command = job.data as { runId: string; version: number }
       const run = await prisma.sourceScanRun.findUniqueOrThrow({ where: { id: command.runId } })
-      await withJobActor(prisma, run, 'scan.run', () => executeSourceCommand(prisma, command, job.retryCount, sourceProcessing))
+      await withJobActor(prisma, run, 'scan.run', () => withUsageContext({conversationId:run.id,conversationType:run.initiatorUserId?'OPERATION':'AUTOMATION',mode:'SCAN',usageLabel:'Kaynak taraması ve rapor üretimi'}, () => executeSourceCommand(prisma, command, job.retryCount, sourceProcessing)))
     }
+  })
+  await rabbitQueue.work(connectorQueueName, async jobs => {
+    for (const job of jobs) await executeConnectorTest(prisma, String(job.data.profileId))
   })
   let sourceDispatching = false
   const dispatchSources = async () => {
     if (sourceDispatching) return
     sourceDispatching = true
+    await dispatchConnectorTests(prisma, rabbitQueue).catch(error => console.error('Connector dispatch failed:', error))
     try {
       await dispatchSourceRuns(prisma, rabbitQueue)
     } finally { sourceDispatching = false }
@@ -162,36 +168,11 @@ async function startWorker() {
   await dispatch()
   setInterval(() => void dispatch().catch((error) => console.error('Outbox dispatch error:', error)), 1_000)
 
-  const { registered } = await registerScanSchedules({
-    schedule: (name, cron, data, options) => queue.schedule(name, cron, data, options),
-    unschedule: (name, cron) => queue.unschedule(name, cron),
-    getSchedules: async () => (await queue.getSchedules()).map((schedule) => ({ name: schedule.name, key: schedule.key ?? '' })),
-  }, { queueName: scheduledScanQueueName, timezone: env.timezone })
-  console.log(`⏰ Günlük tarama zamanlamaları kuruldu (${env.timezone}): ${registered.join(', ')}`)
+  // Retire fixed schedules, including queued firings left over from older workers.
+  await rabbitQueue.work(scheduledScanQueueName, async () => {})
+  await queue.work(scheduledScanQueueName, async () => {})
 
-  await rabbitQueue.work(scheduledScanQueueName, async (jobs) => {
-    const jobList = Array.isArray(jobs) ? jobs : [jobs]
-    for (const job of jobList) {
-      const { slotKey, scheduledAt } = job.data as { slotKey: ScanScheduleSlotKey; scheduledAt: string }
-      const slot = findScheduleSlot(slotKey)
-      if (!slot) {
-        console.error(`Bilinmeyen zamanlama slotu: ${slotKey}`)
-        continue
-      }
-      // The gazette day is the local calendar day, not UTC: the 23:00 Istanbul run
-      // must still target that same day, and a recovered firing its own day.
-      const now = DateTime.fromISO(scheduledAt).setZone(env.timezone)
-      const targetDate = resolveScheduledTargetDate({
-        slotHour: slot.hour, localHour: now.hour, localDate: now.toFormat('yyyy-MM-dd'),
-      })
-      const run = await repository.createScheduledRun({ targetDate, slotKey, sourceKeys: ['resmi-gazete'] })
-      console.log(run.created
-        ? `⏰ ${slot.label} taraması oluşturuldu (${targetDate}): ${run.id}`
-        : `⏰ ${slot.label} taraması zaten var (${targetDate}): ${run.id}`)
-    }
-  })
-
-  for (const name of [scheduledScanQueueName, workspaceAutomationQueue]) {
+  for (const name of [workspaceAutomationQueue]) {
     if (name === workspaceAutomationQueue) await queue.createQueue(name, { retryLimit: 2 })
     await queue.work(name, { includeMetadata: true }, async jobs => {
       for (const job of jobs) await rabbitQueue.send(name, { ...(job.data as object), scheduledAt: job.createdOn.toISOString() }, { singletonKey: job.id })
@@ -211,7 +192,8 @@ async function startWorker() {
     for (const job of jobList) {
       const command = job.data as ScanCommand & { resumeStalled?: boolean }
       const initiator = await prisma.scanOutbox.findUniqueOrThrow({ where: { id: command.outboxId } })
-      await withJobActor(prisma, initiator, 'scan.run', () => executeScanCommand(prisma, command, job.retryCount, async resumeStalled => {
+      const usageRun = await prisma.scanRun.findUniqueOrThrow({where:{id:command.runId}})
+      await withJobActor(prisma, initiator, 'scan.run', () => withUsageContext({conversationId:command.runId,conversationType:usageRun.automationId || !initiator.initiatorUserId ? 'AUTOMATION':'OPERATION',mode:'ANALYSIS',usageLabel:((usageRun.workspaceConfig as any)?.automationName ?? 'Mevzuat taraması')+' · Rapor üretimi'}, () => executeScanCommand(prisma, command, job.retryCount, async resumeStalled => {
       await executeScanRun(command.runId, {
         repository,
         http,
@@ -229,7 +211,7 @@ async function startWorker() {
           topicConcurrency: env.gemini.topicConcurrency,
         },
       }, command.type, { resumeStalled })
-      }, (client, runId) => runSelectedSources(client, runId, sourceProcessing)))
+      }, (client, runId) => runSelectedSources(client, runId, sourceProcessing))))
     }
   })
 
@@ -238,7 +220,8 @@ async function startWorker() {
     for (const job of jobList) {
       const command = job.data as TopicAnalysisCommand
       const initiator = await prisma.topicOutbox.findUniqueOrThrow({ where: { id: command.outboxId } })
-      await withJobActor(prisma, initiator, 'report.edit', async () => {
+      const usageReport = await prisma.topicReport.findFirst({where:{topicId:command.topicId},select:{id:true}})
+      await withJobActor(prisma, initiator, 'report.edit', () => withUsageContext({conversationId:usageReport?.id ?? command.topicId,conversationType:command.messageId?'REPORT':'OPERATION',...(command.messageId?{messageId:command.messageId}:{}),mode:command.messageId?'REVISION':'ANALYSIS',usageLabel:'Rapor analizi'}, async () => {
       if (command.command === 'REVISE_FIELDS') {
         if (!command.messageId) throw new Error('Alan revizyonu komutunda messageId eksik.')
         await executePromptPatch({ topicId: command.topicId, messageId: command.messageId }, {
@@ -257,34 +240,31 @@ async function startWorker() {
           model: env.gemini.model, maxContextBytes: env.gemini.maxContentBytes,
         })
       }
-      })
+      }))
     }
   })
 }
 
-function createAiModel(apiKey: string | undefined, timeoutMs: number): AiModelClient {
-  if (!apiKey) {
+function createAiModel(timeoutMs: number): AiModelClient {
+  const client = createGoogleAi()
+  if (!client) {
     return {
       async generateStructured() {
-        throw new AiProviderError('AUTHENTICATION', false, 'Gemini API anahtarı yapılandırılmamış.')
+        throw new AiProviderError('AUTHENTICATION', false, 'AI bağlantısı yapılandırılmamış.')
       },
     }
   }
-  const client = new GoogleGenAI({ apiKey })
   const transport: GeminiTransport = {
     async generateContent(request) {
       const response = await client.models.generateContent(request)
       return {
         ...(response.text ? { text: response.text } : {}),
         ...(response.responseId ? { responseId: response.responseId } : {}),
-        usageMetadata: {
-          ...(typeof response.usageMetadata?.promptTokenCount === 'number' ? { promptTokenCount: response.usageMetadata.promptTokenCount } : {}),
-          ...(typeof response.usageMetadata?.candidatesTokenCount === 'number' ? { candidatesTokenCount: response.usageMetadata.candidatesTokenCount } : {}),
-        },
+        ...(response.usageMetadata ? {usageMetadata: response.usageMetadata} : {}),
       }
     },
   }
-  return new GeminiAiModelClient(transport, { timeoutMs })
+  return backgroundUsageModel(new GeminiAiModelClient(transport, { timeoutMs }), new PrismaUsageRecorder(prisma), {conversationType:'OPERATION',mode:'ANALYSIS',usageLabel:'AI analizi'})
 }
 
 workerServiceActor(prisma).then(actor => runWithActorContext(actor, startWorker)).catch(err => {

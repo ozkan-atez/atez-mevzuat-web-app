@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Button, Checkbox, Empty, Input, Pagination, Spin } from 'antd'
 import { DesktopOutlined, GlobalOutlined, PaperClipOutlined, PlusOutlined } from '@ant-design/icons'
 import { useCan } from '../auth/AuthProvider'
@@ -7,7 +7,8 @@ import type { DocumentAttachment } from '../documents/AttachmentList'
 
 const MAX_ATTACHMENTS = 10
 
-export function ComposerAttachments({items,disabled,onAdd,onRemove,onBusyChange,onError,webSearch,onWebSearchChange,browserAgent,onBrowserAgentChange}: {
+export function ComposerAttachments({contextPanel, hasContext, sourcesSelected, items,disabled,onAdd,onRemove,onBusyChange,onError,webSearch,onWebSearchChange,browserAgent,onBrowserAgentChange}: {
+  sourcesSelected?: boolean; contextPanel?: ReactNode; hasContext?: boolean;
   browserAgent?:boolean;onBrowserAgentChange?:(enabled:boolean)=>void;
   webSearch?:boolean;onWebSearchChange?:(enabled:boolean)=>void;
   items:DocumentAttachment[];disabled:boolean;onAdd:(item:DocumentAttachment)=>void;onRemove:(id:string)=>void;
@@ -42,14 +43,14 @@ export function ComposerAttachments({items,disabled,onAdd,onRemove,onBusyChange,
   useEffect(()=>{
     if(!open)return
     const dismiss=(event:MouseEvent)=>{if(event.target instanceof Node && !host.current?.contains(event.target))setOpen(false)}
-    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){setOpen(false);host.current?.querySelector<HTMLButtonElement>('[aria-expanded]')?.focus()}}
+    const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){setOpen(false);host.current?.querySelector<HTMLButtonElement>('button.atez-chat-add')?.focus()}}
     document.addEventListener('mousedown',dismiss)
     document.addEventListener('keydown',escape)
     return()=>{document.removeEventListener('mousedown',dismiss);document.removeEventListener('keydown',escape)}
   },[open])
 
   const upload = async (files:File[])=>{
-    if(!files.length || disabled || webSearch || browserAgent || uploading.current || !canUpload)return
+    if(!files.length || disabled || sourcesSelected || webSearch || browserAgent || uploading.current || !canUpload)return
     if(files.length + items.length > MAX_ATTACHMENTS){onError('Bir mesaja en fazla 10 belge ekleyebilirsiniz.');return}
     uploading.current=true;onBusyChange(true);onError(null);setOpen(false)
     const errors:string[]=[]
@@ -65,9 +66,10 @@ export function ComposerAttachments({items,disabled,onAdd,onRemove,onBusyChange,
   }
 
   const panel = <div className="atez-composer-attachment-panel" id="chat-attachment-panel" onKeyDown={event=>{if(event.key==='Enter' && event.target instanceof HTMLInputElement)event.preventDefault()}}>
-      {canUpload && <Button type="text" aria-label="Bilgisayardan dosya ekle" icon={<PaperClipOutlined aria-hidden />} disabled={disabled || webSearch || browserAgent || items.length>=MAX_ATTACHMENTS} onClick={()=>{setOpen(false);input.current?.click()}}>Bilgisayardan dosya ekle</Button>}
-      {onWebSearchChange && <Button type="text" aria-label="Web’de ara" icon={<GlobalOutlined aria-hidden />} disabled={disabled || items.length>0} onClick={()=>{onWebSearchChange(!webSearch);setOpen(false)}}>Web’de ara{webSearch ? ' · Açık' : ''}</Button>}
-      {onBrowserAgentChange && <Button type="text" aria-label="Tarayıcı ajanı" icon={<DesktopOutlined aria-hidden />} disabled={disabled || items.length>0} onClick={()=>{onBrowserAgentChange(!browserAgent);setOpen(false)}}>Tarayıcı ajanı{browserAgent?' · Açık':''}</Button>}
+      {canUpload && <Button type="text" aria-label="Bilgisayardan dosya ekle" icon={<PaperClipOutlined aria-hidden />} disabled={disabled || sourcesSelected || webSearch || browserAgent || items.length>=MAX_ATTACHMENTS} onClick={()=>{setOpen(false);input.current?.click()}}>Bilgisayardan dosya ekle</Button>}
+      {onWebSearchChange && <Button type="text" aria-label="Web’de ara" icon={<GlobalOutlined aria-hidden />} disabled={disabled || items.length>0 || hasContext} onClick={()=>{onWebSearchChange(!webSearch);setOpen(false)}}>Web’de ara{webSearch ? ' · Açık' : ''}</Button>}
+      {onBrowserAgentChange && <Button type="text" aria-label="Tarayıcı ajanı" icon={<DesktopOutlined aria-hidden />} disabled={disabled || items.length>0 || hasContext} onClick={()=>{onBrowserAgentChange(!browserAgent);setOpen(false)}}>Tarayıcı ajanı{browserAgent?' · Açık':''}</Button>}
+      {contextPanel}
       <div className="atez-composer-search-section">
         <div className="atez-composer-archive-heading"><span>Dosyalar</span>{items.length>0 && <span>{items.length}/10</span>}</div>
         <Input aria-label="Arşivde belge ara" placeholder="Dosya aramak için yazın…" value={query} variant="borderless" allowClear onChange={event=>{setQuery(event.target.value);setPage(1);setDocuments([]);setError(null)}} />
@@ -78,7 +80,7 @@ export function ComposerAttachments({items,disabled,onAdd,onRemove,onBusyChange,
         {documents.map(doc=>{
           const version=doc.latestVersion
           const selected=items.some(item=>item.id===version?.id)
-          return <Checkbox key={doc.id} checked={selected} disabled={disabled || webSearch || browserAgent || !version || (!selected && items.length>=MAX_ATTACHMENTS)} onChange={event=>{if(!version)return;onError(null);if(event.target.checked)onAdd({id:version.id,title:doc.title});else onRemove(version.id)}}><span title={doc.title}>{doc.title}</span></Checkbox>
+          return <Checkbox key={doc.id} checked={selected} disabled={disabled || sourcesSelected || webSearch || browserAgent || !version || (!selected && items.length>=MAX_ATTACHMENTS)} onChange={event=>{if(!version)return;onError(null);if(event.target.checked)onAdd({id:version.id,title:doc.title});else onRemove(version.id)}}><span title={doc.title}>{doc.title}</span></Checkbox>
         })}
         {!loading && !error && !documents.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Belge bulunamadı."/>}
       </div></Spin>

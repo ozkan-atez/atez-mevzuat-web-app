@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ReportWorkspace } from './ReportWorkspace'
-vi.mock('../analysis/api',()=>({getTopic:vi.fn(async()=>({id:'topic1',runId:'run1',title:'ATEZ raporu',reportVersion:2,reportCard:'K1',thread:{messages:[]}}))}))
+vi.mock('../analysis/api',()=>({getTopic:vi.fn(async()=>({id:'topic1',runId:'run1',title:'ATEZ raporu',reportVersion:2,reportCard:'K1',thread:{messages:[{id:'old-prompt',role:'USER',content:'Önceki revizyon konuşması',createdAt:'2026-10-12T10:00:00Z'}]}}))}))
 vi.mock('../delivery/api',()=>({getDeliveryContext:vi.fn(async()=>({sources:[]})),downloadReportPdf:vi.fn()}))
 vi.mock('./api',()=>({getReportDraftHistory:vi.fn(async()=>({revisions:[{version:2,createdAt:'2026-10-12T10:00:00Z',edits:[{id:'saved1',sequence:1,path:'title',previousValue:'Eski başlık',nextValue:'Yeni başlık',source:'USER',prompt:null,chatMessageId:null,revertible:true,revertsEditId:null,revertedByEditId:null,createdAt:'2026-10-12T10:00:00Z'}]}]}))}))
 vi.mock('./WorkspaceCustomization',()=>({WorkspaceCustomization:()=> <div>Araç içerikleri</div>}))
@@ -34,4 +34,15 @@ describe('report first correction layout',()=>{
     expect(screen.queryByRole('button',{name:'Geri al'})).not.toBeInTheDocument()
   })
 
+})
+
+it('switches a saved version to read-only preview and links to report conversations',async()=>{
+ render(<MemoryRouter><ReportWorkspace topicId="topic1" popup /></MemoryRouter>)
+ await screen.findByTestId('report-preview')
+ await userEvent.click(screen.getByText('Kaydedilmiş revizyonlar ve düzeltme geçmişi'))
+ expect(screen.queryByText('Önceki revizyon konuşması')).not.toBeInTheDocument()
+ expect(await screen.findByRole('link',{name:'Rapor sohbetini aç'})).toHaveAttribute('href','/chat?report=topic1')
+ await userEvent.click(screen.getByRole('button',{name:'Bu sürümü görüntüle'}))
+ await waitFor(()=>expect(screen.queryByRole('textbox',{name:'Mesaj'})).not.toBeInTheDocument())
+ expect(screen.queryByText('Düzen ve kaynak ekleme araçları')).not.toBeInTheDocument()
 })

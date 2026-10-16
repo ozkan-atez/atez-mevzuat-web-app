@@ -10,9 +10,9 @@ import { extractDocumentVersion } from './extract-document'
 
 export interface DocumentStore extends Pick<ObjectStore, 'getContent'> { putContent?: ObjectStore['putContent']; putRunFile?: ObjectStore['putRunFile'] }
 export interface DocumentDependencies { prisma: PrismaClient; objectStore: DocumentStore; actorScope?: string }
-export interface ImportDocumentInput { bytes: Buffer; filename: string; mediaType?: string; title?: string | undefined; publishedOn?: string | undefined; documentId?: string | undefined; origin?: 'UPLOAD' | 'USER_TEXT'; canonicalUrl?: string; actorScope: string; idempotencyKey?: string; allowHtml?: boolean; tempPath?: string }
-export function publicVersion(version: {id:string;mimeType:string;extractionStatus:string;originalFilename:string|null;createdAt:Date}) {
-  return {id:version.id,mimeType:version.mimeType,extractionStatus:version.extractionStatus,originalFilename:version.originalFilename,createdAt:version.createdAt}
+export interface ImportDocumentInput { bytes: Buffer; filename: string; mediaType?: string; title?: string | undefined; publishedOn?: string | undefined; documentId?: string | undefined; origin?: 'UPLOAD' | 'USER_TEXT'; canonicalUrl?: string; actorScope: string; idempotencyKey?: string; allowHtml?: boolean; tempPath?: string; originalOnly?: boolean }
+export function publicVersion(version: {id:string;mimeType:string;extractionStatus:string;originalFilename:string|null;createdAt:Date;storedObjectId?:string|null}) {
+  return {id:version.id,mimeType:version.mimeType,extractionStatus:version.extractionStatus,originalFilename:version.originalFilename,createdAt:version.createdAt,hasOriginal:!!version.storedObjectId}
 }
 export async function importDocument(dependencies: DocumentDependencies, input: ImportDocumentInput) {
   if(getActorContext())input={...input,actorScope:privateActorScope()}
@@ -20,7 +20,7 @@ export async function importDocument(dependencies: DocumentDependencies, input: 
   const mediaType = await validateDocumentContent(input.bytes, input.filename, input.mediaType, input.allowHtml)
   const sha256 = createHash('sha256').update(input.bytes).digest('hex')
   const title = input.title?.trim() || input.filename
-  const payloadHash = createHash('sha256').update(JSON.stringify({sha256,title,documentId:input.documentId ?? null,publishedOn:input.publishedOn ?? null,url:input.canonicalUrl ?? null,origin:input.origin ?? 'UPLOAD'})).digest('hex')
+  const payloadHash = createHash('sha256').update(JSON.stringify({sha256,title,documentId:input.documentId ?? null,publishedOn:input.publishedOn ?? null,url:input.canonicalUrl ?? null,origin:input.origin ?? 'UPLOAD',...(input.originalOnly?{originalOnly:true}:{})})).digest('hex')
   const idempotencyKey = input.idempotencyKey || randomUUID()
   const existing = await prisma.documentImport.findUnique({where: {actorScope_idempotencyKey: {actorScope: input.actorScope, idempotencyKey}}, include: {documentVersion: {include: {document: true}}}})
   let pending: {id: string}
@@ -64,7 +64,9 @@ export async function importDocument(dependencies: DocumentDependencies, input: 
       await tx.documentImport.update({where:{id:pending.id},data:{documentVersionId:version.id,status:'STORED'}})
       return {...version,document}
     })
-    if (version.extractionStatus === 'PENDING' || version.extractionStatus === 'FAILED') await extractDocumentVersion({prisma,objectStore},version.id,input.actorScope)
+    if (input.originalOnly && !['READY','EXTRACTED'].includes(version.extractionStatus)) {
+      await prisma.documentVersion.update({where:{id:version.id},data:{extractionStatus:'ORIGINAL_READY',extractionMetadata:{materialDelivery:'ORIGINAL_FILE',analysisStatus:'NOT_STARTED'}}})
+    } else if (version.extractionStatus === 'PENDING' || version.extractionStatus === 'FAILED') await extractDocumentVersion({prisma,objectStore},version.id,input.actorScope)
     const refreshed = await prisma.documentVersion.findUniqueOrThrow({where:{id:version.id}})
     const completed = await prisma.documentImport.update({where:{id:pending.id},data:{status:refreshed.extractionStatus === 'FAILED' ? 'FAILED' : refreshed.extractionStatus === 'OCR_REQUIRED' ? 'OCR_REQUIRED' : 'READY',error:refreshed.extractionStatus === 'FAILED' ? 'Metin çıkarılamadı; özgün belge arşivde saklandı.':null}})
     return {document:version.document,version:publicVersion(refreshed),import:{id:completed.id,status:completed.status,error:completed.error}}

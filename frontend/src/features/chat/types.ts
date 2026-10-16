@@ -6,11 +6,16 @@ export interface WebResearch {
   queries:string[]
   searchSuggestions:string|null
 }
-export interface ChatSendOptions {webSearch?:boolean;browserAgent?:boolean}
+export interface ChatSendOptions {sourceIds?: string[]; templateId?: string;webSearch?:boolean;browserAgent?:boolean}
 export type ChatRole = 'USER' | 'ASSISTANT'
 export type ChatMessageStatus = 'COMPLETED' | 'FAILED'
 
 export interface ChatMessage {
+  authorId?: string | null
+  authorName?: string | null
+  baseVersion?: number | null
+  reportVersion?: number
+  changePaths?: string[]
   research?:WebResearch
   id: string
   role: ChatRole

@@ -5,6 +5,9 @@ export interface ReportValidationExpectation {
   card: 'K1' | 'K2' | 'K3' | 'K4' | 'K5' | 'K6'
   topicId: string | null
   basename: string
+  structuredTemplate?: boolean
+  sourceUrlRequired?: boolean
+  allowUnverifiedSource?: boolean
   customized?: boolean
 }
 
@@ -12,6 +15,12 @@ export interface ReportValidationExpectation {
 const DATA_FIELD_ATTRIBUTE = /^(?: data-field="[A-Za-z0-9.]+")?$/
 
 export function validateReportHtml(html: string, expected: ReportValidationExpectation): void {
+  if(expected.structuredTemplate) {
+    if(!html.trim() || /<(?:script|link|iframe|form|object|embed)\b/i.test(html) || /\son[a-z]+\s*=|javascript:/i.test(html))throw new Error('BLOCKED_AUDIT: Geçersiz şablon HTML çıktısı.')
+    if(expected.topicId && !html.includes(`content="${expected.topicId}"`))throw new Error('BLOCKED_AUDIT: Rapor kimliği eşleşmiyor.')
+    for(const match of html.matchAll(/\sstyle="([^"]*)"/g))if(sanitizeReportStyle(match[1]!)!==match[1])throw new Error('BLOCKED_AUDIT: Geçersiz şablon stili.')
+    return
+  }
   const errors: string[] = []
   const body = html.replace(/<style>[\s\S]*?<\/style>/i, '').replace(/data:image\/[^"'\s]+/g, '')
   if (!html.trim()) errors.push('HTML boş.')
@@ -20,7 +29,7 @@ export function validateReportHtml(html: string, expected: ReportValidationExpec
   if (/<(?:script|link|iframe|form|object|embed)\b/i.test(html) || /\son[a-z]+\s*=|javascript:/i.test(html) || (!expected.customized && /\sstyle\s*=/i.test(html))) errors.push('Yasaklı HTML etiketi veya niteliği var.')
   if (expected.customized) for (const match of html.matchAll(/\sstyle="([^"]*)"/g)) if (sanitizeReportStyle(match[1]!) !== match[1]) errors.push('Güvensiz satır içi stil var.')
   if (/<img\b[^>]*\bsrc=["']https?:/i.test(html)) errors.push('Harici görsel var.')
-  if (!expected.customized && /(?:doğrulanamadı|teyit edilemedi|güvensiz|emin değiliz|kesin değil|belirsiz|muhtemelen|sanıyoruz|şüpheli|garanti edilemez)/i.test(body)) errors.push('Belirsizlik ifadesi var.')
+  if (!expected.customized && !expected.allowUnverifiedSource && /(?:doğrulanamadı|teyit edilemedi|güvensiz|emin değiliz|kesin değil|belirsiz|muhtemelen|sanıyoruz|şüpheli|garanti edilemez)/i.test(body)) errors.push('Belirsizlik ifadesi var.')
   if (!html.includes('<meta name="x-atez-template" content="bulten-v2">') || !html.includes('class="topbar"') || !html.includes('class="header"') || !html.includes('class="fine"') || !html.includes('class="footer"')) errors.push('Sabit iskelet eksik.')
   if (!/<\/header>\s*<section class="feed">/.test(html) || /class="(?:overview|stats|stat|section-heading)"/.test(html)) errors.push('Feed yerleşimi geçersiz.')
   const cards = html.match(/<article class="card(?: [^"]+)?">/g) ?? []
@@ -42,6 +51,6 @@ export function validateReportHtml(html: string, expected: ReportValidationExpec
   const tableColumns = (body.match(/<th>/g) ?? []).length
   if (!expected.customized && (tableColumns >= 5) !== body.includes('data-table--wide') && tableColumns > 0) errors.push('Geniş tablo sınıfı hatalı.')
   const card = body.match(/<article class="card(?: [^"]+)?">([\s\S]*?)<\/article>/)?.[1]
-  if (!card || !/<div class="source">[\s\S]*href="https?:\/\/[^"]+"[\s\S]*<\/div>\s*$/.test(card)) errors.push('Kartın son kaynak satırı eksik.')
+  if (expected.sourceUrlRequired !== false && (!card || !/<div class="source">[\s\S]*href="https?:\/\/[^"]+"[\s\S]*<\/div>\s*$/.test(card))) errors.push('Kartın son kaynak satırı eksik.')
   if (errors.length) throw new Error(`BLOCKED_AUDIT: ${errors.join(' ')}`)
 }

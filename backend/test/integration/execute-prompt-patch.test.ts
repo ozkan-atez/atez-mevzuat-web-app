@@ -92,7 +92,7 @@ describe('executePromptPatch', () => {
     expect(draft?.edits.map((edit) => edit.path)).toEqual(['title', 'summary'])
   })
 
-  it('applies the editable part of a mixed message and escalates only the rest', async () => {
+  it('applies editable changes and leaves analysis under user control', async () => {
     const { topicId, messageId } = await seedRevisionRequest('başlığı kısalt ve yeni bir yürürlük tarihi ekle')
     const model = stubModel({
       outcome: 'EDITS',
@@ -107,10 +107,9 @@ describe('executePromptPatch', () => {
 
     const draft = await draftRepository.getOpenDraft(topicId)
     expect(draft?.edits.map((edit) => edit.path)).toEqual(['title'])
-    // Only the part that needs evidence goes on to the analysis path.
-    const escalated = await prisma.chatMessage.findFirstOrThrow({ where: { thread: { topicId }, revisionKind: 'ANALYSIS', role: 'USER' } })
-    expect(escalated.content).toBe('Yeni bir yürürlük tarihi ekle.')
-    expect((await threadMessages(topicId)).at(-1)?.content).toMatch(/Analiz revizyonuna aktarıldı/)
+    expect(await prisma.chatMessage.count({where:{thread:{topicId},revisionKind:'ANALYSIS',role:'USER'}})).toBe(0)
+    expect((await threadMessages(topicId)).at(-1)?.content).toMatch(/Yeniden analiz talebinizi bekliyor/)
+
   })
 
   it('drops edits belonging to a request the model could not fulfil', async () => {
@@ -159,23 +158,23 @@ describe('executePromptPatch', () => {
     expect(messages.at(-1)?.content).toMatch(/değiştirilemez/)
   })
 
-  it('escalates a request that changes evidenced facts to the analysis path', async () => {
+  it('explains an analysis requirement without starting analysis', async () => {
     const { topicId, messageId } = await seedRevisionRequest('yeni bir yürürlük tarihi ekle')
     const model = stubModel({ outcome: 'NEEDS_ANALYSIS', reason: 'Tarih kanıta bağlıdır.' })
 
     await executePromptPatch({ topicId, messageId }, deps(topicId, model))
 
     expect(await draftRepository.getOpenDraft(topicId)).toBeNull()
-    // The user asked for a change, so the request is handed on rather than dropped.
+    // A report edit must not silently authorize new analysis.
     const queued = await prisma.topicOutbox.findMany({ where: { topicId }, orderBy: { createdAt: 'asc' } })
-    expect(queued.map((row) => row.command)).toEqual(['REVISE_FIELDS', 'REVISE_ANALYSIS'])
+    expect(queued.map((row) => row.command)).toEqual(['REVISE_FIELDS'])
     const messages = await threadMessages(topicId)
-    expect(messages.at(-1)?.content).toMatch(/analiz revizyonu başlatıldı/)
-    // The reader is told plainly that this path may not reflect the request verbatim.
-    expect(messages.at(-1)?.content).toMatch(/kanıtın desteklediği kadarıyla/)
+    expect(messages.at(-1)?.content).toMatch(/analizi tekrar yap/)
+    // Explain that the existing report was preserved.
+    expect(messages.at(-1)?.content).toMatch(/Rapor değiştirilmedi/)
   })
 
-  it('does not escalate the same request twice when the command is redelivered', async () => {
+  it('does not start analysis when a request is redelivered', async () => {
     const { topicId, messageId } = await seedRevisionRequest('yeni bir yürürlük tarihi ekle')
     const model = stubModel({ outcome: 'NEEDS_ANALYSIS', reason: 'Tarih kanıta bağlıdır.' })
 
@@ -183,7 +182,7 @@ describe('executePromptPatch', () => {
     await executePromptPatch({ topicId, messageId }, deps(topicId, model))
 
     const queued = await prisma.topicOutbox.findMany({ where: { topicId, command: 'REVISE_ANALYSIS' } })
-    expect(queued).toHaveLength(1)
+    expect(queued).toHaveLength(0)
   })
 
   it('reports a malformed model response without touching the report', async () => {

@@ -1,16 +1,19 @@
-import { canonicalDocumentKey } from '../../../platform/actor-context'
+import { canonicalDocumentKey, privateActorScope, sharedActorScope, officialSourceScope, resourceOwnership } from '../../../platform/actor-context'
 import { createHash } from 'node:crypto'
 import type { PrismaClient, Prisma } from '@prisma/client'
 
-export interface BackfillOptions { apply?: boolean; actorScope?: string; pageSize?: number }
+export interface BackfillOptions { apply?: boolean; actorScope?: string; pageSize?: number; collectedDocumentId?: string; sourceRunId?: string }
 export interface BackfillSummary { mode:'DRY_RUN'|'APPLY'; collectedDocuments:number; sourceDocuments:number; mappedVersions:number; missingBytes:number; scopeConflicts:number; missingSource:number }
 interface Candidate { url:string; title:string; sourceId:string; publishedOn:Date|null; storedObjectId?:string; contentHash:string; mimeType:string; text?:string; scanRunId?:string; sourceRunId?:string }
 /** Additive mapping only. Does not download files, extract content, or invent provenance. */
 export async function backfillDocumentArchive(prisma:PrismaClient,options:BackfillOptions={}) {
-  const actorScope=options.actorScope ?? 'local-workspace'
+  const fallbackScope=options.actorScope ?? privateActorScope()
   const pageSize=Math.max(1,Math.min(options.pageSize ?? 100,500))
   const summary:BackfillSummary={mode:options.apply?'APPLY':'DRY_RUN',collectedDocuments:0,sourceDocuments:0,mappedVersions:0,missingBytes:0,scopeConflicts:0,missingSource:0}
   const map=async(candidate:Candidate)=>{
+    const source=await prisma.source.findUnique({where:{id:candidate.sourceId},select:{key:true}})
+    const actorScope=officialSourceScope(source?.key ?? '',candidate.url,fallbackScope)
+    const ownership=resourceOwnership(actorScope===sharedActorScope())
     const existing=await prisma.document.findUnique({where:{canonicalKey:canonicalDocumentKey(candidate.url,actorScope)}})
     if(existing && (existing.actorScope!==actorScope || existing.sourceId!==candidate.sourceId)){summary.scopeConflicts++;return}
     summary.mappedVersions++
@@ -18,17 +21,17 @@ export async function backfillDocumentArchive(prisma:PrismaClient,options:Backfi
     await prisma.$transaction(async tx=>{
       const lock=createHash('sha256').update(`${actorScope}:${candidate.url}`).digest().readBigInt64BE()
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lock})`
-      const document=await tx.document.upsert({where:{canonicalKey:canonicalDocumentKey(candidate.url,actorScope)},create:{canonicalKey:canonicalDocumentKey(candidate.url,actorScope),sourceId:candidate.sourceId,actorScope,origin:'SOURCE',canonicalUrl:candidate.url,title:candidate.title,publishedOn:candidate.publishedOn},update:{}})
+      const document=await tx.document.upsert({where:{canonicalKey:canonicalDocumentKey(candidate.url,actorScope)},create:{...ownership,canonicalKey:canonicalDocumentKey(candidate.url,actorScope),sourceId:candidate.sourceId,actorScope,origin:'SOURCE',canonicalUrl:candidate.url,title:candidate.title,publishedOn:candidate.publishedOn},update:{}})
       if(document.actorScope!==actorScope || document.sourceId!==candidate.sourceId){summary.scopeConflicts++;return}
       const version=await tx.documentVersion.upsert({where:{documentId_contentHash:{documentId:document.id,contentHash:candidate.contentHash}},create:{documentId:document.id,contentHash:candidate.contentHash,mimeType:candidate.mimeType,storedObjectId:candidate.storedObjectId ?? null,extractedText:candidate.text ?? null,extractionStatus:candidate.text?.trim()?'READY':'PENDING',fetchedAt:null,extractionMetadata:{legacyBackfill:true,contentBasis:candidate.storedObjectId?'ARCHIVED_BYTES':'RECORDED_TEXT'}},update:{}})
       if(candidate.storedObjectId && !version.storedObjectId) await tx.documentVersion.update({where:{id:version.id},data:{storedObjectId:candidate.storedObjectId}})
-      const linkage={actorScope,documentVersionId:version.id,scanRunId:candidate.scanRunId ?? null,sourceRunId:candidate.sourceRunId ?? null,role:'SOURCE'}
+      const linkage={...ownership,actorScope,documentVersionId:version.id,scanRunId:candidate.scanRunId ?? null,sourceRunId:candidate.sourceRunId ?? null,role:'SOURCE'}
       if(!await tx.documentLink.findFirst({where:linkage}))await tx.documentLink.create({data:linkage})
     })
   }
   let cursor:string|undefined
-  for(;;){
-    const rows: Array<Prisma.CollectedDocumentGetPayload<{include:{storedObject:true,edition:{include:{scanRun:true}}}}>>=await prisma.collectedDocument.findMany({take:pageSize,orderBy:{id:'asc'},...(cursor?{cursor:{id:cursor},skip:1}:{}),include:{storedObject:true,edition:{include:{scanRun:true}}}})
+  for(;!options.sourceRunId;){
+    const rows: Array<Prisma.CollectedDocumentGetPayload<{include:{storedObject:true,edition:{include:{scanRun:true}}}}>>=await prisma.collectedDocument.findMany({where:options.collectedDocumentId?{id:options.collectedDocumentId}:{},take:pageSize,orderBy:{id:'asc'},...(cursor?{cursor:{id:cursor},skip:1}:{}),include:{storedObject:true,edition:{include:{scanRun:true}}}})
     if(!rows.length)break
     for(const row of rows){
       summary.collectedDocuments++
@@ -41,8 +44,8 @@ export async function backfillDocumentArchive(prisma:PrismaClient,options:Backfi
     cursor=rows.at(-1)!.id
   }
   cursor=undefined
-  for(;;){
-    const rows: Array<Prisma.SourceScanDocumentGetPayload<{include:{run:true}}>>=await prisma.sourceScanDocument.findMany({take:pageSize,orderBy:{id:'asc'},...(cursor?{cursor:{id:cursor},skip:1}:{}),include:{run:true}})
+  for(;!options.collectedDocumentId;){
+    const rows: Array<Prisma.SourceScanDocumentGetPayload<{include:{run:true}}>>=await prisma.sourceScanDocument.findMany({where:options.sourceRunId?{runId:options.sourceRunId}:{},take:pageSize,orderBy:{id:'asc'},...(cursor?{cursor:{id:cursor},skip:1}:{}),include:{run:true}})
     if(!rows.length)break
     for(const row of rows){
       summary.sourceDocuments++

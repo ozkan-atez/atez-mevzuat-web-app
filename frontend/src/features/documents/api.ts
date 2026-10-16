@@ -1,15 +1,15 @@
 import { apiFetch } from '../../lib/apiFetch'
-export interface DocumentVersion { id: string; mimeType: string; extractionStatus: string; originalFilename: string | null; createdAt: string }
-export interface ArchiveDocument { canonicalUrl?: string | null; id: string; title: string; origin: string; publishedOn: string | null; latestVersion: DocumentVersion | null; versions: DocumentVersion[] }
+export interface DocumentVersion { id: string; mimeType: string; extractionStatus: string; originalFilename: string | null; createdAt: string; hasOriginal?: boolean }
+export interface ArchiveDocument { source?: {id:string;name:string|null;key:string;baseUrl:string}|null; classification?:string; canonicalUrl?: string | null; id: string; title: string; origin: string; publishedOn: string | null; latestVersion: DocumentVersion | null; versions: DocumentVersion[] }
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(`/api/v1/${path}`, init)
   const body = await response.json()
   if (!response.ok) throw new Error(body.message ?? 'Belge işlemi tamamlanamadı.')
   return body as T
 }
-export function listDocuments(query = '', options: { page?:number; limit?:number; from?:string; to?:string } = {}) { const params = new URLSearchParams({query,...Object.fromEntries(Object.entries(options).filter(([,value])=>value!==undefined&&value!=='').map(([key,value])=>[key,String(value)]))}); return request<{ documents: ArchiveDocument[]; total: number }>(`documents?${params}`) }
-export async function uploadDocument(file: File) {
-  const data = new FormData(); data.append('file', file)
+export function listDocuments(query = '', options: { page?:number; limit?:number; from?:string; to?:string; origin?:string; classification?:string; sourceId?:string; sort?:string } = {}) { const params = new URLSearchParams({query,...Object.fromEntries(Object.entries(options).filter(([,value])=>value!==undefined&&value!=='').map(([key,value])=>[key,String(value)]))}); return request<{ documents: ArchiveDocument[]; total: number; sources?: Array<{id:string;name:string|null;key:string;baseUrl:string}> }>(`documents?${params}`) }
+export async function uploadDocument(file: File, originalOnly = false) {
+  const data = new FormData(); data.append('file', file); if (originalOnly) data.append('originalOnly', 'true')
   return request<{ document: ArchiveDocument; version: DocumentVersion }>('documents/uploads', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: data })
 }
 export function importDocument(body: { kind: 'TEXT'; title: string; text: string } | { kind: 'URL'; title?: string; url: string }) {

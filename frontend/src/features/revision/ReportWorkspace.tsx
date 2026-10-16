@@ -1,6 +1,6 @@
 import { ActionLink, BackLink } from '../../components/layout/PageToolbar'
 import { useCan } from '../auth/AuthProvider'
-import { Alert, Button, Card, Result, Skeleton, Space, Collapse, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Button, Card, Result, Skeleton, Space, Collapse, Select, Tag, Tooltip, Typography } from 'antd'
 import { DownloadOutlined, MailOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons'
 import '../reports/reports.css'
 import { useCallback, useEffect, useState } from 'react'
@@ -13,7 +13,6 @@ import type { DeliverySource } from '../delivery/types'
 import type { TopicDetail } from '../analysis/types'
 import { useReportDraft } from '../revision/useReportDraft'
 import { ConversationComposer } from '../chat/ConversationComposer'
-import { ConversationMessages } from '../chat/ConversationMessages'
 import { WorkspaceCustomization } from './WorkspaceCustomization'
 import { EditableReportPreview } from '../revision/EditableReportPreview'
 import { ChangeList } from '../revision/ChangeList'
@@ -28,9 +27,9 @@ const SOURCE_LABELS: Record<DeliverySource['kind'], string> = {
   SUPPORTING: 'Destekleyici kaynak',
 }
 
-export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }: { topicId: string; popup?: boolean; onRevisionSaved?: () => void }) {
+export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved, onOpenConversation }: { topicId: string; popup?: boolean; onRevisionSaved?: () => void; onOpenConversation?: () => void }) {
   const canEdit=useCan('report.edit'),canPublish=useCan('report.publish'),canSend=useCan('delivery.send')
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [topic, setTopic] = useState<TopicDetail | null>(null)
   const [sources, setSources] = useState<DeliverySource[]>([])
   const [isLoadingTopic, setIsLoadingTopic] = useState(true)
@@ -40,14 +39,14 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
   const [historyLoaded,setHistoryLoaded] = useState(false)
   const [historyLoading,setHistoryLoading] = useState(false)
   const [historyError,setHistoryError] = useState<string|null>(null)
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [zoom, setZoom] = useState(80)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [isDispatchOpen, setIsDispatchOpen] = useState(false)
 
   const requestedVersion = Number(searchParams.get('revision'))
-  const draft = useReportDraft(id, canEdit, Number.isInteger(requestedVersion) && requestedVersion > 0 ? requestedVersion : undefined)
+  const editable = canEdit && !(Number.isInteger(requestedVersion) && requestedVersion > 0)
+  const draft = useReportDraft(id, editable, Number.isInteger(requestedVersion) && requestedVersion > 0 ? requestedVersion : undefined)
 
   const loadTopic = useCallback(async () => {
     if (!id) return
@@ -60,7 +59,7 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
       setTopic(nextTopic)
       // Sources come from the same analysis revision the bulletin was rendered from,
       // so a failure here must not hide an otherwise valid report.
-      if (nextTopic.reportCard === 'K6') {
+      if (!nextTopic.documentId || nextTopic.reportCard === 'K6') {
         // Empty-day bulletins have no document delivery context; use their recorded source.
         setSources([])
       } else setSources(await getDeliveryContext(id, revision).then((context) => context.sources ?? []).catch(() => []))
@@ -119,12 +118,13 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
   }
 
   const reportSource = draft.view.spec.source as {label?:string;url?:string} | undefined
-  const displayedSources = sources.length ? sources : reportSource?.url ? [{kind:'GAZETTE' as const,label:reportSource.label ?? 'Resmî Gazete',url:reportSource.url}] : []
-  const supportsDelivery = topic.reportCard !== 'K6'
+  const displayedSources = sources.length ? sources : reportSource?.url ? [{kind:(draft.view?.spec.card === 'K5' ? 'SUPPORTING' : 'GAZETTE') as DeliverySource['kind'],label:reportSource.label ?? 'Kaynak',url:reportSource.url}] : []
+  const supportsDelivery = topic.reportCard !== 'K6' && Boolean(topic.documentId)
   const edits = draft.view.draft?.edits ?? []
   const pendingCount = edits.filter((edit) => !edit.revertedByEditId && !edit.revertsEditId).length
 
   const previewPanel = (<Card className="atez-report-card atez-report-preview-card" title="Bülten önizleme" extra={<Space wrap>
+          <Select aria-label="Rapor sürümü" style={{minWidth: 160}} value={requestedVersion > 0 ? requestedVersion : 'draft'} onOpenChange={open => {if (open && !historyLoaded) void loadSavedHistory()}} options={[{value:'draft',label:'Güncel rapor / taslak'}, ...savedHistory.map(item => ({value:item.version,label:`r${item.version} · ${new Date(item.createdAt).toLocaleDateString('tr-TR')}`}))]} onChange={version => setSearchParams(params => {const next = new URLSearchParams(params); if (version === 'draft') next.delete('revision'); else next.set('revision', String(version)); return next}, {replace: true})} />
           <Space.Compact><Tooltip title="Uzaklaştır"><Button icon={<ZoomOutOutlined />} onClick={() => stepZoom(-1)} aria-label="Uzaklaştır" disabled={zoom === ZOOM_STEPS[0]} /></Tooltip><Button disabled>%{zoom}</Button><Tooltip title="Yakınlaştır"><Button icon={<ZoomInOutlined />} onClick={() => stepZoom(1)} aria-label="Yakınlaştır" disabled={zoom === ZOOM_STEPS.at(-1)} /></Tooltip></Space.Compact>
           {supportsDelivery && <Button aria-label="PDF İndir" icon={<DownloadOutlined />} onClick={() => void downloadPdf()} loading={isDownloading}>PDF İndir</Button>}
           {canSend && supportsDelivery && <Button type="primary" aria-label="E-Posta ile Dağıt" icon={<MailOutlined />} onClick={() => setIsDispatchOpen(true)}>E-Posta ile Dağıt</Button>}
@@ -140,14 +140,14 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
             <EditableReportPreview
               html={draft.view.html}
               zoom={zoom}
-              editable={canEdit && !draft.isBusy && !draft.isPrompting && draft.conflictVersion === null && !draft.view.isStale}
+              editable={editable && !draft.isBusy && !draft.isPrompting && draft.conflictVersion === null && !draft.view.isStale}
               onEditField={(path, value) => void draft.editField(path, value)}
             />
           </div>
         </Card>)
   const correctionPanel = (<div className="atez-report-changes">
-          {pendingCount > 0 && <Collapse items={[{ key: 'changes', label: `Bu taslaktaki değişiklikler (${pendingCount})`, children: <ChangeList edits={edits} isBusy={draft.isBusy || draft.isPrompting} onRevert={(editId) => void draft.revert(editId)} /> }]} />}
-      {canPublish && <PublishDraftBar
+          {pendingCount > 0 && <Collapse items={[{ key: 'changes', label: `Bu taslaktaki değişiklikler (${pendingCount})`, children: <ChangeList edits={edits} isBusy={draft.isBusy || draft.isPrompting} readOnly={!editable} onRevert={(editId) => void draft.revert(editId)} /> }]} />}
+      {canPublish && editable && <PublishDraftBar
         pendingCount={pendingCount}
         isBusy={draft.isBusy}
         isPrompting={draft.isPrompting}
@@ -159,7 +159,7 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
         onReload={() => { void draft.reload(); void loadTopic() }}
       />}
 
-          <Collapse className="atez-report-correction-history" onChange={keys => { if (keys.includes('history') && !historyLoaded && !historyLoading) void loadSavedHistory() }} items={[{ key: 'history', label: 'Kaydedilmiş revizyonlar ve düzeltme geçmişi', children: (<Space orientation="vertical" style={{width:'100%'}}>{historyLoading && <Typography.Text type="secondary">Geçmiş yükleniyor…</Typography.Text>}{historyError && <Alert type="warning" showIcon title={historyError} action={<Button size="small" onClick={()=>void loadSavedHistory()}>Yeniden dene</Button>} />}{savedHistory.map(revision=><Card size="small" key={revision.version} title={<Space wrap><Tag>Kaydedildi · r{String(revision.version).padStart(2,'0')}</Tag><Typography.Text type="secondary">{new Date(revision.createdAt).toLocaleString('tr-TR')}</Typography.Text></Space>}>{revision.edits.length ? <ChangeList edits={revision.edits} isBusy={false} readOnly onRevert={()=>{}} /> : <Typography.Text type="secondary">Bu sürümde kayıtlı alan değişikliği yok.</Typography.Text>}</Card>)}<ConversationMessages messages={[...topic.thread.messages, ...(pendingPrompt ? [{ id: 'pending-report-prompt', role: 'USER' as const, content: pendingPrompt, createdAt: new Date().toISOString() }] : [])].filter((message) => message.role !== 'SYSTEM').map((message) => ({ ...message, role: message.role as 'USER' | 'ASSISTANT', status: 'COMPLETED' as const, errorDetail: null }))} isSending={draft.isPrompting} activity={draft.isPrompting ? 'Rapor düzenleniyor' : null} /></Space>) }]} />
+          <Collapse className="atez-report-correction-history" onChange={keys => { if (keys.includes('history') && !historyLoaded && !historyLoading) void loadSavedHistory() }} items={[{ key: 'history', label: 'Kaydedilmiş revizyonlar ve düzeltme geçmişi', children: (<Space orientation="vertical" style={{width:'100%'}}>{historyLoading && <Typography.Text type="secondary">Geçmiş yükleniyor…</Typography.Text>}{historyError && <Alert type="warning" showIcon title={historyError} action={<Button size="small" onClick={()=>void loadSavedHistory()}>Yeniden dene</Button>} />}{savedHistory.map(revision=><Card size="small" key={revision.version} title={<Space wrap><Tag>Kaydedildi · r{String(revision.version).padStart(2,'0')}</Tag><Button size="small" onClick={() => setSearchParams(params => {const next = new URLSearchParams(params); next.set('revision', String(revision.version)); return next}, {replace: true})}>Bu sürümü görüntüle</Button><Typography.Text type="secondary">{new Date(revision.createdAt).toLocaleString('tr-TR')} · {revision.createdByName ?? 'Kullanıcı bilgisi kaydedilmemiş'}</Typography.Text></Space>}>{revision.edits.length ? <ChangeList edits={revision.edits} isBusy={false} readOnly onRevert={()=>{}} /> : <Typography.Text type="secondary">Bu sürümde kayıtlı alan değişikliği yok.</Typography.Text>}</Card>)}{onOpenConversation ? <Button onClick={onOpenConversation}>Rapor sohbetini aç</Button> : <ActionLink to={`/chat?report=${encodeURIComponent(id)}`}>Rapor sohbetini aç</ActionLink>}</Space>) }]} />
         </div>)
   const customizationPanel = (<WorkspaceCustomization view={draft.view} isBusy={draft.isBusy || draft.isPrompting || draft.view.isStale || draft.conflictVersion !== null} onApplyTemplate={draft.applyTemplate} onSave={draft.saveCustomization} onAddSource={draft.addSource} />)
 
@@ -168,7 +168,7 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
       <div className="atez-report-scroll">
       <header className="atez-report-header">
         <div className="flex min-w-0 items-center gap-3">
-          <BackLink to={`/runs/${topic.runId}`} compact>Taramaya dön</BackLink>
+          <BackLink to={topic.runId?`/runs/${topic.runId}`:'/reports'} compact>{topic.runId?'Taramaya dön':'Raporlara dön'}</BackLink>
           <div className="min-w-0">
             <h1>{topic.title.replace(/^\s*(?:[-–—−•]\s*)+/u, '').trim()}</h1>
             <p className="mt-0.5 text-xs text-[var(--atez-muted)]">
@@ -192,16 +192,17 @@ export function ReportWorkspace({ topicId: id, popup = false, onRevisionSaved }:
 
       <div className="atez-report-workspace atez-report-workspace-stacked">{previewPanel}{canEdit && correctionPanel}</div>
 
-      {canEdit && <Collapse className="atez-report-tools" items={[{ key: 'tools', label: 'Düzen ve kaynak ekleme araçları', children: customizationPanel }]} />}
+      {editable && <Collapse className="atez-report-tools" items={[{ key: 'tools', label: 'Düzen ve kaynak ekleme araçları', children: customizationPanel }]} />}
 
       </div>
-      {canEdit && <footer className="atez-report-composer-footer">
+      {editable && <footer className="atez-report-composer-footer">
+        {topic.thread.messages.filter(message => message.role === 'ASSISTANT').slice(-1).map(message => <div key={message.id} style={{whiteSpace:'pre-wrap',maxHeight:280,overflow:'auto',padding:'12px 0'}}>{message.content}</div>)}
         <ConversationComposer
           attachmentsEnabled={false}
           placeholder="Raporu nasıl değiştirelim?"
           autoFocus={false}
           isSending={draft.isPrompting || draft.isBusy || draft.view.isStale || draft.conflictVersion !== null}
-          onSend={(content) => { setPendingPrompt(content); void draft.submitPrompt(content).then(() => loadTopic()).finally(() => setPendingPrompt(null)) }}
+          onSend={(content) => { void draft.submitPrompt(content).then(() => loadTopic()).finally(() => onRevisionSaved?.()) }}
         />
       </footer>}
 

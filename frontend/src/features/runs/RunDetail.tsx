@@ -1,11 +1,10 @@
+import { RunFlow } from './RunFlow'
 import { ActionLink, PageToolbar } from '../../components/layout/PageToolbar'
 import { useState } from 'react'
 import { Alert, Button, Card, Result, Skeleton, Statistic, Tag } from 'antd'
 import { CalendarDays } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { retryAiFilter, retryPreviousSources } from '../scans/api'
-import { retryTopicAnalysis } from '../analysis/api'
-import { TopicAnalysisCard } from '../analysis/TopicAnalysisCard'
 import { useScanRun } from '../scans/useScanRun'
 import type { ScanRunStatus } from '../scans/types'
 import { CollectedDocuments } from './CollectedDocuments'
@@ -25,7 +24,6 @@ export function RunDetail() {
   const { run, isLoading, notFound, error, refresh, reconnect } = useScanRun(id)
   const [isRetrying, setIsRetrying] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
-  const [retryingTopicId, setRetryingTopicId] = useState<string | null>(null)
 
   const handleRetry = async (kind: 'filter' | 'previous-sources') => {
     if (!id || isRetrying) return
@@ -38,20 +36,6 @@ export function RunDetail() {
       setRetryError(caught instanceof Error ? caught.message : 'İşlem yeniden başlatılamadı')
     } finally {
       setIsRetrying(false)
-    }
-  }
-
-  const handleTopicRetry = async (topicId: string) => {
-    if (retryingTopicId) return
-    setRetryingTopicId(topicId)
-    setRetryError(null)
-    try {
-      await retryTopicAnalysis(topicId)
-      await reconnect()
-    } catch (caught) {
-      setRetryError(caught instanceof Error ? caught.message : 'Topic analizi yeniden başlatılamadı')
-    } finally {
-      setRetryingTopicId(null)
     }
   }
 
@@ -79,8 +63,8 @@ export function RunDetail() {
           <div className="atez-run-hero-content">
             <div>
               <div className="atez-run-date"><CalendarDays className="h-4 w-4" />{formatDate(run.targetDate)}</div>
-              <h1>Tarama İnceleme Masası</h1>
-              <p>{[...(run.sourceKeys?.includes('resmi-gazete') || !run.sourceKeys ? ['Resmî Gazete'] : []), ...(run.sourceRuns ?? []).map(source => source.source.name)].join(' · ') || 'Seçilen kaynaklar'} · {run.id}</p>
+              <h1>Çalışma özeti</h1>
+              <p>{[...(run.sourceKeys?.includes('resmi-gazete') || !run.sourceKeys ? ['Resmî Gazete'] : []), ...(run.sourceRuns ?? []).map(source => source.source.name)].join(' · ') || 'Seçilen kaynaklar'}</p>
             </div>
             <Tag color={run.status === 'COMPLETED' ? 'success' : run.status === 'FAILED' ? 'error' : 'processing'}>{statusLabels[run.status]}</Tag>
           </div>
@@ -97,38 +81,14 @@ export function RunDetail() {
         <Alert type="warning" message={error} showIcon action={<Button onClick={() => void refresh()}>Yenile</Button>} />
       )}
 
-      <div className="atez-run-workbench">
-        <OperationSteps
-          run={run}
-          onRetryAiFilter={() => void handleRetry('filter')}
-          onRetryPreviousSources={() => void handleRetry('previous-sources')}
-          isRetrying={isRetrying}
-          retryError={retryError}
-        />
-        <CollectedDocuments editions={run.editions} />
-      </div>
+      <RunFlow run={run} />
+      <section className="run-report-results" aria-label="Oluşturulan raporlar">
+        <h2 className="atez-run-section-title">Oluşturulan raporlar</h2>
+        {run.reports?.length ? <div className="run-report-list">{run.reports.map(report=><Link key={report.id} to={`/runs/${run.id}/reports/${report.id}`}><div><strong>{report.card==='K6'?'Değişiklik bulunmadı':report.title}</strong><small>{report.card==='K6'?'Bu çalışmada raporlanacak yeni değişiklik tespit edilmedi.':`Sürüm ${report.version}`}</small></div><span>{report.card==='K6'?'Değişiklik yok raporunu aç':'Raporu aç'} →</span></Link>)}</div> : <p className="atez-run-card-subtitle">{run.status==='COMPLETED'?'Bu çalışmada oluşturulmuş rapor bulunmuyor.':'Henüz rapor oluşturulmadı. Çalışma durumunu yukarıdaki akıştan takip edebilirsiniz.'}</p>}
+      </section>
+      <details className="run-secondary-details"><summary>Belgeler ve kapsam sonuçları · {run.counts.documents}</summary><CollectedDocuments editions={run.editions} /></details>
+      <details className="run-secondary-details"><summary>İşlem ayrıntıları ve yeniden deneme</summary><OperationSteps run={run} onRetryAiFilter={() => void handleRetry('filter')} onRetryPreviousSources={() => void handleRetry('previous-sources')} isRetrying={isRetrying} retryError={retryError} /></details>
 
-      {(run.analysis?.topics.length ?? 0) > 0 && (
-        <section className="space-y-4">
-          <div>
-            <h2 className="atez-run-section-title">İlgili mevzuat analizleri</h2>
-            <p className="atez-run-card-subtitle">Her belge bağımsız analiz edilir ve tek bir bülten üretir.</p>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {run.analysis?.topics.map((topic) => (
-              <TopicAnalysisCard key={topic.id} topic={topic} onRetry={(topicId) => void handleTopicRetry(topicId)} isRetrying={retryingTopicId === topic.id} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {run.reports?.find((report) => report.card === 'K6') && (
-        <section className="atez-run-empty-day">
-          <h2 className="font-bold text-emerald-950">Değişiklik bulunmadı</h2>
-          <p className="mt-1 text-sm text-emerald-800">Bu tarihte gümrük ve dış ticaretle ilgili bir mevzuat değişikliği tespit edilmedi.</p>
-          <Link to={`/runs/${run.id}/reports/${run.reports.find((report) => report.card === 'K6')?.id}`}><Button type="primary">Değişiklik yok raporunu aç</Button></Link>
-        </section>
-      )}
     </div>
   )
 }

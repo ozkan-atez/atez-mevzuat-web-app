@@ -1,3 +1,6 @@
+import { aiProvider } from '../../../config/google-ai'
+import { randomUUID } from 'node:crypto'
+import { emptyTokens, geminiTokens, type UsageCall } from '../../usage/measurement'
 import { DateTime } from 'luxon'
 import { BrowserResearchError } from '../application/browser-research'
 import { chromium } from 'playwright'
@@ -19,7 +22,7 @@ export function browserStartUrl(content:string,today=DateTime.now().setZone('Eur
 export class GeminiBrowserResearch implements BrowserResearch {
   private active=0
   constructor(private readonly api:GoogleGenAI,private readonly model:string,private readonly maxSteps=8){}
-  async *run(input:{content:string;signal?:AbortSignal}):AsyncGenerator<BrowserResearchEvent>{
+  async *run(input:Parameters<BrowserResearch['run']>[0]):AsyncGenerator<BrowserResearchEvent>{
     if(/giriş\s*yap|giris\s*yap|\blog\s*in\b|\blogin\b/i.test(input.content))throw new BrowserResearchError('LOGIN_UNSUPPORTED','Tarayıcı ajanı şu anda hesaplara giriş yapmıyor. Bu araçla yalnızca açık web sayfaları incelenebilir; TARIFF hesap sorguları için mevcut Tariff aracını kullanın.')
     if(this.active>=2)throw new Error('Tarayıcı araştırması kapasitesi dolu; yeniden deneyin.')
     this.active++
@@ -59,7 +62,10 @@ export class GeminiBrowserResearch implements BrowserResearch {
       let completed=false
       for(let step=0;step<this.maxSteps;step++){
         if(controller.signal.aborted)throw new Error('Araştırma süre sınırına ulaştı veya iptal edildi.')
-        const response=await this.api.models.generateContent({model:this.model,contents,config:{abortSignal:controller.signal,httpOptions:{timeout:45000},tools:[{computerUse:{environment:Environment.ENVIRONMENT_BROWSER,enablePromptInjectionDetection:true}}]}})
+        input.usage?.onCall()
+        const call: UsageCall | undefined = input.usage ? {...emptyTokens, ...input.usage.context, id: randomUUID(), provider: aiProvider(), model: this.model, mode: 'BROWSER', status: 'RUNNING', startedAt: new Date(), completedAt: null} : undefined
+        if (call) await input.usage!.recorder.save(call)
+        const response=await this.api.models.generateContent({model:this.model,contents,config:{abortSignal:controller.signal,httpOptions:{timeout:45000},tools:[{computerUse:{environment:Environment.ENVIRONMENT_BROWSER,enablePromptInjectionDetection:true}}]}}).then(async response => { if (call) await input.usage!.recorder.save({...call, ...geminiTokens(response.usageMetadata), status: 'COMPLETED', completedAt: new Date()}); return response }, async error => { if (call) await input.usage!.recorder.save({...call, status: controller.signal.aborted ? 'CANCELLED' : 'FAILED', completedAt: new Date()}); throw error })
         const candidate=response.candidates?.[0]?.content
         if(!candidate){const reason=String(response.promptFeedback?.blockReason ?? 'UNKNOWN');throw new BrowserResearchError('MODEL_NO_CANDIDATE','Gemini tarayıcı ajanından geçerli yanıt alınamadı. Bu sonuç sitenin erişim engeli uyguladığını kanıtlamaz.',{candidateCount:response.candidates?.length ?? 0,blockReason:/^[A-Z0-9_]{1,80}$/.test(reason)?reason:'UNKNOWN'})}
         contents.push(candidate)

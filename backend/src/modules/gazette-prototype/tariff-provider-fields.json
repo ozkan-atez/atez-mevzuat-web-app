@@ -1,0 +1,1546 @@
+{
+  "version": "1",
+  "observedOn": "2026-10-13",
+  "endpoint": "https://tariff.singlewindow.io/api/v2-0/tariff-query/tariff-measures-by-commodity",
+  "scope": "Yedi GTİP için gözlenen yanıtların birleşimi; sağlayıcının tüm API sözleşmesi veya doluluk garantisi değildir.",
+  "samples": 17,
+  "logicalFields": {
+    "commodity_identity": {
+      "label": "GTİP, sonek, beyan edilebilirlik ve ürün kimliği",
+      "paths": [
+        "commodities"
+      ]
+    },
+    "product_description": {
+      "label": "Ürün adı ve biçimlendirilmiş açıklaması",
+      "paths": [
+        "commodities[].description",
+        "commodities[].formatted_description"
+      ]
+    },
+    "product_hierarchy": {
+      "label": "Üst ürün grubu, parent_id ve tarife ağacındaki konum",
+      "paths": [
+        "commodities"
+      ]
+    },
+    "commodity_validity": {
+      "label": "Ürün kodunun başlangıç/bitiş ve beyan tarihleri",
+      "paths": [
+        "commodities"
+      ]
+    },
+    "measure_identity": {
+      "label": "Önlem kimliği, türü, kategorisi ve vergi kodu",
+      "paths": [
+        "measures[].id",
+        "measures[].measureType"
+      ]
+    },
+    "measure_value": {
+      "label": "Ham ve biçimlendirilmiş oran, tutar veya eşik",
+      "paths": [
+        "measures[].base_duty",
+        "measures[].base_duty_formatted"
+      ]
+    },
+    "duty_components": {
+      "label": "Oran/tutar, para birimi, miktar ve ölçü birimi bileşenleri",
+      "paths": [
+        "measures[].dutyExpr"
+      ]
+    },
+    "minimum_duty": {
+      "label": "Asgari yükümlülük bileşenleri",
+      "paths": [
+        "measures[].minDutyExpr"
+      ]
+    },
+    "maximum_duty": {
+      "label": "Azami yükümlülük bileşenleri",
+      "paths": [
+        "measures[].maxDutyExpr"
+      ]
+    },
+    "measure_validity": {
+      "label": "Önlemin yürürlük başlangıcı ve bitişi",
+      "paths": [
+        "measures[].effective_start_date",
+        "measures[].effective_end_date"
+      ]
+    },
+    "geographical_scope": {
+      "label": "Ülke/ülke grubu, kapsam, çeviriler ve geçerlilik",
+      "paths": [
+        "measures[].areaDetails",
+        "measures[].origin",
+        "measures[].origin_relation"
+      ]
+    },
+    "trade_direction": {
+      "label": "İthalat/ihracat/transit ve rejim kapsamı",
+      "paths": [
+        "measures[].is_import",
+        "measures[].is_export",
+        "measures[].is_transit",
+        "measures[].regime_group_codes",
+        "measures[].measureType.regime_group_codes"
+      ]
+    },
+    "conditions": {
+      "label": "Koşullar, şart kodları, eylemler ve çevirileri",
+      "paths": [
+        "measures[].conditions"
+      ]
+    },
+    "required_documents": {
+      "label": "Belge kodları, belge açıklamaları ve geçerlilikleri",
+      "paths": [
+        "measures[].conditions"
+      ]
+    },
+    "exemptions_and_tolerances": {
+      "label": "Kapsam dışı referanslar, gözetim istisnaları ve toleranslar",
+      "paths": [
+        "measures[].conditions"
+      ]
+    },
+    "footnotes": {
+      "label": "Dipnotlar, açıklamalar, dil ve geçerlilik bilgileri",
+      "paths": [
+        "measures[].footnoteViews"
+      ]
+    },
+    "legal_basis": {
+      "label": "Mevzuat başlığı/kimliği, yayım tarihi, RG sayısı/sayfası, URL ve geçerlilik",
+      "paths": [
+        "measures[].legalActViews"
+      ]
+    },
+    "suspension_and_status": {
+      "label": "Askıya alma, silinme ve önlem durumları",
+      "paths": [
+        "measures[].isSuspended",
+        "measures[].was_deleted",
+        "measures[].deleted_at"
+      ]
+    },
+    "quota_reference": {
+      "label": "Kontenjan order_number; miktar/bakiye garantisi değildir",
+      "paths": [
+        "measures[].order_number"
+      ]
+    },
+    "provider_metadata": {
+      "label": "Sağlayıcı kayıt/revizyon zamanları ve kaynak kimlikleri",
+      "paths": [
+        "measures[].datasource_code",
+        "measures[].owner_assigned_id",
+        "measures[].revision_date",
+        "measures[].created_at",
+        "measures[].updated_at",
+        "measures[].source_checksum"
+      ]
+    },
+    "raw_provider_payload": {
+      "label": "Tüm özgün yanıt; yeni/bilinmeyen alanlar dahil kayıpsız saklama",
+      "paths": [
+        "$"
+      ]
+    }
+  },
+  "observedMeasureTypes": {
+    "103": "Gümrük Vergisi (MFN)",
+    "106": "Gümrük Vergisi (AB Gümrük Birliği)",
+    "109": "Tamamlayıcı Ölçü Birimi",
+    "142": "Gümrük Vergisi (Tercihli Tarife)",
+    "TR060": "TRT Bandrol Ticari",
+    "TR040": "Katma Değer Vergisi",
+    "TR059": "İlave Gümrük Vergisi",
+    "TR991": "Kaynak Kullanımı Destekleme Fonu",
+    "TR392": "Ek Mali Yükümlülük - Ab Gts & Sta",
+    "TRC115": "Varış Öncesi Gümrük İşlemi Yapılabilecek Eşyalar",
+    "TRC057": "İthalatta Gözetim Uygulanması (Kıymet Krıterli)",
+    "TRC064": "Goods To Be Subjected To Laboratory Analysis"
+  },
+  "providerFields": [
+    {
+      "path": "$",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.commodities",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.commodities[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.commodities[].basic_duty_rate",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.commodities[].bti_url",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.commodities[].commodity_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].commodity_end_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.commodities[].commodity_start_date",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].commodity_suffix",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].consigned",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.commodities[].consigned_from",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.commodities[].created_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].datasource_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].declarable",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.commodities[].declarable_start_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.commodities[].description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].formatted_description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].heading_id",
+      "types": [
+        "null",
+        "number"
+      ]
+    },
+    {
+      "path": "$.commodities[].hierarchical_position",
+      "types": [
+        "null",
+        "number"
+      ]
+    },
+    {
+      "path": "$.commodities[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.commodities[].imex_indicator",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].leaf",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.commodities[].meursing_code",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.commodities[].number_indents",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.commodities[].owner_assigned_id",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.commodities[].parent_id",
+      "types": [
+        "null",
+        "number"
+      ]
+    },
+    {
+      "path": "$.commodities[].updated_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.datasource_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.end_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.geographical_area_abbrev",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.geographical_area_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.geographical_area_descr",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.geographical_area_type",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.start_date",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.translations",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.translations[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.translations[].geographical_area_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.translations[].geographical_area_descr",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.translations[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].areaDetails.updated_at",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].base_duty",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].base_duty_formatted",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].action",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].action_translations",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].action_translations[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].action_translations[].action",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].action_translations[].action_value",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].action_translations[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].action_translations[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].condition_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].condition_code_descriptions",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].condition_code_descriptions[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].condition_code_descriptions[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].condition_code_descriptions[].measure_condition_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].condition_code_descriptions[].measure_condition_code_description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_code",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].certificate_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].certificate_type_code",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].datasource_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].description_start_date",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].end_date",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].formatted_description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].id",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].out_of_scope_reference",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].owner_assigned_id",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].start_date",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].document_descriptions[].status",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].duty_expression",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].duty_expression_formatted",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].measure_id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].nomenclature_pointer",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].out_of_scope_reference",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].owner_assigned_id",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].requirement",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].requirement_translations",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].requirement_translations[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].requirement_translations[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].requirement_translations[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].requirement_translations[].requirement",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].requirement_translations[].requirement_value",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].revision_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].serie_no",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type_code",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.created_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.created_by",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.operator_type",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.uoms",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.updated_at",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_type.updated_by",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_exclusion_values",
+      "types": [
+        "array",
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].surv_expr",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].tolerance_quantity",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].conditions[].used_expr",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].created_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].datasource_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].deleted_at",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr[].amount",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr[].currencyCode",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr[].quantity",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr[].rate",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr[].type",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].dutyExpr[].uom",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].effective_end_date",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].effective_start_date",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].datasource_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].description_end_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].description_start_date",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].end_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].footnote_id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].footnote_type_id",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].formatted_description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].measure_id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].owner_assigned_id",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].start_date",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].footnoteViews[].updated_at",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].formatted_description",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].geographical_area_id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].is_excise",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].is_export",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].is_import",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].is_transit",
+      "types": [
+        "boolean",
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].is_vat",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].isSuspended",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].datasource_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].legal_act_id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].measure_id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].officialjournal_number",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].officialjournal_page",
+      "types": [
+        "null",
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].published_date",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].regulation_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].regulation_url",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].validity_end_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].legalActViews[].validity_start_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr[].amount",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr[].currencyCode",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr[].quantity",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr[].rate",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr[].type",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].maxDutyExpr[].uom",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measure_type_group_code",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].measure_type_id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.category",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.compliance_category",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.created_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.display_order",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.display_type",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.is_export",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.is_import",
+      "types": [
+        "boolean"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.is_national",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.is_transit",
+      "types": [
+        "boolean",
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measure_type_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measure_type_description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measure_type_group_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measure_type_serie_id",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measure_type_short_descr",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations[].created_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations[].description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations[].measure_type_group_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.measureTypeGroupTranslations[].updated_at",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.origin_relation",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.regime_group_codes",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.regime_group_codes[]",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.tax_code",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations[].id",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations[].language_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations[].measure_type_code",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations[].measure_type_description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations[].short_description",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.translations[].updated_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].measureType.updated_at",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr",
+      "types": [
+        "array"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr[]",
+      "types": [
+        "object"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr[].amount",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr[].currencyCode",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr[].quantity",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr[].rate",
+      "types": [
+        "number"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr[].type",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].minDutyExpr[].uom",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].order_number",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].origin",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].origin_relation",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].owner_assigned_id",
+      "types": [
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].reduction_indicator",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].regime_group_codes",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].revision_date",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].source_checksum",
+      "types": [
+        "null"
+      ]
+    },
+    {
+      "path": "$.measures[].updated_at",
+      "types": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "path": "$.measures[].was_deleted",
+      "types": [
+        "null"
+      ]
+    }
+  ],
+  "notGuaranteed": [
+    "Tam mevzuat metni",
+    "Bütün tarihsel değişiklik zinciri",
+    "Her GTİP için tüm alanların doluluğu",
+    "Kontenjan kullanılabilir bakiye bilgisi"
+  ]
+}

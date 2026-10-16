@@ -67,7 +67,7 @@ export function renderMarkdown(text: string): ReactNode {
   return <div className="space-y-2.5">{blocks}</div>
 }
 
-const INLINE = /(\[[^\]\n]+\]\(\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?\)|\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\n]+\*|\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?)/g
+const INLINE = /(\[[^\]\n]+\]\(https:\/\/[^\s<>"\)]+\)|\[[^\]\n]+\]\(\/(?:runs|reports|operations)\/(?:documents\/)?[a-zA-Z0-9-]+(?:\?revision=\d+)?\)|\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\n]+\*|\/(?:runs|reports|operations)\/(?:documents\/)?[a-zA-Z0-9-]+(?:\?revision=\d+)?)/g
 
 function renderInline(text: string): ReactNode[] {
   return text.split(INLINE).filter((part) => part.length > 0).map((part, index) => {
@@ -80,9 +80,19 @@ function renderInline(text: string): ReactNode[] {
     if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
       return <em key={index}>{part.slice(1, -1)}</em>
     }
-    const reportLink = /^\[([^\]\n]+)\]\((\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?)\)$/.exec(part)
+    const externalLink = /^\[([^\]\n]+)\]\((https:\/\/[^\s<>"\)]+)\)$/.exec(part)
+    if (externalLink) {
+      try {
+        const url = new URL(externalLink[2]!)
+        if (url.hostname === 'tariff.singlewindow.io' && url.pathname.startsWith('/api/')) {
+          return <span key={index} title="Tariff sorgusu yetkilendirme gerektirir; API bağlantısı tarayıcıdan açılamaz.">Tariff (yetkilendirilmiş sorgu)</span>
+        }
+        if (url.protocol === 'https:' && !url.username && !url.password) return <a key={index} href={url.href} target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--atez-accent)] underline">{externalLink[1]}</a>
+      } catch { /* Malformed model links remain plain text. */ }
+    }
+    const reportLink = /^\[([^\]\n]+)\]\((\/(?:runs|reports|operations)\/(?:documents\/)?[a-zA-Z0-9-]+(?:\?revision=\d+)?)\)$/.exec(part)
     if (reportLink) return <a key={index} href={reportLink[2]} className="font-semibold text-[var(--atez-accent)] underline">{reportLink[1]}</a>
-    if (/^\/(?:runs|reports)\/[a-zA-Z0-9-]+(?:\?revision=\d+)?$/.test(part)) {
+    if (/^\/(?:runs|reports|operations)\/(?:documents\/)?[a-zA-Z0-9-]+(?:\?revision=\d+)?$/.test(part)) {
       return <a key={index} href={part} className="font-semibold text-[var(--atez-accent)] underline">{part}</a>
     }
     return <span key={index}>{part}</span>

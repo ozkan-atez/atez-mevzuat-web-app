@@ -53,7 +53,7 @@ export async function listCustomerGroups(): Promise<CustomerGroup[]> {
   return (await response.json() as { groups: CustomerGroup[] }).groups
 }
 
-export async function createCustomerGroup(input: { name: string; description: string | null; emails: string[] }): Promise<CustomerGroup> {
+export async function createCustomerGroup(input: { name: string; description: string | null; emails: string[]; recipientNames?: Record<string, string> }): Promise<CustomerGroup> {
   const response = await apiFetch('/api/v1/customer-groups', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   })
@@ -61,7 +61,7 @@ export async function createCustomerGroup(input: { name: string; description: st
   return response.json() as Promise<CustomerGroup>
 }
 
-export async function updateCustomerGroup(id: string, input: Partial<{ name: string; description: string | null; emails: string[]; isActive: boolean }>): Promise<CustomerGroup> {
+export async function updateCustomerGroup(id: string, input: Partial<{ name: string; description: string | null; emails: string[]; recipientNames?: Record<string, string>; isActive: boolean }>): Promise<CustomerGroup> {
   const response = await apiFetch(`/api/v1/customer-groups/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   })

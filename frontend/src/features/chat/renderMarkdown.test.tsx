@@ -38,3 +38,24 @@ describe('renderMarkdown', () => {
   })
 
 })
+
+it('links saved HTML reports and operation requests with their complete paths', () => {
+  render(<>{renderMarkdown('[Raporu aç](/reports/documents/report-1) [İşlemi izle](/operations/op-1)')}</>)
+  expect(screen.getByRole('link', {name:'Raporu aç'})).toHaveAttribute('href','/reports/documents/report-1')
+  expect(screen.getByRole('link', {name:'İşlemi izle'})).toHaveAttribute('href','/operations/op-1')
+})
+
+it('renders a source link once and rejects active URL schemes', () => {
+  render(<>{renderMarkdown('[Ticaret duyurusu](https://ticaret.gov.tr/duyurular/ornek) [Kötü](javascript:alert(1)) [Veri](data:text/html,test)')}</>)
+  expect(screen.getAllByRole('link')).toHaveLength(1)
+  expect(screen.getByRole('link',{name:'Ticaret duyurusu'})).toHaveAttribute('href','https://ticaret.gov.tr/duyurular/ornek')
+  expect(screen.getByRole('link')).toHaveAttribute('rel','noopener noreferrer')
+})
+
+
+it('renders legacy authenticated Tariff citations without unusable links', () => {
+  render(<>{renderMarkdown('[**Tariff Sorgusu**](https://tariff.singlewindow.io/api/v2-0/tariff-query/tariff-measures-by-commodity?commodityCode=691090000000&queryDate=2026-07-12) [Mevzuat referansı](https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31.htm)')}</>)
+  expect(screen.getByText('Tariff (yetkilendirilmiş sorgu)')).toBeInTheDocument()
+  expect(screen.getAllByRole('link')).toHaveLength(1)
+  expect(screen.getByRole('link', { name: 'Mevzuat referansı' })).toHaveAttribute('href', 'https://www.resmigazete.gov.tr/eskiler/2026/07/20260711-31.htm')
+})

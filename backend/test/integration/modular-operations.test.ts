@@ -55,7 +55,9 @@ describe.skipIf(!enabled)('modular workflow on isolated test database',()=>{
   const built=await service.get(build.id),artifact=built.tasks[0]!.artifacts[0]!,data=artifact.data as Record<string,any>
   expect(data.publicationStatus).toBe('DRAFT');expect(data.html).toContain('Test özeti');expect(data.html).toContain('data:image/png;base64,');expect(data.sourceContext[0].classification).toBe('USER_PROVIDED');expect(data.sourceContext[0].url).toBeNull();expect(data.sourceContext[0].publishedOn).toBeNull()
   const revise=await service.start({operation:'REVISE_REPORT',mode:'FORCE',reportTaskId:built.tasks[0]!.id,reportEdits:{summary:'Elle düzeltilmiş özet <script>bad()</script>'}},'revise1');await service.execute(revise.tasks[0]!.id)
-  const revised=await service.get(revise.id),next=revised.tasks[0]!.artifacts[0]!.data as Record<string,any>
+  const revised=await service.get(revise.id)
+  expect(revised.status,JSON.stringify(revised.tasks.map(t=>({status:t.status,error:t.errorMessage})))).toBe('SUCCEEDED')
+  const next=revised.tasks[0]!.artifacts[0]!.data as Record<string,any>
   expect(next.html).toContain('Elle düzeltilmiş özet');expect(next.html).not.toContain('<script>bad()');expect(next.previousReportTaskId).toBe(built.tasks[0]!.id);expect((await service.get(build.id)).tasks[0]!.artifacts[0]!.data).toEqual(data);expect(ai.generateStructured).toHaveBeenCalledTimes(1)
   expect((await publication.publication(built.tasks[0]!.id)).expectedVersion).toBe(0)
   const cachedDraft=await service.start({operation:'BUILD_REPORT',mode:'REUSE_ONLY',analysisTaskId:analyzed.tasks[0]!.id,templateId},'report-cached')

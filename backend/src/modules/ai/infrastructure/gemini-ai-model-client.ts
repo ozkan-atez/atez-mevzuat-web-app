@@ -1,3 +1,4 @@
+import { geminiTokens, type GeminiUsageMetadata } from '../../usage/measurement'
 import type { AiInputPart, AiModelClient, StructuredAiRequest, StructuredAiResult } from '../application/ai-model-client'
 import { AiProviderError } from '../domain/ai-errors'
 
@@ -14,10 +15,7 @@ export interface GeminiTransportRequest {
 export interface GeminiTransportResponse {
   text?: string
   responseId?: string
-  usageMetadata?: {
-    promptTokenCount?: number
-    candidatesTokenCount?: number
-  }
+  usageMetadata?: GeminiUsageMetadata
 }
 
 export interface GeminiTransport {
@@ -48,6 +46,7 @@ export class GeminiAiModelClient implements AiModelClient {
         }),
         timeout,
       ])
+      if (request.onUsage) await request.onUsage(geminiTokens(response.usageMetadata))
       if (!response.text) throw new AiProviderError('INVALID_RESPONSE', true, 'Gemini geçerli bir yapılandırılmış yanıt döndürmedi.')
       let json: unknown
       try {
@@ -59,8 +58,7 @@ export class GeminiAiModelClient implements AiModelClient {
         json,
         providerRequestId: response.responseId ?? null,
         usage: {
-          inputTokens: response.usageMetadata?.promptTokenCount ?? null,
-          outputTokens: response.usageMetadata?.candidatesTokenCount ?? null,
+          ...geminiTokens(response.usageMetadata),
         },
       }
     } catch (error) {

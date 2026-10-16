@@ -8,6 +8,8 @@ import type { AssistantKnowledge } from '../../src/modules/chat/application/assi
 describe('selected document chat operations', () => {
   it('only starts work for a direct instruction and selected immutable versions', () => {
     expect(parseDocumentOperation('bu belgeyi analiz et', ['v'])).toMatchObject({ operation: 'ANALYZE', documentVersionIds: ['v'], mode: 'FILL_MISSING' })
+    expect(parseDocumentOperation('bu belgeyi inceleyebilir misin?', ['v'])).toMatchObject({operation:'ANALYZE'})
+    expect(parseDocumentOperation('belgeyi okur musun?', ['v'])).toMatchObject({operation:'EXTRACT'})
     expect(parseDocumentOperation('analiz etme', ['v'])).toBeNull()
     expect(parseDocumentOperation('nasıl analiz yapabilirim?', ['v'])).toBeNull()
     expect(parseDocumentOperation('belgeyi ekledim', ['v'])).toBeNull()

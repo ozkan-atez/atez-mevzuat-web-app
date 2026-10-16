@@ -18,6 +18,14 @@ function fakeArchive(){
   return {prisma:prisma as PrismaClient,store,imports,documents,versions,blobs}
 }
 describe('scoped immutable document imports',()=>{
+  it.each([['source.pdf','%PDF-1.7\noriginal content'],['source.txt','Original text']])('preserves %s without mandatory text extraction',async(filename,content)=>{
+    const archive=fakeArchive()
+    const result=await importDocument({prisma:archive.prisma,objectStore:archive.store},{bytes:Buffer.from(content),filename,actorScope:'workspace',originalOnly:true})
+    expect(result.version.extractionStatus).toBe('ORIGINAL_READY')
+    expect(archive.store.getContent).not.toHaveBeenCalled()
+    expect(archive.versions[0].extractionMetadata).toEqual({materialDelivery:'ORIGINAL_FILE',analysisStatus:'NOT_STARTED'})
+  })
+
   it('same upload reuses physical bytes and logical version; no AI or scraping',async()=>{
     const archive=fakeArchive();const input={bytes:Buffer.from('Customs data'),filename:'file.txt',actorScope:'workspace'}
     const first=await importDocument({prisma:archive.prisma,objectStore:archive.store},{...input,idempotencyKey:'one'})

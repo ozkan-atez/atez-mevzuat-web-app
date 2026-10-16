@@ -50,7 +50,7 @@ export async function publishReportDraft(
   const root = `runs/${base.targetDate.replaceAll('-', '/')}/${base.runId}/topics/${input.topicId}/reports/${revisionFolder}/draft-${draft.id}/${randomUUID()}`
 
   const html = await renderReportHtml(spec)
-  validateReportHtml(html, { customized: Boolean(spec.customization && (spec.customization.customHtml || spec.customization.sections.length || Object.keys(spec.customization.headings).length || spec.customization.order.length)), card: spec.card, topicId: spec.topicId, basename: base.basename })
+  validateReportHtml(html, { structuredTemplate:Boolean(spec.customization?.templateReport && !spec.customization?.customHtml), customized: Boolean(spec.customization && (spec.customization.customHtml || spec.customization.sections.length || Object.keys(spec.customization.headings).length || spec.customization.order.length)), card: spec.card, topicId: spec.topicId, basename: base.basename })
 
   await dependencies.objectStore.putRunFile(`${root}/report-spec.json`, Buffer.from(JSON.stringify(spec)), 'application/json')
   await dependencies.objectStore.putRunFile(`${root}/${base.basename}`, Buffer.from(html), 'text/html; charset=utf-8')

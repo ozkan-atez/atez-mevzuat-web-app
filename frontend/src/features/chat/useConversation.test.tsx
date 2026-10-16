@@ -137,3 +137,27 @@ describe('useConversation', () => {
     expect(result.current.messages.at(-1)).toMatchObject({ role: 'ASSISTANT', status: 'FAILED', errorDetail: 'Yapay zekâ yanıtı tamamlanamadı. Lütfen yeniden deneyin.' })
   })
 })
+
+it('marks an interrupted stream failed instead of leaving an empty completed bubble',async()=>{
+  stubFetch({stream:[frame({type:'message',message:message('u1','USER','Soru')},'message')]})
+  const {result}=renderHook(()=>useConversation('s1'))
+  await waitFor(()=>expect(result.current.isLoading).toBe(false))
+  await act(()=>result.current.send('Soru'))
+  expect(result.current.isSending).toBe(false)
+  expect(result.current.messages.at(-1)).toMatchObject({role:'ASSISTANT',status:'FAILED',errorDetail:expect.stringContaining('bağlantı kesildi')})
+})
+
+it('restores a server-owned running turn and sends an explicit stop request',async()=>{
+ const fetcher=vi.fn(async(url:RequestInfo|URL,_init?:RequestInit)=>{
+  if(String(url).endsWith('/stop'))return new Response(JSON.stringify({stopping:true}),{status:200})
+  return new Response(JSON.stringify({messages:[message('u1','USER','Soru')],active:{startedAt:Date.now(),stage:'Kaynaklar inceleniyor',content:'Kısmi cevap',stopping:false}}),{status:200})
+ })
+ vi.stubGlobal('fetch',fetcher)
+ const {result,unmount}=renderHook(()=>useConversation('s1'))
+ await waitFor(()=>expect(result.current.isSending).toBe(true))
+ expect(result.current.messages.at(-1)?.content).toBe('Kısmi cevap')
+ await act(async()=>result.current.stop())
+ expect(fetcher.mock.calls.some(([url,init])=>String(url).endsWith('/s1/stop') && init?.method==='POST')).toBe(true)
+ unmount()
+ expect(fetcher.mock.calls.filter(([url])=>String(url).endsWith('/stop'))).toHaveLength(1)
+})

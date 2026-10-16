@@ -1,3 +1,4 @@
+import { SourceSizeLimitError, captureFailure } from './capture-error'
 import { extractOfficeText } from './document-text'
 import { assertContentAccess } from './source-profile'
 import { createHash } from 'node:crypto'
@@ -9,7 +10,7 @@ import { extractPdfText } from './pdf-text'
 
 export interface CapturedSourceFile {
   url: string; title: string; role: 'DOCUMENT' | 'ATTACHMENT' | 'IMAGE'; status: 'STORED' | 'FAILED'
-  resolvedUrl?: string; capturedAt?: string; mediaType?: string; byteSize?: number; sha256?: string; objectKey?: string; bucket?: string; error?: string
+  resolvedUrl?: string; capturedAt?: string; mediaType?: string; byteSize?: number; sha256?: string; objectKey?: string; bucket?: string; error?: string; failure?: ReturnType<typeof captureFailure>
 }
 export interface SourceCapture { contentText: string | null; files: CapturedSourceFile[]; errors: string[]; status: 'COMPLETED' | 'PARTIAL' | 'FAILED' }
 const supportedPath = /\.(?:pdf|png|jpe?g|gif|webp|svg|bmp|tiff?|docx?|xlsx?|pptx?|csv|txt|zip|rar|7z)$/i
@@ -44,16 +45,19 @@ export async function captureSourceDocument(
   url: string, sourceBaseUrl: string, store: Pick<ObjectStore,'putRunFile'>,
   extra: Array<{url:string;title:string}> = [], maxTotalBytes = 100_000_000,
   fetcher: (url:string,maxBytes:number) => Promise<{body:Buffer;contentType:string;finalUrl?:string}> = fetchSourceBinary,
+  options: {extractPdfText?:boolean;maxFileBytes?:number} = {},
 ): Promise<SourceCapture> {
   const files: CapturedSourceFile[] = []; const errors: string[] = []; const texts: string[] = []
+  const maxFileBytes=options.maxFileBytes??25_000_000
   let total = 0
   let html: string | null = null
   let htmlBase = url
   const capture = async (candidate: {url:string;title:string;role:CapturedSourceFile['role']}) => {
     try {
       if (maxTotalBytes - total <= 0) throw new Error('Tarama boyut sınırı aşıldı.')
-      const resource = await fetcher(candidate.url, Math.min(25_000_000, maxTotalBytes - total))
-      if (!resource.body.length || resource.body.length > 25_000_000 || total + resource.body.length > maxTotalBytes) throw new Error('Dosya veya tarama boyut sınırı aşıldı.')
+      const resource = await fetcher(candidate.url, Math.min(maxFileBytes, maxTotalBytes - total))
+      if(resource.body.length>Math.min(maxFileBytes,maxTotalBytes-total))throw new SourceSizeLimitError(candidate.url,Math.min(maxFileBytes,maxTotalBytes-total),resource.body.length)
+      if(!resource.body.length)throw new Error('Dosya boş')
       total += resource.body.length
       let detected: Awaited<ReturnType<typeof fileTypeFromBuffer>>
       try { detected = await fileTypeFromBuffer(resource.body) } catch { detected = undefined }
@@ -64,7 +68,7 @@ export async function captureSourceDocument(
       const sha256 = createHash('sha256').update(resource.body).digest('hex')
       const stored = await store.putRunFile(`source-captures/${sha256}`, resource.body, mediaType || 'application/octet-stream')
 
-      if (mediaType === 'application/pdf') {
+      if (mediaType === 'application/pdf' && options.extractPdfText!==false) {
         try { const text = await extractPdfText(resource.body); if (text) texts.push(`Kaynak: ${candidate.url}\n${text.slice(0,40000)}`) } catch { /* The original remains available even if it needs OCR. */ }
       } else if (/html/i.test(mediaType)) {
         const encoding = /charset\s*=\s*["']?windows-1254/i.test(`${resource.contentType} ${resource.body.subarray(0,2000).toString('latin1')}`) ? 'windows-1254' : 'utf-8'
@@ -80,7 +84,7 @@ export async function captureSourceDocument(
       files.push({ ...candidate, status: 'STORED', capturedAt: new Date().toISOString(), ...(resource.finalUrl ? {resolvedUrl:resource.finalUrl} : {}), mediaType, byteSize: resource.body.length, sha256, objectKey: stored.objectKey, bucket: stored.bucket })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Dosya indirilemedi.'
-      files.push({ ...candidate, status: 'FAILED', error: message.slice(0,300) }); errors.push(`${candidate.title}: ${message}`)
+      files.push({ ...candidate, status: 'FAILED', error: message.slice(0,300), failure:captureFailure(error,candidate.url,Math.min(maxFileBytes,Math.max(0,maxTotalBytes-total))) }); errors.push(`${candidate.title}: ${message}`)
     }
   }
   await capture({ url, title: 'Özgün belge', role: 'DOCUMENT' })

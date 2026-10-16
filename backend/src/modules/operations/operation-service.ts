@@ -1,3 +1,4 @@
+import { reportActor } from '../chat/infrastructure/report-audit'
 import { getActorContext, privateActorScope, resourceOwnership, documentAccessWhere } from '../../platform/actor-context'
 import { createHash, randomUUID } from 'node:crypto'
 import { Prisma, type PrismaClient } from '@prisma/client'
@@ -16,11 +17,11 @@ export const OperationInputSchema = z.object({
   code: z.string().max(30).optional(), previousDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), origin: z.string().max(100).optional(),
 }).strict()
 export type OperationInput = z.infer<typeof OperationInputSchema>
-export const OperationTaskParametersSchema=OperationInputSchema.extend({executionSnapshot:z.record(z.string(),z.unknown()).optional()})
+export const OperationTaskParametersSchema=OperationInputSchema.extend({operation:z.enum([...operationKinds,'PUBLISH_REPORT']),executionSnapshot:z.record(z.string(),z.unknown()).optional()})
 export type OperationParameters=z.infer<typeof OperationTaskParametersSchema>
 export interface ArtifactOutput { kind: string; referenceId?: string; objectKey?: string; data?: unknown }
 export type OperationExecutor = (parameters: OperationParameters, context: { taskId: string; actorScope: string; signal: AbortSignal }) => Promise<ArtifactOutput[]>
-export type OperationExecutors = Partial<Record<OperationInput['operation'], OperationExecutor>>
+export type OperationExecutors = Partial<Record<OperationParameters['operation'], OperationExecutor>>
 export interface PlannedTask { operation:OperationInput['operation']; inputSignature:string; parameters:OperationParameters; dependencyIds:string[]; status:string; reused:boolean; cachedTaskId?:string; existingArtifacts?:ArtifactOutput[]; signatureDependencies?:string[] }
 export interface OperationPlan {operation:OperationInput['operation'];mode:OperationInput['mode'];tasks:PlannedTask[];missing:Array<{operation:string;documentVersionId?:string;reason:string}>;canStart:boolean}
 export class OperationError extends Error {
@@ -99,8 +100,8 @@ export class OperationService {
       if (!template || !template.isActive) throw new OperationError('Şablon bulunamadı.', 404)
       if(input.templateRevision!==undefined && input.templateRevision!==template.revision)throw new OperationError('Şablon sürümü değişti.',409,'TEMPLATE_CHANGED')
       input.templateRevision = template.revision
-      executionSnapshot.template={id:template.id,revision:template.revision,html:template.html,sections:template.sections}
-      semantic = { ...semantic, templateRevision: template.revision, templateSnapshot: { html: template.html, sections: template.sections } }
+      executionSnapshot.template={id:template.id,revision:template.revision,html:template.html,sections:template.sections,definition:template.definition}
+      semantic = { ...semantic, templateRevision: template.revision, templateSnapshot: { html: template.html, sections: template.sections, definition: template.definition, revision: template.revision } }
     }
     if(input.sourceId) {
       const source = await this.prisma.source.findFirst({where:{id:input.sourceId,isActive:true}})
@@ -150,7 +151,7 @@ export class OperationService {
     if (['ANALYZE','FILTER','PREVIOUS_SOURCES','REVISE_ANALYSIS'].includes(input.operation)) for (const version of versions) {
       if (version.extractionStatus === 'READY' && version.extractedText?.trim()) continue
       const reason = version.extractionStatus === 'OCR_REQUIRED' ? 'OCR_REQUIRED' : 'TEXT_MISSING'
-      if (input.mode === 'REUSE_ONLY' || version.extractionStatus === 'OCR_REQUIRED') { missing.push({ operation: 'EXTRACT', documentVersionId: version.id, reason }); continue }
+      if (input.mode === 'REUSE_ONLY') { missing.push({ operation: 'EXTRACT', documentVersionId: version.id, reason }); continue }
       if (!this.executors.EXTRACT) { missing.push({ operation: 'EXTRACT', documentVersionId: version.id, reason: 'EXECUTOR_UNAVAILABLE' }); continue }
       const parameters: OperationInput = { operation: 'EXTRACT', mode: 'FILL_MISSING', documentVersionIds: [version.id] }
       const inputSignature = operationHash({ scope: this.scope, parameters: { ...parameters, mode: undefined }, version: this.versions.EXTRACT })
@@ -219,6 +220,11 @@ export class OperationService {
       const changed = await tx.operationTask.updateMany({ where: { id, status: task.status }, data: { status: 'QUEUED', errorCategory: null, errorMessage: null } })
       if (!changed.count) throw new OperationError('Görev değişti.', 409)
       await tx.operationOutbox.create({ data: { taskId: id } })
+      const blocked=await tx.operationTask.findMany({where:{requestId:task.requestId,status:'BLOCKED',errorCategory:'DEPENDENCY_FAILED'}})
+      for(const child of blocked){
+        await tx.operationTask.update({where:{id:child.id},data:{status:'QUEUED',errorCategory:null,errorMessage:null}})
+        await tx.operationOutbox.create({data:{taskId:child.id}})
+      }
       await tx.operationRequest.update({ where: { id: task.requestId }, data: { status: 'QUEUED' } })
     }); return this.get(task.requestId)
   }
@@ -265,7 +271,8 @@ export class OperationService {
           if(artifact.kind === 'REPORT_DRAFT' && artifact.data) {
             const draft = await tx.reportDraft.create({data:{...resourceOwnership(),operationTaskId:taskId,actorScope:current.actorScope,baseVersion:0,specJson:json(artifact.data)}})
             const edits = parameters.reportEdits
-            if(edits) for(const [index,[path,value]] of Object.entries(edits).entries()) await tx.reportFieldEdit.create({data:{draftId:draft.id,sequence:index+1,path:`reportContent.${path}`,nextValue:json(value),source:'USER'}})
+            const editor=await reportActor(tx)
+            if(edits) for(const [index,[path,value]] of Object.entries(edits).entries()) await tx.reportFieldEdit.create({data:{actorId:editor.id,actorName:editor.name,requestedBy:editor.id,draftId:draft.id,sequence:index+1,path:`reportContent.${path}`,nextValue:json(value),source:'USER'}})
           }
         }
         await tx.operationAttempt.update({ where: { id: attempt.id }, data: { status: cancelled ? 'CANCELLED' : partial ? 'PARTIAL' : 'SUCCEEDED', completedAt: new Date() } })

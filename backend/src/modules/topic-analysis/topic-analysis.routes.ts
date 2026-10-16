@@ -1,3 +1,8 @@
+import { reportChatIntent } from './application/report-chat-intent'
+import type { ReportAnalysisService } from '../operations/report-analysis-service'
+import { OperationError } from '../operations/operation-service'
+import { reportFromTemplate, TemplateSnapshotSchema } from '../workspace/template-report'
+import { measuredStructuredModel, type UsageRecorder } from '../usage/measurement'
 import type { AiModelClient } from '../ai/application/ai-model-client'
 import { reviseRunReport } from './application/revise-run-report'
 import { applyAutomationTemplate } from './application/apply-automation-template'
@@ -29,6 +34,8 @@ import { ReportPatchError } from './domain/report-patch'
 import { applyEditsSchema, messageSchema, publishDraftSchema, versionSchema } from './topic-analysis.schemas'
 
 interface Options {
+  reportAnalysis?: ReportAnalysisService
+  usageRecorder?: UsageRecorder
   revisionModel?: AiModelClient
   revisionModelName?: string
   repository: PrismaTopicAnalysisRepository
@@ -72,17 +79,37 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
     const { id } = request.params as { id: string }
     try {
       const report = await options.repository.getTopicDetail(id)
-      if (report?.reportCard === 'K6' && !report.documentId) {
+      if (!report) return reply.code(404).send({message:'Rapor bulunamadı.'})
+      const intent = reportChatIntent(body.data.message)
+      if (intent !== 'EDIT_REPORT' && options.reportAnalysis) {
+        if (intent === 'RERUN_ANALYSIS' && report?.documentId) return reply.code(202).send(await options.repository.appendRevisionRequest({topicId:id,requestKey:key.data,message:body.data.message,revisionKind:'ANALYSIS'}))
+        const messageId = `report-analysis:${id}:${key.data}`
+        await options.repository.recordRunReportMessage(id,{id:messageId,role:'USER',content:body.data.message})
+        if (intent === 'RERUN_ANALYSIS') await options.reportAnalysis.rerun(id,body.data.message,key.data)
+        const result = await options.reportAnalysis.read(id)
+        await options.repository.recordRunReportMessage(id,{id:`${messageId}:result`,role:'ASSISTANT',content:intent === 'SHOW_ANALYSIS' ? result.text : 'Analiz yeniden yapıldı ve kaydedildi. Rapor metni ve taslağı değiştirilmedi. Yeni analizi paylaşmamı veya rapora uygulamamı isteyebilirsiniz.'})
+        return reply.send({messageId,status:'COMPLETED'})
+      }
+      if (report && !report.documentId) {
         const dependencies = draftDependencies(reply)
         if (!dependencies) return reply
         if (!options.revisionModel) return reply.code(503).send({message:'Rapor düzeltme modeli kullanılamıyor.'})
-        await reviseRunReport({id,message:body.data.message,requestKey:key.data}, {...dependencies,aiModel:options.revisionModel,model:options.revisionModelName ?? 'gemini-3.7-flash'})
+        const messageId = `run-report:${id}:${key.data}:user`
+        await options.repository.recordRunReportMessage?.(id, {id: messageId, role: 'USER', content: body.data.message})
+        try {
+          await reviseRunReport({id,message:body.data.message,requestKey:key.data,messageId,...(options.reportAnalysis ? {analysisContext:await options.reportAnalysis.read(id).then(r=>r.text).catch(()=>undefined)} : {})}, {...dependencies,aiModel:options.usageRecorder ? measuredStructuredModel(options.revisionModel, options.usageRecorder, {conversationId: id, conversationType: 'REPORT', messageId}) : options.revisionModel,model:options.revisionModelName ?? 'gemini-3.7-flash'})
+          await options.repository.recordRunReportMessage?.(id, {id: `${messageId}:result`, role: 'ASSISTANT', content: 'Düzeltme taslağa işlendi. Raporu açıp kontrol ederek yeni sürümü kaydedebilirsiniz.'})
+        } catch (error) {
+          await options.repository.recordRunReportMessage?.(id, {id: `${messageId}:error`, role: 'ASSISTANT', content: 'Düzeltme tamamlanamadı. Güncel raporu kontrol edip yeniden deneyin.'})
+          throw error
+        }
         return reply.send({messageId:key.data,status:'COMPLETED'})
       }
       return reply.code(202).send(await options.repository.appendRevisionRequest({
         topicId: id, requestKey: key.data, message: body.data.message, revisionKind: classifyRevisionKind(),
       }))
     } catch (error) {
+      if (error instanceof OperationError) return reply.code(error.statusCode).send({message:error.message})
       if (error instanceof TopicNotFoundError) return reply.code(404).send({ message: error.message })
       if (error instanceof TopicCommandConflictError) return reply.code(409).send({ message: error.message })
       return replyDraftError(reply,error)
@@ -96,6 +123,7 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
     try {
       return reply.code(202).send(await options.repository.requestTopicRetry(id, key.data))
     } catch (error) {
+      if (error instanceof OperationError) return reply.code(error.statusCode).send({message:error.message})
       if (error instanceof TopicNotFoundError) return reply.code(404).send({ message: error.message })
       if (error instanceof TopicRetryConflictError || error instanceof TopicCommandConflictError) return reply.code(409).send({ message: error.message })
       throw error
@@ -142,7 +170,11 @@ export async function topicAnalysisRoutes(app: FastifyInstance, options: Options
           if (!options.loadTemplate) return reply.code(503).send({message: 'Şablon deposu kullanılamıyor'})
           const template = await options.loadTemplate(value.templateId)
           if (!template) return reply.code(404).send({message: 'Şablon bulunamadı'})
-          value = applyAutomationTemplate({...current.spec,customization: value}, {templateId: value.templateId,template}).customization ?? null
+          if(TemplateSnapshotSchema.parse(template).definition) {
+            if(!options.revisionModel)return reply.code(503).send({message:'Şablon içeriğini üretmek için AI sağlayıcısı gerekli.'})
+            const generated=await reportFromTemplate(template,current.spec,[{id:'current-report',label:'Mevcut kaynaklı rapor',url:current.spec.source.url,excerpt:current.spec.card==='K6'?current.spec.emptyDayText:current.spec.summary},...(value.sources ?? []).map(s=>({id:s.id,label:s.label,url:s.url||null,excerpt:s.content}))],options.revisionModel,options.revisionModelName ?? 'gemini-3.7-flash')
+            value={...value,customHtml:null,templateReport:generated!.report}
+          } else value = applyAutomationTemplate({...current.spec,customization: {...value,templateReport:null}}, {templateId: value.templateId,template}).customization ?? null
         }
         const view = await applyReportFieldEdits({topicId: id, patch: {edits: [{path: 'customization', value}]}, ...(body.data.expectedVersion === undefined ? {} : {expectedVersion: body.data.expectedVersion}), requestKey: key.data, source: 'USER', prompt: null, chatMessageId: null, actor: null}, dependencies)
         return reply.send(toDraftPayload(view))

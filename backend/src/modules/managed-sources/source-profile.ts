@@ -1,3 +1,4 @@
+import { load } from 'cheerio'
 import { z } from 'zod'
 import { normalizeManagedSourceUrl } from './fetch-managed-source'
 const address=z.string().transform((value,ctx)=>{try{return normalizeManagedSourceUrl(value)}catch{ctx.addIssue({code:'custom',message:'Geçerli bir HTTPS kaynak adresi gerekli.'});return z.NEVER}})
@@ -6,8 +7,9 @@ export const sourceProfileSchema = z.object({
   name: z.string().min(1).max(200),
   transport: z.enum(['HTTP', 'BROWSER', 'TARIFF_API', 'GAZETTE']),
   allowedHosts: z.array(z.string().regex(/^[a-z0-9.-]+$/)).min(1).max(15),
-  feeds: z.array(z.object({ url: address, title: z.string().max(200), row: selector, link: selector, date: selector.optional(), detailDate: selector.optional(), next: selector.optional(), yearInPath: z.boolean().optional(), recentOnly: z.boolean().optional() })).max(20),
+  feeds: z.array(z.object({ url: address, title: z.string().max(200), row: selector, link: selector, titleSelector: selector.optional(), date: selector.optional(), detailDate: selector.optional(), next: selector.optional(), pageParameter: z.string().regex(/^[a-zA-Z]+$/).max(30).optional(), yearInPath: z.boolean().optional(), recentOnly: z.boolean().optional() })).max(20),
   auth: z.object({ mode: z.enum(['NONE', 'FORM', 'TARIFF']), loginUrl: address.optional(), username: selector.optional(), password: selector.optional(), submit: selector.optional(), success: selector.optional() }),
+  maxFileBytes:z.number().int().min(1_000_000).max(100_000_000).optional(),
   maxPages: z.number().int().min(1).max(30).default(10),
   maxDocuments: z.number().int().min(1).max(300).default(100),
   delayMs: z.number().int().min(300).max(10000).default(750),
@@ -22,9 +24,17 @@ export function builtinProfile(key: string): SourceProfileConfig | null {
   const common = {maxPages:10,maxDocuments:100,delayMs:750,auth:{mode:'NONE' as const}}
   const profiles: Record<string, unknown> = {
     'resmi-gazete': {...common,name:'Resmî Gazete',transport:'GAZETTE',allowedHosts:['www.resmigazete.gov.tr','resmigazete.gov.tr'],feeds:[]},
-    'ticaret-bakanligi': {...common,name:'Ticaret Bakanlığı',transport:'HTTP',allowedHosts:['ticaret.gov.tr','www.ticaret.gov.tr','ggm.ticaret.gov.tr'],feeds:[
+    'ticaret-bakanligi': {...common,maxDocuments:300,name:'Ticaret Bakanlığı',transport:'HTTP',allowedHosts:['ticaret.gov.tr','www.ticaret.gov.tr','ggm.ticaret.gov.tr','tagm.ticaret.gov.tr','personel.ticaret.gov.tr','ithalat.ticaret.gov.tr'],feeds:[
       {url:'https://ggm.ticaret.gov.tr/duyurular',title:'Gümrük duyuruları',row:'ul.dizin-content li',link:'a[href]',detailDate:'.__header span'},
-      {url:'https://ticaret.gov.tr/gumruk-islemleri/mevzuat/genelge/2026',title:'Gümrük genelgeleri',row:'table tr',link:'a[href$=".pdf"],a[href$=".PDF"]',date:'td:nth-child(3)',yearInPath:true},
+      {url:'https://ticaret.gov.tr/gumruk-islemleri/mevzuat/genelge/2026',title:'Gümrük genelgeleri',row:'table tr',link:'a[href$=".pdf"],a[href$=".PDF"]',titleSelector:'td:first-child',date:'td:nth-child(3)',yearInPath:true},
+      ...[
+        ['https://ticaret.gov.tr/haberler','Bakanlık haberleri'],
+        ['https://ticaret.gov.tr/duyurular','Bakanlık duyuruları'],
+        ['https://ticaret.gov.tr/kurumsal-haberler','Kurumsal haberler'],
+        ['https://ticaret.gov.tr/blog/ekonomi-haberleri','Ekonomi haberleri'],
+        ['https://ticaret.gov.tr/urun-guvenligi/duyurular','Ürün güvenliği duyuruları'],
+        ['https://ithalat.ticaret.gov.tr/duyurular','İthalat duyuruları'],
+      ].map(([url,title])=>({url,title,row:'ul.dizin-content li',link:'a[href]',titleSelector:'h5',date:'.text > span',detailDate:'.__header span',next:'.pagination li[title="Next Page"]:not(.disabled) a[href]',pageParameter:'s'})),
     ]},
     igmd:{...common,name:'İGMD',transport:'HTTP',allowedHosts:['www.igmd.org.tr','igmd.org.tr','files.igmd.org.tr'],feeds:[{url:'https://www.igmd.org.tr/mevzuat_haberleri',title:'Mevzuat haberleri',row:'.border-ec',link:'h4.haberbaslik a[href]',date:'.bilgiler',next:'a[href^="?p="]'}]},
     'mevzuat-net':{...common,name:'Mevzuat.Net',transport:'BROWSER',allowedHosts:['www.mevzuat.net','mevzuat.net'],auth:{mode:'FORM',loginUrl:'https://www.mevzuat.net/LoginMevzuat.aspx',username:'#mid',password:'#indy',submit:'button:has-text("Abone Girişi")',success:'#SiteGenelContent'},feeds:[{url:'https://www.mevzuat.net/Guncellik.aspx',title:'Son yayımlanan 30 mevzuat',row:'#tblListe tr',link:'td:nth-child(4) a[href]',date:'td:nth-child(2)',recentOnly:true}]},
@@ -40,6 +50,12 @@ export function sourceUrl(value: string, base: string, profile: SourceProfileCon
 }
 export function assertContentAccess(html: string, url: string) {
   if (/LoginMevzuat|\/login(?:[/?]|$)|\/signin(?:[/?]|$)/i.test(url) || /<input[^>]+type=["']password["']/i.test(html)) throw new Error('AUTH_REQUIRED: Kaynak belgeye erişmek için oturum açılmasını istiyor.')
-  if (/g-recaptcha|h-captcha|cf-turnstile|challenge-platform/i.test(html)) throw new Error('USER_ACTION_REQUIRED: Kaynak insan doğrulaması istiyor.')
+  // The Gazette contact dialog contains an optional CAPTCHA unrelated to document access.
+  // Exclude only that known form; challenges elsewhere must still stop the request.
+  let accessHtml=html
+  if (['www.resmigazete.gov.tr','resmigazete.gov.tr'].includes(new URL(url).hostname)) {
+    const $=load(html); $('#contactForm').remove(); accessHtml=$.html()
+  }
+  if (/g-recaptcha|h-captcha|cf-turnstile|challenge-platform/i.test(accessHtml)) throw new Error('USER_ACTION_REQUIRED: Kaynak insan doğrulaması istiyor.')
   if (/Pro or Higher Plan Required|subscription required|aboneliğiniz.*sona ermiştir/i.test(html)) throw new Error('SUBSCRIPTION_REQUIRED: Bu içerik için etkin abonelik gerekiyor.')
 }
