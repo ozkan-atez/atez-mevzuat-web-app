@@ -11,7 +11,8 @@ const Env = z.object({
   S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   /** Vertex AI; boşsa AI geçidi kurulmaz ve AI adımları kalıcı hata verir. */
   VERTEX_PROJECT: z.string().optional().transform((v) => v || undefined),
-  VERTEX_LOCATION: z.string().optional().transform((v) => v || undefined),
+  /** Varsayılan `global` (2026-10-17 kararı); veri yerleşimi gerekirse `eu`. */
+  VERTEX_LOCATION: z.string().optional().transform((v) => v || 'global'),
   /** Servis hesabı anahtar dosyası (repoya girmez; yalnızca .env). */
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional().transform((v) => v || undefined),
   GOTENBERG_URL: z.string().optional().transform((v) => v || undefined),

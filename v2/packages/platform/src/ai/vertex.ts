@@ -15,7 +15,7 @@ const THINKING: Record<NonNullable<ProviderRequest['thinking']>, ThinkingLevel> 
 }
 
 /**
- * Vertex AI (AB bölgesi). Kimlik: servis hesabı anahtar dosyası (`keyFilename`); verilmezse
+ * Vertex AI (`global` uç noktası; VERTEX_LOCATION ile değişir). Kimlik: servis hesabı anahtar dosyası (`keyFilename`); verilmezse
  * Application Default Credentials.
  */
 export class VertexProvider implements AiProvider {

@@ -33,7 +33,7 @@ Bu proje şirketin GitHub'ına **yeni bir repo** olarak taşınacak. Belge bu y�
 
 | Konu | Karar |
 |---|---|
-| AI sağlayıcı ve model | **Vertex AI, AB bölgesi.** Ana model `gemini-3.8-flash` (sürüm sabitlenir). Hafif işler `gemini-3.5-flash-lite` ile yapılır: başlık elemesi, yönlendirme, başlık üretimi, özet, küçük düzeltmeler, belirsiz eşleştirme. |
+| AI sağlayıcı ve model | **Vertex AI, `global` uç noktası (2026-10-17 kararı).** Not: `global` uç noktası işlemenin AB içinde kalacağını garanti etmez. Veri yerleşimi gerekirse `VERTEX_LOCATION` bir AB bölgesine çevrilir (2026-10-17 yoklamasında bu modeller yalnızca `eu` çok-bölgeli uç noktasında vardı; `europe-west4` gibi tek AB bölgeleri 404 döndü). Ana model `gemini-3.8-flash` (sürüm sabitlenir). Hafif işler `gemini-3.5-flash-lite` ile yapılır: başlık elemesi, yönlendirme, başlık üretimi, özet, küçük düzeltmeler, belirsiz eşleştirme. |
 | Onay ve gönderim | Onay adımı yok. Bütün raporlar `READY` ("Gönderime hazır") olur. Otomatik e-posta gönderilmez. |
 | Altyapı | Şirketin mevcut **RabbitMQ**, **PostgreSQL** ve **MinIO** kurulumları kullanılır, yeni kurulum yapılmaz. Altyapı ekibinden gereken tek şey bu uygulamaya ait bir RabbitMQ vhost'u ve kullanıcısı, bir Postgres veritabanı ve kullanıcısı, bir MinIO bucket'ı ve erişim anahtarı. `pgvector` yalnızca anlamsal arama faz 6'ya gelince gerekir. |
 | Konu eşleştirme | Kesin eşleşme (RG bağlantısı veya resmî numara) ya da AI ile "aynı olay" tespiti yapılamazsa belge **ayrı konu** olarak kalır. |

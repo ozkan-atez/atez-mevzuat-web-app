@@ -27,7 +27,7 @@ pnpm api               # :3100  POST /runs  GET /runs/:id
 ## Tek seferlik çalıştırma (geliştirici aracı)
 
 ```bash
-# .env: GOOGLE_APPLICATION_CREDENTIALS (servis hesabı anahtarı), VERTEX_LOCATION (eu)
+# .env: GOOGLE_APPLICATION_CREDENTIALS (servis hesabı anahtarı), VERTEX_LOCATION (varsayılan global)
 pnpm run-once --recipe rg-daily-profile --date 2025-12-31
 ```
 
