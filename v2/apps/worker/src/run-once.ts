@@ -18,6 +18,7 @@ const { values } = parseArgs({
     date: { type: 'string' },
     mode: { type: 'string', default: 'FILL_MISSING' },
     input: { type: 'string', default: '{}' },
+    concurrency: { type: 'string', default: '1' },
   },
 })
 const rt = await bootRuntime('run-once')
@@ -32,7 +33,7 @@ const deps: StepDeps = {
 const recipes = RecipeRegistry.fromDir(join(rt.configDir, 'recipes'))
 const relay = new OutboxRelay(rt.db.db, rt.amqp.publisher, { idleMs: 50, logger: rt.log })
 relay.start()
-const worker = new StepWorker<StepDeps>({ db: rt.db.db, steps: buildStepRegistry(), deps, owner: `${hostname()}:${process.pid}`, logger: rt.log })
+const worker = new StepWorker<StepDeps>({ db: rt.db.db, steps: buildStepRegistry(), deps, owner: `${hostname()}:${process.pid}`, logger: rt.log, prefetch: Number(values.concurrency) })
 const stopWorker = await worker.consumePools(rt.amqp.connection, [...POOLS])
 const stopOrch = await new Orchestrator(rt.db.db, rt.log).consume(rt.amqp.connection)
 

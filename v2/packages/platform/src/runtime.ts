@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { AiGateway, loadAiConfig, VertexProvider } from './ai/index'
+import { AiGateway, loadAiConfig, projectIdFromKeyFile, VertexProvider } from './ai/index'
 import { loadEnv, type Env } from './config/env'
 import { createDb, type DbHandle } from './db/client'
 import { createLogger, type Logger } from './log'
@@ -40,10 +40,13 @@ export async function bootRuntime(role: string, opts: { amqp?: boolean } = {}): 
   })
   const configDir = env.CONFIG_DIR ?? DEFAULT_CONFIG_DIR
   let ai: AiGateway | null = null
-  if (env.VERTEX_PROJECT && env.VERTEX_LOCATION) {
-    ai = new AiGateway(db.db, new VertexProvider(env.VERTEX_PROJECT, env.VERTEX_LOCATION), loadAiConfig(configDir))
+  const keyFile = env.GOOGLE_APPLICATION_CREDENTIALS
+  const project = env.VERTEX_PROJECT ?? (keyFile ? projectIdFromKeyFile(keyFile) : undefined)
+  if (project && env.VERTEX_LOCATION) {
+    ai = new AiGateway(db.db, new VertexProvider(project, env.VERTEX_LOCATION, keyFile), loadAiConfig(configDir))
+    log.info('vertex configured', { project, location: env.VERTEX_LOCATION, credentials: keyFile ? 'service-account' : 'adc' })
   } else {
-    log.warn('VERTEX_PROJECT / VERTEX_LOCATION tanımlı değil; AI adımları çalışmaz')
+    log.warn('Vertex projesi/bölgesi tanımlı değil; AI adımları çalışmaz')
   }
   return {
     env,

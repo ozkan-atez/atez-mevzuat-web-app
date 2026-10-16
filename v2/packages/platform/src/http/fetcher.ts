@@ -59,7 +59,13 @@ export class SafeHttpFetcher implements HttpFetcher {
       throw new TransientError(`Ağ hatası: ${req.url}: ${String(err)}`, 'HTTP_NETWORK', { cause: err })
     }
     if (res.status === 429 || res.status >= 500) throw new TransientError(`HTTP ${res.status}: ${req.url}`, 'HTTP_STATUS')
-    const body = res.status === 304 || req.method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await res.arrayBuffer())
+    let body: Buffer
+    try {
+      body = res.status === 304 || req.method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await res.arrayBuffer())
+    } catch (err) {
+      // Gövde okunurken zaman aşımı / bağlantı kopması da geçicidir.
+      throw new TransientError(`Gövde okunamadı: ${req.url}: ${String(err)}`, 'HTTP_BODY', { cause: err })
+    }
     const max = this.opts.maxBytes ?? 200 * 1024 * 1024
     if (body.length > max) throw new PermanentError(`Dosya sınırı aşıldı (${body.length} B): ${req.url}`, 'HTTP_TOO_LARGE')
     return {

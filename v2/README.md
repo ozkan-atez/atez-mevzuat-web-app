@@ -27,8 +27,7 @@ pnpm api               # :3100  POST /runs  GET /runs/:id
 ## Tek seferlik çalıştırma (geliştirici aracı)
 
 ```bash
-gcloud auth application-default login     # Vertex AI kimliği (ADC)
-# .env: VERTEX_PROJECT, VERTEX_LOCATION
+# .env: GOOGLE_APPLICATION_CREDENTIALS (servis hesabı anahtarı), VERTEX_LOCATION (eu)
 pnpm run-once --recipe rg-daily-profile --date 2025-12-31
 ```
 

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { ApiError, GoogleGenAI, MediaResolution, ThinkingLevel, type Part } from '@google/genai'
 import { ProviderError, type AiProvider, type ProviderRequest, type ProviderResponse } from './provider'
 
@@ -13,12 +14,15 @@ const THINKING: Record<NonNullable<ProviderRequest['thinking']>, ThinkingLevel> 
   high: ThinkingLevel.HIGH,
 }
 
-/** Vertex AI (AB bölgesi). Kimlik: Application Default Credentials. */
+/**
+ * Vertex AI (AB bölgesi). Kimlik: servis hesabı anahtar dosyası (`keyFilename`); verilmezse
+ * Application Default Credentials.
+ */
 export class VertexProvider implements AiProvider {
   readonly name = 'vertex'
   private readonly client: GoogleGenAI
-  constructor(readonly project: string, readonly location: string) {
-    this.client = new GoogleGenAI({ vertexai: true, project, location })
+  constructor(readonly project: string, readonly location: string, keyFilename?: string) {
+    this.client = new GoogleGenAI({ vertexai: true, project, location, ...(keyFilename ? { googleAuthOptions: { keyFilename } } : {}) })
   }
 
   async generate(req: ProviderRequest): Promise<ProviderResponse> {
@@ -59,5 +63,15 @@ export class VertexProvider implements AiProvider {
       // Ağ / kimlik yenileme hataları geçici sayılır.
       throw new ProviderError(err instanceof Error ? err.message : String(err), true, null, { cause: err })
     }
+  }
+}
+
+/** Proje kimliğini anahtar dosyasından okur (yalnızca `project_id`; başka alan okunmaz/loglanmaz). */
+export function projectIdFromKeyFile(keyFilename: string): string | undefined {
+  try {
+    const id = (JSON.parse(readFileSync(keyFilename, 'utf8')) as { project_id?: unknown }).project_id
+    return typeof id === 'string' && id ? id : undefined
+  } catch {
+    return undefined
   }
 }

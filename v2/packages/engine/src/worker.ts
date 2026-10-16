@@ -49,6 +49,8 @@ export interface WorkerOptions<D> {
   deps: D
   owner: string
   leaseMs?: number
+  /** Kuyruk başına eşzamanlı iş (varsayılan 1, Ek B.2 `prefetch(1)`). */
+  prefetch?: number
   retryTiers?: readonly RetryTier[]
   logger?: Logger
 }
@@ -76,7 +78,7 @@ export class StepWorker<D> {
   async consumePools(connection: ChannelModel, pools: Pool[]): Promise<() => Promise<void>> {
     // ai-lite ve ai-main aynı kuyruğu paylaşır; her kuyruğa bir kez abone olunur.
     const queues = [...new Set(pools.map(poolQueue))]
-    const subs = await Promise.all(queues.map((q) => consume(connection, q, (env) => this.handle(env), { prefetch: 1, logger: this.log })))
+    const subs = await Promise.all(queues.map((q) => consume(connection, q, (env) => this.handle(env), { prefetch: this.opts.prefetch ?? 1, logger: this.log })))
     return async () => {
       for (const s of subs) await s.cancel()
     }

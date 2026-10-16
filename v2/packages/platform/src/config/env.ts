@@ -12,6 +12,8 @@ const Env = z.object({
   /** Vertex AI; boşsa AI geçidi kurulmaz ve AI adımları kalıcı hata verir. */
   VERTEX_PROJECT: z.string().optional().transform((v) => v || undefined),
   VERTEX_LOCATION: z.string().optional().transform((v) => v || undefined),
+  /** Servis hesabı anahtar dosyası (repoya girmez; yalnızca .env). */
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional().transform((v) => v || undefined),
   GOTENBERG_URL: z.string().optional().transform((v) => v || undefined),
   CONFIG_DIR: z.string().optional(),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
