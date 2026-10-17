@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Popover, Skeleton, Spin, Tag, Tooltip, Typography, message } from 'antd'
-import { ArrowLeftOutlined, CheckOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined, StarFilled, ThunderboltOutlined } from '@ant-design/icons'
+import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Popover, Skeleton, Spin, Tag, Tooltip, message } from 'antd'
+import { ArrowLeftOutlined, CheckOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, StarFilled, ThunderboltOutlined } from '@ant-design/icons'
 import { Can } from '../auth/Can'
 import { studioApi, StudioRequestError } from './studioApi'
 import { CATEGORY_LABELS, MISSING_RULE_LABELS, type ComponentCategory, type StudioComponent, type TemplateDefinitionV2, type TemplateFullV2, type TemplateRowV2, type TemplateSectionV2 } from './studio-types'
-import { StudioNav } from './StudioNav'
-import './connectors.css'
+import { StudioHeader } from './StudioHeader'
 import './template-studio.css'
 
 /** Sunucu jsonb anahtarlarını yeniden sıralar; kirli/temiz karşılaştırması sıradan bağımsız. */
@@ -76,33 +75,32 @@ export function TemplatesPage() {
   return (
     <div className="atez-demo-page connectors-page">
       {holder}
-      <header className="connector-heading">
-        <div>
-          <Typography.Title level={1}>Şablonlar</Typography.Title>
-          <p>Raporun neyi, hangi bileşenlerle ve nasıl anlatacağını tarif edin.</p>
-        </div>
-        <div className="connector-header-actions">
-          <Input className="connector-search" aria-label="Şablonlarda ara" prefix={<SearchOutlined />} placeholder="Şablon ara" value={query} onChange={(e) => setQuery(e.target.value)} allowClear />
+      <StudioHeader
+        title="Şablonlar"
+        subtitle="Raporun neyi, hangi bileşenlerle ve nasıl anlatacağını tarif edin."
+        search={query}
+        onSearch={setQuery}
+        searchLabel="Şablon ara"
+        action={
           <Can permission="config.manage">
             <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
               Şablon oluştur
             </Button>
           </Can>
-        </div>
-      </header>
+        }
+        counts={
+          <>
+            <span>{rows.length} şablon</span>
+            {def && (
+              <span>
+                <i className="status-dot good" />
+                Varsayılan · {def.title}
+              </span>
+            )}
+          </>
+        }
+      />
       {error && <Alert type="error" title="Şablonlar yüklenemedi" description={error} action={<Button onClick={() => void load()}>Yeniden dene</Button>} />}
-      <div className="connector-toolbar">
-        <div className="connector-counts">
-          <span>{rows.length} şablon</span>
-          {def && (
-            <span>
-              <i className="status-dot good" />
-              Varsayılan · {def.title}
-            </span>
-          )}
-        </div>
-        <StudioNav />
-      </div>
       <Spin spinning={loading}>
         {visible.length > 0 && (
           <section className="connector-section" aria-label="Rapor şablonları">

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Drawer, Empty, Input, List, Popconfirm, Select, Segmented, Skeleton, Space, Switch, Tag, Tooltip, Typography, message } from 'antd'
-import { DeleteOutlined, HistoryOutlined, InboxOutlined, PlusOutlined } from '@ant-design/icons'
-import { useSearchParams } from 'react-router-dom'
+import { Alert, Button, Card, Drawer, Empty, List, Popconfirm, Select, Segmented, Skeleton, Space, Switch, Tag, Tooltip, Typography, message } from 'antd'
+import { DeleteOutlined, HistoryOutlined, InboxOutlined, MessageOutlined } from '@ant-design/icons'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Can } from '../auth/Can'
 import { studioApi } from './studioApi'
 import { CATEGORY_LABELS, ORIGIN_LABELS, STATUS_LABELS, type StudioComponent, type StudioComponentDetail } from './studio-types'
-import { StudioNav } from './StudioNav'
+import { StudioHeader } from './StudioHeader'
 import { StudioPreview } from './StudioPreview'
 import { ComponentComposerDrawer } from './ComponentComposerDrawer'
 import './template-studio.css'
@@ -160,6 +160,7 @@ function ComponentDetailDrawer({ id, onClose, onChanged }: { id: string | null; 
 
 export function ComponentPoolPage() {
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
   const [items, setItems] = useState<StudioComponent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -185,18 +186,31 @@ export function ComponentPoolPage() {
   const visible = useMemo(() => items.filter((c) => !q || `${c.name} ${c.description}`.toLocaleLowerCase('tr').includes(q.toLocaleLowerCase('tr'))), [items, q])
 
   return (
-    <div className="atez-demo-page studio-page">
-      <div className="atez-demo-heading">
-        <div>
-          <Typography.Title level={1}>Bileşen havuzu</Typography.Title>
-          <Typography.Paragraph type="secondary">Raporların yapı taşları. Kartlar örnek analizle canlı render edilir; pasif bileşenler şablonlarda seçilemez. Yeni bileşen sohbetten oluşturulur.</Typography.Paragraph>
-        </div>
-      </div>
-      <div className="studio-toolbar">
-        <StudioNav />
-      </div>
+    <div className="atez-demo-page connectors-page studio-page">
+      <StudioHeader
+        title="Bileşen havuzu"
+        subtitle="Raporların yapı taşları. Kartlar örnek analizle canlı görüntülenir; pasif bileşenler şablonlarda seçilemez."
+        search={q}
+        onSearch={setQ}
+        searchLabel="Bileşen ara"
+        action={
+          <Can permission="config.manage">
+            <Button type="primary" size="large" icon={<MessageOutlined />} onClick={() => navigate('/chat')}>
+              Bileşen oluştur
+            </Button>
+          </Can>
+        }
+        counts={
+          <>
+            <span>{visible.length} bileşen</span>
+            <span>
+              <i className="status-dot good" />
+              {items.filter((c) => c.status === 'ACTIVE').length} aktif
+            </span>
+          </>
+        }
+      />
       <div className="studio-filters">
-        <Input.Search allowClear placeholder="Ara…" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} aria-label="Bileşen ara" />
         <Select allowClear placeholder="Kategori" value={category} onChange={setCategory} style={{ minWidth: 200 }} options={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))} aria-label="Kategori" />
         <Segmented
           value={status}
@@ -209,9 +223,6 @@ export function ComponentPoolPage() {
           ]}
         />
         <Select allowClear placeholder="Kaynak" value={origin} onChange={setOrigin} style={{ minWidth: 140 }} options={Object.entries(ORIGIN_LABELS).map(([value, label]) => ({ value, label }))} aria-label="Kaynak" />
-        <Typography.Text type="secondary" className="studio-count">
-          {visible.length} bileşen
-        </Typography.Text>
       </div>
       {error && <Alert type="error" showIcon title="Bileşenler yüklenemedi" description={error} action={<Button onClick={() => void load()}>Yeniden dene</Button>} />}
       {loading ? (
@@ -224,8 +235,8 @@ export function ComponentPoolPage() {
         </div>
       ) : (
         <Empty description="Bu filtrelerle bileşen yok.">
-          <Button icon={<PlusOutlined />} onClick={() => setParams({ ai: '1' })}>
-            AI ile oluştur
+          <Button icon={<MessageOutlined />} onClick={() => navigate('/chat')}>
+            Sohbette oluştur
           </Button>
         </Empty>
       )}

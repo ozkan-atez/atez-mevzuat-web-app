@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { cleanup, render, screen, waitFor, within } from '../../test/test-utils'
 import { ComponentPoolPage } from './ComponentPoolPage'
 
@@ -41,6 +41,20 @@ describe('bileşen havuzu (§10.1)', () => {
     expect(screen.getByText('2 şablon sürümünde')).toBeVisible()
     await userEvent.click(screen.getByRole('switch', { name: 'Geçici kart aktif' }))
     await waitFor(() => expect(calls).toContainEqual({ url: '/api/v2/components/c2', method: 'PATCH', body: { status: 'ACTIVE' } }))
+  })
+
+  it('"Bileşen oluştur" sohbete yönlendirir; üst kısım şablonlarla aynı', async () => {
+    render(
+      <MemoryRouter initialEntries={['/templates/components']}>
+        <Routes>
+          <Route path="/templates/components" element={<ComponentPoolPage />} />
+          <Route path="/chat" element={<p>sohbet ekranı</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('radio', { name: /Şablonlar/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Bileşen oluştur/ }))
+    expect(await screen.findByText('sohbet ekranı')).toBeInTheDocument()
   })
 
   it('AI paneli taslak üretir, önizler ve kullanıcı onayıyla kaydeder', async () => {
