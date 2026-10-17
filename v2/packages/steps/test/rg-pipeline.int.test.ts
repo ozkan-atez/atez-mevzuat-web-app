@@ -1,51 +1,17 @@
-import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { and, eq, sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { AiGateway, DEFAULT_AI_CONFIG, FakeProvider, MemoryObjectStore, ProviderError, schema, type FetchRequest, type FetchResponse, type HttpFetcher, type ProviderRequest } from '@atez/platform'
+import { AiGateway, DEFAULT_AI_CONFIG, FakeProvider, MemoryObjectStore, ProviderError, schema, type ProviderRequest } from '@atez/platform'
 import { RecipeRegistry } from '@atez/engine'
 import { startHarness, type Harness } from '@atez/engine/testing'
 import { DocumentProfileV1 } from '@atez/contracts'
+import { TariffClient } from '@atez/modules'
 import { buildStepRegistry, type StepDeps } from '../src/index'
+import { FakeRg, fx } from './helpers'
 
 const CONFIG = fileURLToPath(new URL('../../../config', import.meta.url))
-const fx = (name: string) => readFileSync(fileURLToPath(new URL(`../../modules/test/fixtures/rg/${name}`, import.meta.url)))
 const { aiCall, document, documentProfile, workItem, runStep } = schema
-
-/** RG sitesinin fixture'larla taklidi; ETag ile koşullu istekleri destekler. */
-class FakeRg implements HttpFetcher {
-  requests: FetchRequest[] = []
-  dayOverride = new Map<string, Buffer>()
-  constructor(private readonly pdf: Buffer) {}
-  async fetch(req: FetchRequest): Promise<FetchResponse> {
-    this.requests.push(req)
-    const u = new URL(req.url)
-    const ok = (body: Buffer, contentType: string, etag: string | null = null): FetchResponse => {
-      if (etag && req.etag === etag) return { url: req.url, status: 304, notModified: true, headers: { etag, lastModified: null, contentType, location: null }, body: Buffer.alloc(0) }
-      return { url: req.url, status: 200, notModified: false, headers: { etag, lastModified: null, contentType, location: null }, body }
-    }
-    const day = u.pathname.match(/^\/(\d{2})\.(\d{2})\.(\d{4})$/)
-    if (day) {
-      const iso = `${day[3]}-${day[2]}-${day[1]}`
-      const body = this.dayOverride.get(iso) ?? fx(`day-${iso}.html`)
-      return ok(body, 'text/html; charset=utf-8')
-    }
-    if (u.pathname === '/fihrist') {
-      try {
-        return ok(fx(`fihrist-${u.searchParams.get('tarih')}-m${u.searchParams.get('mukerrer')}.html`), 'text/html; charset=utf-8')
-      } catch {
-        return { url: req.url, status: 302, notModified: false, headers: { etag: null, lastModified: null, contentType: null, location: '/' }, body: Buffer.alloc(0) }
-      }
-    }
-    if (u.pathname.endsWith('.htm')) return ok(fx('doc-20251231-9.htm'), 'text/html', `"htm-${u.pathname}"`)
-    if (u.pathname.endsWith('.pdf')) return ok(this.pdf, 'application/pdf', `"pdf-${u.pathname}"`)
-    return { url: req.url, status: 404, notModified: false, headers: { etag: null, lastModified: null, contentType: null, location: null }, body: Buffer.alloc(0) }
-  }
-  reset() {
-    this.requests = []
-  }
-}
 
 /** Sahte Gemini: başlık elemesi ve profil yanıtları. */
 function fakeGemini(failOnce: Set<string>) {
@@ -102,7 +68,7 @@ describe('Aşama 2: RG çekirdeği (sahte RG + sahte Gemini, gerçek kuyruk)', (
     rg = new FakeRg(Buffer.from(await pdf.save()))
     h = await startHarness<StepDeps>({
       steps: buildStepRegistry(),
-      deps: (db) => ({ db, store, http: rg, configDir: CONFIG, ai: new AiGateway(db, new FakeProvider(fakeGemini(failOnce)), DEFAULT_AI_CONFIG) }),
+      deps: (db) => ({ db, store, http: rg, configDir: CONFIG, ai: new AiGateway(db, new FakeProvider(fakeGemini(failOnce)), DEFAULT_AI_CONFIG), tariff: new TariffClient(db, store, null) }),
       recipes: RecipeRegistry.fromDir(`${CONFIG}/recipes`),
       pools: ['io', 'doc', 'ai-lite', 'ai-main'],
     })

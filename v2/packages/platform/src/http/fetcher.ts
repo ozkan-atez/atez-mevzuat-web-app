@@ -9,7 +9,10 @@ export interface FetchRequest {
   url: string
   etag?: string | null
   lastModified?: string | null
-  method?: 'GET' | 'HEAD'
+  method?: 'GET' | 'HEAD' | 'POST'
+  body?: string
+  contentType?: string
+  accept?: string
   /** Yönlendirmeyi takip etme; 3xx yanıtı olduğu gibi dön (ör. RG'de olmayan mükerrer → 302). */
   noFollow?: boolean
 }
@@ -47,11 +50,14 @@ export class SafeHttpFetcher implements HttpFetcher {
     const headers: Record<string, string> = { 'user-agent': this.opts.userAgent ?? 'ATEZ-Mevzuat-Radari/2.0' }
     if (req.etag) headers['if-none-match'] = req.etag
     if (req.lastModified) headers['if-modified-since'] = req.lastModified
+    if (req.contentType) headers['content-type'] = req.contentType
+    if (req.accept) headers.accept = req.accept
     let res: Response
     try {
       res = await fetch(url, {
         method: req.method ?? 'GET',
         headers,
+        ...(req.body !== undefined ? { body: req.body } : {}),
         redirect: req.noFollow ? 'manual' : 'follow',
         signal: AbortSignal.timeout(this.opts.timeoutMs ?? 60_000),
       })

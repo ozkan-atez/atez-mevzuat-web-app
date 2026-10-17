@@ -31,6 +31,8 @@ export const ChangeKind = z.enum(['NEW', 'AMENDMENT', 'REPEAL', 'EXTENSION', 'SU
 export const EffectiveRuleKind = z.enum(['ON_PUBLICATION', 'EXPLICIT_DATE', 'DAYS_AFTER_PUBLICATION', 'UNRESOLVED'])
 
 export const RelationKind = z.enum(['AMENDS', 'REPEALS', 'EXTENDS', 'IMPLEMENTS', 'REFERENCES'])
+/** document_relation tipleri (§4.1) + TARIFF önceki değeri (§7). */
+export const DocumentRelationKind = z.enum(['AMENDS', 'REPEALS', 'EXTENDS', 'IMPLEMENTS', 'REFERENCES', 'ATTACHMENT_OF', 'SAME_EVENT', 'PRIOR_VALUE'])
 
 /** TARIFF alan → önlem tipi eşlemesi §7'de; burada yalnızca alan adı. */
 export const TariffField = z.enum([

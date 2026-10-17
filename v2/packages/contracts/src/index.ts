@@ -1,3 +1,4 @@
+export * from './analysis'
 export * from './actor'
 export * from './envelope'
 export * from './events'

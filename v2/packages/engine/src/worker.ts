@@ -185,6 +185,7 @@ export class StepWorker<D> {
       runInput,
       actor,
       attempt: item.attempt,
+      maxAttempts: item.maxAttempts,
       log,
       signal,
       deps: this.opts.deps,

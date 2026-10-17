@@ -1,0 +1,15 @@
+{
+  "key": "document-report",
+  "version": 1,
+  "title": "Seçili belgeler → READY rapor",
+  "description": "Planlayıcı `entry` (belge sürümü kimlikleri) ile: tablo çıkarma → önceki hal → konu → kümülatif analiz → rapor. Profili zaten olan belgeler için; filtre adımı eklenmez.",
+  "nodes": [
+    { "id": "entry", "step": "entry.documents" },
+    { "id": "extract", "step": "extract.table", "after": ["entry"], "fanOut": "items" },
+    { "id": "lineage", "step": "lineage.resolve", "after": ["extract"] },
+    { "id": "link", "step": "topic.link", "after": ["lineage"] },
+    { "id": "analyze", "step": "topic.analyze", "after": ["link"] },
+    { "id": "compose", "step": "report.compose", "after": ["analyze"] },
+    { "id": "render", "step": "report.render", "after": ["compose"] }
+  ]
+}

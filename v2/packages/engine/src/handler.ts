@@ -12,6 +12,8 @@ export interface StepContext<D = unknown> {
   runInput: Record<string, unknown>
   actor: Actor
   attempt: number
+  /** Bu öğe için toplam deneme hakkı; son denemede adımlar geçici hatayı sonuç olarak yazabilir. */
+  maxAttempts: number
   log: Logger
   /** Lease kaybedilirse iptal edilir. */
   signal: AbortSignal

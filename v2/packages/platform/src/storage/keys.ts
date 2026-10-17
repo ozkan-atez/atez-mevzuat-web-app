@@ -24,6 +24,8 @@ export const StorageKeys = {
   profileRaw: (documentVersionId: string, version: number) => `artifacts/documents/${assertId(documentVersionId)}/profile.v${version}.raw.json`,
   /** capture-manifest.json (§9.2). */
   captureManifest: (documentVersionId: string) => `artifacts/documents/${assertId(documentVersionId)}/capture-manifest.json`,
+  /** extract.table ham model yanıtları ve satırlar. */
+  tables: (documentVersionId: string, version: number) => `artifacts/documents/${assertId(documentVersionId)}/tables.v${version}.json`,
   tariffSnapshot: (gtip: string, date: string) => `artifacts/tariff/${assertId(gtip)}/${date}.json`,
   topicAnalysis: (topicId: string, revision: number) => `artifacts/topics/${assertId(topicId)}/analysis/r${pad2(revision)}.json`,
   reportFile: (reportId: string, revision: number, file: 'spec.json' | 'report.html' | 'report.pdf') =>

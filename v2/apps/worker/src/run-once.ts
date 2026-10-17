@@ -4,8 +4,8 @@ import { parseArgs } from 'node:util'
 import { eq, sql } from 'drizzle-orm'
 import { SYSTEM_ACTOR, TERMINAL_RUN_STATUSES, type RunStatus } from '@atez/contracts'
 import { Orchestrator, RecipeRegistry, StepWorker, startRun } from '@atez/engine'
-import { OutboxRelay, POOLS, SafeHttpFetcher, bootRuntime, schema } from '@atez/platform'
-import { buildStepRegistry, type StepDeps } from '@atez/steps'
+import { OutboxRelay, POOLS, bootRuntime, schema } from '@atez/platform'
+import { buildStepRegistry, createStepDeps, type StepDeps } from '@atez/steps'
 
 /**
  * Geliştirici aracı: relay + bütün havuzlar + orkestratörü tek süreçte açar, bir tarif
@@ -23,13 +23,8 @@ const { values } = parseArgs({
 })
 const rt = await bootRuntime('run-once')
 await rt.store.ensureBucket()
-const deps: StepDeps = {
-  db: rt.db.db,
-  store: rt.store,
-  ai: rt.ai,
-  configDir: rt.configDir,
-  http: new SafeHttpFetcher({ allowedHosts: ['www.resmigazete.gov.tr', 'resmigazete.gov.tr'], minIntervalMs: 750, timeoutMs: 180_000 }),
-}
+const deps: StepDeps = createStepDeps(rt)
+if (!deps.tariff.configured) rt.log.warn('TARIFF kimlik bilgisi yok; önceki hal yalnızca RG aramasıyla aranır')
 const recipes = RecipeRegistry.fromDir(join(rt.configDir, 'recipes'))
 const relay = new OutboxRelay(rt.db.db, rt.amqp.publisher, { idleMs: 50, logger: rt.log })
 relay.start()

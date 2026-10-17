@@ -1,8 +1,8 @@
 import { hostname } from 'node:os'
 import { parseArgs } from 'node:util'
 import { Orchestrator, Reaper, StepWorker } from '@atez/engine'
-import { POOLS, SafeHttpFetcher, bootRuntime } from '@atez/platform'
-import { buildStepRegistry, type StepDeps } from '@atez/steps'
+import { POOLS, bootRuntime } from '@atez/platform'
+import { buildStepRegistry, createStepDeps, type StepDeps } from '@atez/steps'
 import type { Pool } from '@atez/contracts'
 
 /**
@@ -16,13 +16,8 @@ const pools = (all ? POOLS : requested.filter((p) => (POOLS as readonly string[]
 const withOrchestrator = all || requested.includes('orchestrator')
 
 const rt = await bootRuntime(`worker:${values.pool}`)
-const deps: StepDeps = {
-  db: rt.db.db,
-  store: rt.store,
-  ai: rt.ai,
-  configDir: rt.configDir,
-  http: new SafeHttpFetcher({ allowedHosts: ['www.resmigazete.gov.tr', 'resmigazete.gov.tr'], minIntervalMs: 750, timeoutMs: 120_000 }),
-}
+const deps: StepDeps = createStepDeps(rt)
+if (!deps.tariff.configured) rt.log.warn('TARIFF kimlik bilgisi yok; önceki hal yalnızca RG aramasıyla aranır')
 await rt.store.ensureBucket()
 const worker = new StepWorker<StepDeps>({ db: rt.db.db, steps: buildStepRegistry(), deps, owner: `${hostname()}:${process.pid}`, logger: rt.log })
 const stops: (() => Promise<void>)[] = []

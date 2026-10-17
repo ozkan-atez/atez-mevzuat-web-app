@@ -88,6 +88,75 @@ export const ClassifyProfileOutput = z.object({
   objectKey: z.string(),
 })
 
+// ---- entry.documents (planlayıcı `entry`: belge kimlikleriyle başlayan tarifler) ----
+export const EntryDocumentsInput = z.object({ documentVersionIds: z.array(z.string().uuid()).min(1) })
+export const DocRef = z.object({ documentVersionId: z.string().uuid() })
+export const EntryDocumentsOutput = z.object({ items: z.array(DocRef) })
+
+// ---- extract.table -------------------------------------------------------------
+export const ExtractTableInput = DocRef
+export const ExtractTableOutput = z.object({
+  documentVersionId: z.string().uuid(),
+  status: z.enum(['NO_TABLES', 'EXTRACTED', 'PARTIAL']),
+  rows: z.number().int(),
+  tables: z.array(z.object({ title: z.string(), pages: z.array(z.number().int()), rows: z.number().int(), expectedRows: z.number().int().nullable() })),
+  issues: z.array(z.string()),
+})
+
+// ---- lineage.resolve -------------------------------------------------------------
+export const LineageStatus = z.enum(['NOT_NEEDED', 'FOUND', 'PARTIAL', 'AMBIGUOUS', 'SINGLE_SOURCE'])
+export const LineageResolveInput = DocRef
+export const LineageResolveOutput = z.object({
+  documentVersionId: z.string().uuid(),
+  status: LineageStatus,
+  attempts: z.array(z.object({ strategy: z.enum(['TARIFF', 'RG_SEARCH']), status: z.string(), note: z.string().nullable() })),
+  relations: z.array(
+    z.object({
+      relationId: z.string().uuid(),
+      relation: z.string(),
+      toVersionId: z.string().uuid().nullable(),
+      tariffSnapshotId: z.string().uuid().nullable(),
+      ambiguous: z.boolean(),
+    }),
+  ),
+})
+
+// ---- topic.link ----------------------------------------------------------------
+export const TopicLinkInput = DocRef
+export const TopicLinkOutput = z.object({
+  documentVersionId: z.string().uuid(),
+  topicId: z.string().uuid(),
+  matchedBy: z.enum(['RG_REFERENCE', 'OFFICIAL_NUMBER', 'AI_SAME_EVENT', 'NEW_TOPIC', 'EXISTING_MEMBER']),
+})
+
+// ---- topic.analyze ---------------------------------------------------------------
+export const TopicAnalyzeInput = z.object({ topicId: z.string().uuid() })
+export const TopicAnalyzeOutput = z.object({
+  topicId: z.string().uuid(),
+  analysisId: z.string().uuid(),
+  revision: z.number().int(),
+  status: z.enum(['OK', 'REVIEW']),
+  comparisonRows: z.number().int(),
+  objectKey: z.string(),
+})
+
+// ---- report.compose / report.render -----------------------------------------------
+export const ReportComposeInput = TopicAnalyzeOutput
+export const ReportComposeOutput = z.object({
+  reportId: z.string().uuid(),
+  revision: z.number().int(),
+  card: z.string(),
+  specKey: z.string(),
+})
+export const ReportRenderInput = ReportComposeOutput
+export const ReportRenderOutput = z.object({
+  reportId: z.string().uuid(),
+  revision: z.number().int(),
+  status: z.literal('READY'),
+  htmlKey: z.string(),
+  issues: z.array(z.string()),
+})
+
 export interface StepContract {
   pool: Pool
   /** Dış dünyaya (ağ, AI) çıkıyor mu? REUSE_ONLY modunda dış adımlar çalıştırılmaz. */
@@ -105,6 +174,13 @@ export const STEP_CATALOG = {
   'doc.fetch': { pool: 'io', external: true, input: DocFetchInput, output: DocFetchOutput },
   'doc.normalize': { pool: 'doc', external: false, input: DocNormalizeInput, output: DocNormalizeOutput },
   'classify.profile': { pool: 'ai-main', external: true, input: ClassifyProfileInput, output: ClassifyProfileOutput },
+  'entry.documents': { pool: 'doc', external: false, input: EntryDocumentsInput, output: EntryDocumentsOutput },
+  'extract.table': { pool: 'ai-main', external: true, input: ExtractTableInput, output: ExtractTableOutput },
+  'lineage.resolve': { pool: 'ai-main', external: true, input: LineageResolveInput, output: LineageResolveOutput },
+  'topic.link': { pool: 'ai-lite', external: true, input: TopicLinkInput, output: TopicLinkOutput },
+  'topic.analyze': { pool: 'ai-main', external: true, input: TopicAnalyzeInput, output: TopicAnalyzeOutput },
+  'report.compose': { pool: 'ai-main', external: true, input: ReportComposeInput, output: ReportComposeOutput },
+  'report.render': { pool: 'render', external: false, input: ReportRenderInput, output: ReportRenderOutput },
 } as const satisfies Record<string, StepContract>
 
 export type StepKey = keyof typeof STEP_CATALOG
