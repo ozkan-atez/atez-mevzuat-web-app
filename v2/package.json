@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:int": "vitest run --project integration",
@@ -20,7 +20,8 @@
     "api": "tsx --env-file-if-exists=.env apps/api/src/main.ts",
     "scheduler": "tsx --env-file-if-exists=.env apps/scheduler/src/main.ts",
     "topology:export": "tsx packages/platform/src/messaging/export-cli.ts",
-    "run-once": "tsx --env-file-if-exists=.env apps/worker/src/run-once.ts"
+    "run-once": "tsx --env-file-if-exists=.env apps/worker/src/run-once.ts",
+    "web": "pnpm --filter @atez/web dev"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -12,6 +12,7 @@
     "@atez/engine": "workspace:*",
     "fastify": "^5.2.0",
     "zod": "^4.1.0",
-    "drizzle-orm": "^0.38.0"
+    "drizzle-orm": "^0.38.0",
+    "@atez/modules": "workspace:*"
   }
 }

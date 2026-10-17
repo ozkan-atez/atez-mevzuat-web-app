@@ -140,6 +140,8 @@ export const reportRevision = pgTable(
     reportId: uuid('report_id').notNull(),
     revision: integer('revision').notNull(),
     analysisId: uuid('analysis_id').notNull(),
+    /** Rapor üretilirken dondurulan şablon sürümü (§10.1). */
+    templateVersionId: uuid('template_version_id'),
     specKey: text('spec_key').notNull(),
     htmlKey: text('html_key'),
     validation: jsonb('validation'),

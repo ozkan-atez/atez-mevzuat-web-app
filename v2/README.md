@@ -21,7 +21,8 @@ pnpm infra:up          # postgres :55432, rabbitmq :55672 (yönetim :55673), min
 pnpm db:migrate
 pnpm worker            # --pool=all: bütün havuzlar + orkestratör + reaper
 pnpm relay             # outbox → RabbitMQ
-pnpm api               # :3100  POST /runs  GET /runs/:id
+pnpm api               # :3100  POST /runs  GET /runs/:id · /api/components · /api/templates
+pnpm web               # :5174  Bileşen havuzu + şablon stüdyosu (Vite, /api proxy)
 ```
 
 ## Tek seferlik çalıştırma (geliştirici aracı)
@@ -40,6 +41,8 @@ kontrol `NO_CHANGE` döner ve AI çağrısı yapılmaz.
 | Aşama | Durum |
 |---|---|
 | 1. İskelet | contracts, platform (RabbitMQ topolojisi, outbox/inbox, relay, MinIO, AI geçidi), engine (run/work_item/step_result, lease+heartbeat, reaper, modlar) |
+| 3. Önceki hal + analiz + rapor | TARIFF → RG → tek kaynak, kümülatif analiz, kodla karşılaştırma, READY rapor |
+| §10.1 Şablon stüdyosu | Bileşen havuzu (yerleşik K1–K6 + AI), şablonlar (bölüm açıklaması → compose), web arayüzü |
 | 2. RG çekirdeği | `rg-daily-profile` tarifi: `source.discover` (ön kontrol) → `classify.title` → `doc.fetch` → `doc.normalize` → `classify.profile` |
 
 ## Testler

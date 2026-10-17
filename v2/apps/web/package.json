@@ -3,5 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "React + Vite arayüzü (Aşama 2 belge detay ekranıyla başlayacak; şimdilik yer tutucu)."
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@atez/contracts": "workspace:*",
+    "@tanstack/react-query": "5.85.5",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "4.7.0",
+    "typescript": "5.9.3",
+    "vite": "6.3.5"
+  }
 }

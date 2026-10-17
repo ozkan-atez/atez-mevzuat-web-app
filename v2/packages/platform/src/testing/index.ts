@@ -13,6 +13,10 @@ export async function openTestDb(): Promise<DbHandle> {
 }
 
 const TABLES = [
+  'template_version',
+  'template',
+  'component_version',
+  'component',
   'report_revision',
   'report',
   'analysis',

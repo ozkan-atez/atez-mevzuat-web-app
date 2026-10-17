@@ -73,28 +73,32 @@ export type AnalysisV1 = z.infer<typeof AnalysisV1>
 export const ReportCard = z.enum(['YENI_DUZENLEME', 'ORAN_TABLOSU', 'SURE_UZATIMI', 'YURURLUKTEN_KALDIRMA', 'DUYURU', 'DEGISIKLIK_YOK'])
 export type ReportCard = z.infer<typeof ReportCard>
 
-export const ReportTextFields = z.object({
-  headline: z.string().min(1),
-  lead: z.string().min(1),
-  keyPoints: z.array(z.string()).min(1).max(8),
-  impact: z.string(),
-  tableNote: z.string().nullable(),
-})
-export type ReportTextFields = z.infer<typeof ReportTextFields>
-
-export const ReportSpecV1 = z.object({
-  schemaVersion: z.literal(1),
+/**
+ * Rapor spec v2 (§10.1): şablon sürümü dondurulur; her bölüm bileşen sürümüyle birlikte saklanır.
+ * Metin alanları (slot) modelden, sayılar ve tablolar analizden (kod) gelir.
+ */
+export const ReportSpecV2 = z.object({
+  schemaVersion: z.literal(2),
   reportId: z.string().uuid(),
   revision: z.number().int().min(1),
   topicId: z.string().uuid(),
   analysisId: z.string().uuid(),
+  templateVersionId: z.string().uuid(),
+  /** Liste ekranları için kural tabanlı kart etiketi (§10). */
   card: ReportCard,
-  fields: ReportTextFields,
-  dates: AnalysisV1.shape.dates,
-  comparison: AnalysisV1.shape.comparison.nullable(),
-  priorState: AnalysisV1.shape.priorState,
-  sources: z.array(z.object({ title: z.string(), url: z.string().nullable(), publicationDate: IsoDate.nullable(), role: z.string() })),
-  validation: z.object({ numbersChecked: z.number().int(), unmatchedNumbers: z.array(z.string()), repairRounds: z.number().int() }),
+  headline: z.string(),
+  status: z.enum(['READY', 'NEEDS_INPUT']),
+  sections: z.array(
+    z.object({
+      sectionId: z.string(),
+      componentKey: z.string(),
+      componentVersion: z.number().int(),
+      heading: z.string(),
+      state: z.enum(['RENDERED', 'OMITTED', 'NOTE', 'BLOCKED']),
+      fields: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+    }),
+  ),
+  validation: z.object({ numbersChecked: z.number().int(), unmatchedNumbers: z.array(z.string()), repairRounds: z.number().int(), missingSlots: z.array(z.string()) }),
   generatedBy: z.object({ model: z.string(), promptVersion: z.string(), aiCallIds: z.array(z.string()) }),
 })
-export type ReportSpecV1 = z.infer<typeof ReportSpecV1>
+export type ReportSpecV2 = z.infer<typeof ReportSpecV2>

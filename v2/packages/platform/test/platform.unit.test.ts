@@ -87,4 +87,10 @@ describe('yardımcılar', () => {
     expect(s.properties.d.pattern).toBeUndefined()
     expect(s.properties.d.type).toBe('string')
   })
+  it('"format" adlı alanı silmez, yalnızca şema anahtar kelimesini siler', () => {
+    const s = toGeminiJsonSchema(z.object({ format: z.enum(['a', 'b']), at: z.string().datetime() })) as { properties: Record<string, Record<string, unknown>>; required: string[] }
+    expect(s.properties.format).toBeDefined()
+    expect(s.properties.at!.format).toBeUndefined()
+    expect(s.required).toContain('format')
+  })
 })

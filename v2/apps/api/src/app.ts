@@ -2,14 +2,16 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { and, asc, eq } from 'drizzle-orm'
 import { StartRunRequest, SYSTEM_ACTOR } from '@atez/contracts'
 import { RecipeRegistry, startRun } from '@atez/engine'
-import { schema, type Db } from '@atez/platform'
+import { schema, type AiGateway, type Db } from '@atez/platform'
+import { registerStudio } from './studio'
 
 /**
  * REST API (Aşama 1 asgari yüzeyi). Kimlik: Keycloak bağlanana kadar sistem aktörü
  * (K9, `AuthProvider` arayüzü Aşama 8'de).
  */
-export function buildApi(deps: { db: Db; recipes: RecipeRegistry }): FastifyInstance {
-  const app = Fastify({ logger: false })
+export async function buildApi(deps: { db: Db; recipes: RecipeRegistry; configDir: string; ai: AiGateway | null }): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 })
+  await app.register(async (scoped) => registerStudio(scoped, deps), { prefix: '/api' })
 
   app.get('/health', async () => ({ ok: true }))
   app.get('/recipes', async () => deps.recipes.list().map((r) => ({ key: r.key, version: r.version, title: r.title })))
@@ -51,3 +53,4 @@ export function buildApi(deps: { db: Db; recipes: RecipeRegistry }): FastifyInst
 
   return app
 }
+

@@ -2,10 +2,10 @@ import { fileURLToPath } from 'node:url'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { AnalysisV1, ReportSpecV1 } from '@atez/contracts'
+import { AnalysisV1, ReportSpecV2 } from '@atez/contracts'
 import { RecipeRegistry } from '@atez/engine'
 import { startHarness, type Harness } from '@atez/engine/testing'
-import { TariffClient, type TariffApi } from '@atez/modules'
+import { ComponentService, TariffClient, TemplateService, type TariffApi } from '@atez/modules'
 import { AiGateway, DEFAULT_AI_CONFIG, FakeProvider, MemoryObjectStore, PermanentError, schema, type ProviderRequest } from '@atez/platform'
 import { buildStepRegistry, type StepDeps } from '../src/index'
 import { FakeRg } from './helpers'
@@ -45,6 +45,7 @@ class FakeTariff implements TariffApi {
 const marker = (req: ProviderRequest) => req.system ?? ''
 const instruction = (req: ProviderRequest) => (req.parts.at(-1) as { text: string }).text
 
+const composePrompts: string[] = []
 function fakeGemini(req: ProviderRequest): unknown {
   const sys = marker(req)
   if (sys.includes('başlıklarını ön eleyen')) {
@@ -97,12 +98,14 @@ function fakeGemini(req: ProviderRequest): unknown {
     }
   }
   if (sys.includes('metin alanlarını yazan')) {
+    composePrompts.push((req.parts[0] as { text: string }).text)
+    const input = JSON.parse((req.parts[0] as { text: string }).text.split('\n\n')[0]!) as { bölümler: { sectionId: string; slots: { key: string; kind: string }[] }[] }
     return {
       headline: 'Sıcak haddelenmiş sacda damping tutarı değişti',
-      lead: 'Çin menşeli sacda önlem 1.250,5 ABD Doları/ton oldu.',
-      keyPoints: ['Değişiklik yayımı tarihinde yürürlüğe girdi.'],
-      impact: 'İthalatçılar yeni tutarı uygular.',
-      tableNote: 'Önceki değerler TARIFF ya da önceki tebliğden alınmıştır.',
+      sections: input.bölümler.map((b) => ({
+        sectionId: b.sectionId,
+        fields: b.slots.map((sl) => (sl.kind === 'list' ? { slot: sl.key, text: null, items: ['Değişiklik yayımı tarihinde yürürlüğe girdi.'] } : { slot: sl.key, text: 'Çin menşeli sacda önlem 1.250,5 ABD Doları/ton oldu.', items: null })),
+      })),
     }
   }
   throw new Error(`beklenmeyen istem: ${sys.slice(0, 60)}`)
@@ -139,7 +142,10 @@ describe('Aşama 3: önceki hal, kümülatif analiz ve READY rapor (sahte RG/TAR
   const latestSpec = async () => {
     const [r] = await h.db.db.select().from(report)
     const [rev] = await h.db.db.select().from(reportRevision).where(eq(reportRevision.reportId, r!.id)).orderBy(desc(reportRevision.revision)).limit(1)
-    return { report: r!, rev: rev!, spec: ReportSpecV1.parse(JSON.parse((await store.get(rev!.specKey)).toString())) }
+    const spec = ReportSpecV2.parse(JSON.parse((await store.get(rev!.specKey)).toString()))
+    const [a] = await h.db.db.select().from(schema.analysis).where(eq(schema.analysis.id, spec.analysisId))
+    const analysis = AnalysisV1.parse(JSON.parse((await store.get(a!.objectKey)).toString()))
+    return { report: r!, rev: rev!, spec, analysis }
   }
 
   it('daily-scan: TARIFF önceki değeri (yayım − 1) ile karşılaştırma tablosu ve READY rapor', async () => {
@@ -150,10 +156,13 @@ describe('Aşama 3: önceki hal, kümülatif analiz ve READY rapor (sahte RG/TAR
     expect(tariffApi.calls.map((c) => c.gtip).sort()).toEqual(['720851200011', '720851200012'])
     const [lineage] = await node(runId, 'lineage')
     expect(lineage!.output).toMatchObject({ status: 'FOUND', attempts: [{ strategy: 'TARIFF', status: 'FOUND' }] })
-    const { report: r, spec } = await latestSpec()
+    const { report: r, spec, analysis } = await latestSpec()
     expect(r.status).toBe('READY')
     expect(spec.card).toBe('ORAN_TABLOSU')
-    const byGtip = Object.fromEntries(spec.comparison!.rows.map((x) => [x.gtip, x]))
+    // Varsayılan şablon: bütün yerleşik bileşenler açık; görünme kurallarına göre bölümler.
+    const state = Object.fromEntries(spec.sections.map((x) => [x.componentKey, x.state]))
+    expect(state).toMatchObject({ ozet: 'RENDERED', 'karsilastirma-tablosu': 'RENDERED', 'gtip-tablosu': 'OMITTED', 'sure-uzatimi': 'OMITTED' })
+    const byGtip = Object.fromEntries(analysis.comparison.rows.map((x) => [x.gtip, x]))
     expect(byGtip['7208.51.20.00.11']).toMatchObject({ status: 'CHANGED', changePct: '25.05', previous: { value: '1000' }, current: { value: '1250.5' }, currency: 'USD', unit: 'TNE' })
     expect(byGtip['7208.51.20.00.12']).toMatchObject({ status: 'NEW', previous: null }) // önlem yoktu ≠ değişmedi
     expect(spec.validation.unmatchedNumbers).toEqual([])
@@ -188,10 +197,10 @@ describe('Aşama 3: önceki hal, kümülatif analiz ve READY rapor (sahte RG/TAR
     // Önceki belge de profillendi ve tablosu çıkarıldı
     const priorRows = await h.db.db.select().from(gtipValue).where(eq(gtipValue.documentVersionId, amends[0]!.toVersionId!))
     expect(priorRows.length).toBe(2)
-    const { report: r2, spec } = await latestSpec()
+    const { report: r2, spec, analysis: an2 } = await latestSpec()
     expect(r2.id).toBe(r.id)
     expect(r2.currentRevision).toBe(2)
-    expect(spec.comparison!.rows.find((x) => x.gtip === '7208.51.20.00.11')).toMatchObject({ status: 'UNCHANGED', previous: { source: expect.stringMatching(/^d2/) } })
+    expect(an2.comparison.rows.find((x) => x.gtip === '7208.51.20.00.11')).toMatchObject({ status: 'UNCHANGED', previous: { source: expect.stringMatching(/^d2/) } })
     const attempts = await h.db.db.select().from(resolutionAttempt)
     expect(attempts.some((a) => a.strategy === 'TARIFF' && a.status === 'ERROR')).toBe(true)
     const analysis = AnalysisV1.parse(JSON.parse((await store.get(`artifacts/topics/${spec.topicId}/analysis/r02.json`)).toString()))
@@ -207,5 +216,23 @@ describe('Aşama 3: önceki hal, kümülatif analiz ve READY rapor (sahte RG/TAR
     expect(await aiCalls()).toBe(before)
     const outcomes = (await h.db.db.select().from(workItem).where(eq(workItem.runId, runId))).filter((i) => !['entry', 'link'].includes(i.nodeId)).map((i) => i.outcome)
     expect(new Set(outcomes)).toEqual(new Set(['FROM_CACHE']))
+  })
+
+  it('şablonda bölüm açıklaması değişince compose yeniden çalışır ve açıklama prompt\'a girer', async () => {
+    const components = new ComponentService(h.db.db)
+    const templates = new TemplateService(h.db.db, components)
+    const def = await templates.ensureDefault()
+    const next = { ...def.definition, sections: def.definition.sections.map((s) => (s.id === 'ozet' ? { ...s, sectionDescription: 'Yalnızca ithalatçıya düşen yükümlülüğü vurgula.' } : s)) }
+    await templates.save(def.id, next)
+    const before = composePrompts.length
+    const dv = (await h.db.db.select({ v: schema.topic.primaryVersionId }).from(schema.topic))[0]!.v!
+    const runId = await h.start('document-report', { documentVersionIds: [dv] })
+    expect(await h.waitForRun(runId)).toBe('COMPLETED')
+    const [compose] = await node(runId, 'compose')
+    expect(compose!.outcome).toBe('EXECUTED')
+    expect(composePrompts.length).toBe(before + 1)
+    expect(composePrompts.at(-1)).toContain('Yalnızca ithalatçıya düşen yükümlülüğü vurgula.')
+    const [render] = await node(runId, 'render')
+    expect(render!.outcome).toBe('EXECUTED')
   })
 })

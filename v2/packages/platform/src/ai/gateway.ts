@@ -20,6 +20,11 @@ export interface GenerateRequest<T> {
   /** Belge parçaları önce, talimat en sonda olmalı. */
   parts: AiPart[]
   schema?: z.ZodType<T>
+  /**
+   * Gemini'ye giden şemadan sayısal/uzunluk sınırlarını çıkarır (doğrulama yine zod ile).
+   * Karmaşık şemalarda Vertex 400 INVALID_ARGUMENT dönebiliyor (canlı deneme 2026-10-17).
+   */
+  relaxSchema?: boolean
   temperature?: number
   mediaResolution?: 'low' | 'medium' | 'high'
   thinking?: 'minimal' | 'low' | 'medium' | 'high'
@@ -54,7 +59,7 @@ export class AiGateway {
 
   async generate<T = string>(req: GenerateRequest<T>): Promise<GenerateResult<T>> {
     const model = this.modelFor(req.tier)
-    const jsonSchema = req.schema ? toGeminiJsonSchema(req.schema) : undefined
+    const jsonSchema = req.schema ? toGeminiJsonSchema(req.schema, { relax: req.relaxSchema }) : undefined
     const requestHash = sha256(
       [model, req.promptVersion, req.system ?? '', ...req.parts.map((p) => ('text' in p ? sha256(p.text) : sha256(p.inline.data)))].join('|'),
     )
@@ -128,15 +133,20 @@ const usageCols = (u: ProviderUsage | null) => ({
 })
 
 /** zod → JSON Schema; Gemini'nin desteklemediği anahtarlar ayıklanır (doğrulama zod ile yapılır). */
-export function toGeminiJsonSchema(schema: z.ZodType): unknown {
+const BOUNDS = new Set(['maxLength', 'minLength', 'maxItems', 'minItems', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum'])
+
+export function toGeminiJsonSchema(schema: z.ZodType, opts: { relax?: boolean } = {}): unknown {
   const json = z.toJSONSchema(schema, { target: 'draft-2020-12', unrepresentable: 'any' }) as Record<string, unknown>
-  const strip = (node: unknown): unknown => {
-    if (Array.isArray(node)) return node.map(strip)
+  // `properties` altındaki anahtarlar alan adıdır (ör. "format" adlı bir alan); yalnızca şema
+  // anahtar kelimeleri ayıklanır.
+  const strip = (node: unknown, isPropertyMap = false): unknown => {
+    if (Array.isArray(node)) return node.map((n) => strip(n))
     if (node && typeof node === 'object') {
       const out: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(node)) {
-        if (k === '$schema' || k === 'pattern' || k === 'additionalProperties' || k === 'format') continue
-        out[k] = strip(v)
+        if (!isPropertyMap && (k === '$schema' || k === 'pattern' || k === 'additionalProperties' || (k === 'format' && typeof v === 'string'))) continue
+        if (!isPropertyMap && opts.relax && BOUNDS.has(k) && typeof v === 'number') continue
+        out[k] = strip(v, !isPropertyMap && k === 'properties')
       }
       return out
     }
