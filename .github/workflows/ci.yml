@@ -1,0 +1,107 @@
+# Her PR ve dev / test / main itişinde: tip denetimi + testler + imajların derlenebilirliği.
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, test, main]
+  push:
+    branches: [dev, test, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: frontend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npx vitest run
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: backend}}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_USER: atez, POSTGRES_PASSWORD: atez-ci, POSTGRES_DB: atez_backend_test}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U atez" --health-interval 5s --health-timeout 5s --health-retries 20
+      rabbitmq:
+        image: rabbitmq:4.1-management
+        env: {RABBITMQ_DEFAULT_USER: atez, RABBITMQ_DEFAULT_PASS: atez-ci}
+        ports: ["5672:5672"]
+        options: --health-cmd "rabbitmq-diagnostics -q ping" --health-interval 10s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://atez:atez-ci@127.0.0.1:5432/atez_backend_test?schema=public
+      RABBITMQ_TEST_URL: amqp://atez:atez-ci@127.0.0.1:5672
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: backend/package-lock.json}
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npx prisma migrate deploy
+        env: {DATABASE_URL: "${{ env.TEST_DATABASE_URL }}"}
+      - run: npx vitest run
+
+  v2:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: v2}}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_USER: atez, POSTGRES_PASSWORD: atez-local, POSTGRES_DB: atez_v2_test}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U atez" --health-interval 5s --health-timeout 5s --health-retries 20
+      rabbitmq:
+        image: rabbitmq:3.13-management
+        env: {RABBITMQ_DEFAULT_USER: atez, RABBITMQ_DEFAULT_PASS: atez-local}
+        ports: ["5672:5672", "15672:15672"]
+        options: --health-cmd "rabbitmq-diagnostics -q ping" --health-interval 10s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://atez:atez-local@127.0.0.1:5432/atez_v2_test
+      TEST_AMQP_URL: amqp://atez:atez-local@127.0.0.1:5672/atez-mevzuat-test
+      RABBITMQ_MANAGEMENT_URL: http://atez:atez-local@127.0.0.1:15672
+      TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      TEST_S3_BUCKET: atez-radar-test
+      S3_ACCESS_KEY_ID: atez-local
+      S3_SECRET_ACCESS_KEY: atez-local-secret
+    steps:
+      - uses: actions/checkout@v4
+      # MinIO servis olarak başlatılamaz (komut argümanı gerekir); adım olarak çalıştırılır.
+      - run: docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=atez-local -e MINIO_ROOT_PASSWORD=atez-local-secret minio/minio server /data
+        working-directory: .
+      - uses: pnpm/action-setup@v4
+        with: {version: 9.15.0}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: pnpm, cache-dependency-path: v2/pnpm-lock.yaml}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  images:
+    # Dockerfile'ların derlendiğini doğrular; itme images.yml'dedir.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [backend, v2, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.component }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}

@@ -1,9 +1,85 @@
+# Üretim / test ortamı: GitHub Actions'ın GHCR'ye ittiği imajlarla çalışır (kaynaktan derlemez).
+#
+#   IMAGE_TAG=main docker compose -f docker-compose.prod.yml --env-file /etc/atez/mevzuat.env up -d
+#
+# PostgreSQL, S3 ve kimlik sağlayıcı (şirket Keycloak'ı, AUTH_PROFILE=company) dışarıdadır; değerler
+# ortamın secret store'undan gelen env dosyasıyla verilir (örnek değişkenler: .env.example).
+# RabbitMQ ve Gotenberg bu dosyada çalışır; şirket RabbitMQ'su kullanılacaksa RABBITMQ_URL / V2_AMQP_URL verilir.
+name: atez-mevzuat
+
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  AUTH_PROFILE: ${AUTH_PROFILE:?AUTH_PROFILE is required (company)}
+  APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:?}
+  OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?}
+  OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?}
+  OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?}
+  OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:?}
+  OIDC_POST_LOGOUT_REDIRECT_URI: ${OIDC_POST_LOGOUT_REDIRECT_URI:?}
+  SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?}
+  SESSION_ENCRYPTION_KEY_ID: ${SESSION_ENCRYPTION_KEY_ID:-v1}
+  SESSION_IDLE_TTL_SECONDS: ${SESSION_IDLE_TTL_SECONDS:-1800}
+  SESSION_ABSOLUTE_TTL_SECONDS: ${SESSION_ABSOLUTE_TTL_SECONDS:-28800}
+  AUTH_WORKSPACE_KEY: ${AUTH_WORKSPACE_KEY:-atez}
+  OIDC_CA_FILE: ${OIDC_CA_FILE:-}
+  AUTH_API_ALLOWED_HOSTS: ${AUTH_API_ALLOWED_HOSTS:-}
+  WORKER_ACTOR_USER_ID: ${WORKER_ACTOR_USER_ID:-}
+  MODULAR_OPERATIONS_ENABLED: ${MODULAR_OPERATIONS_ENABLED:-true}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  PORT: "3001"
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USER:-atez}:${RABBITMQ_PASSWORD:?}@rabbitmq:5672}
+  GOTENBERG_URL: http://gotenberg:3000
+  COMPONENT_STUDIO_URL: http://v2-api:3100
+  GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-true}
+  GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+  GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/vertex_credentials
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+  GEMINI_BROWSER_MODEL: ${GEMINI_BROWSER_MODEL:-gemini-3.8-flash}
+  GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-60000}
+  GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+  GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+  GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+  GRAPH_SENDER_ADDRESS: ${GRAPH_SENDER_ADDRESS:-}
+  GRAPH_SENDER_NAME: ${GRAPH_SENDER_NAME:-ATEZ Mevzuat Radarı}
+  SCAN_TIMEZONE: ${SCAN_TIMEZONE:-Europe/Istanbul}
+  SOURCE_HOSTS: ${SOURCE_HOSTS:-resmigazete.gov.tr,www.resmigazete.gov.tr}
+  NODE_EXTRA_CA_CERTS: /app/certs/GeoTrustTLSRSACAG1.pem
+  S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT is required}
+  S3_REGION: ${S3_REGION:?S3_REGION is required}
+  S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is required}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+  TARIFF_ENABLED: ${TARIFF_ENABLED:-false}
+  TARIFF_USERNAME: ${TARIFF_USERNAME:-}
+  TARIFF_PASSWORD: ${TARIFF_PASSWORD:-}
+
+x-v2-env: &v2-env
+  NODE_ENV: production
+  DATABASE_URL: ${V2_DATABASE_URL:?V2_DATABASE_URL is required}
+  AMQP_URL: ${V2_AMQP_URL:-amqp://${RABBITMQ_USER:-atez}:${RABBITMQ_PASSWORD:?}@rabbitmq:5672/atez-mevzuat}
+  S3_ENDPOINT: ${S3_ENDPOINT:?}
+  S3_REGION: ${S3_REGION:?}
+  S3_BUCKET: ${V2_S3_BUCKET:?V2_S3_BUCKET is required}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+  VERTEX_PROJECT: ${VERTEX_PROJECT:-}
+  VERTEX_LOCATION: ${VERTEX_LOCATION:-global}
+  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/vertex_credentials
+  GOTENBERG_URL: http://gotenberg:3000
+  TARIFF_USERNAME: ${TARIFF_USERNAME:-}
+  TARIFF_PASSWORD: ${TARIFF_PASSWORD:-}
+
 services:
   rabbitmq:
     image: rabbitmq:4.1-management
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-atez}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-atezpassword}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
       - ./deploy/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -11,8 +87,18 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 20
+      retries: 30
     restart: unless-stopped
+
+  rabbitmq-init:
+    image: curlimages/curl:8.10.1
+    entrypoint: ["sh", "/init.sh"]
+    environment:
+      RABBITMQ_USER: ${RABBITMQ_USER:-atez}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?}
+    volumes: ["./deploy/docker/rabbitmq-init.sh:/init.sh:ro"]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
 
   gotenberg:
     image: gotenberg/gotenberg:8
@@ -20,56 +106,12 @@ services:
     restart: unless-stopped
 
   backend:
-    build:
-      context: ./backend
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-backend:${IMAGE_TAG:-main}
     command: ["sh", "-c", "npm run prisma:migrate && npm run start:api"]
-    environment: &backend-environment
-      AUTH_PROFILE: ${AUTH_PROFILE:-}
-      APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:-}
-      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
-      OIDC_POST_LOGOUT_REDIRECT_URI: ${OIDC_POST_LOGOUT_REDIRECT_URI:-}
-      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:-}
-      SESSION_ENCRYPTION_KEY_ID: ${SESSION_ENCRYPTION_KEY_ID:-v1}
-      SESSION_IDLE_TTL_SECONDS: ${SESSION_IDLE_TTL_SECONDS:-1800}
-      SESSION_ABSOLUTE_TTL_SECONDS: ${SESSION_ABSOLUTE_TTL_SECONDS:-28800}
-      AUTH_WORKSPACE_KEY: ${AUTH_WORKSPACE_KEY:-atez}
-      OIDC_CA_FILE: ${OIDC_CA_FILE:-}
-      AUTH_API_ALLOWED_HOSTS: ${AUTH_API_ALLOWED_HOSTS:-}
-      WORKER_ACTOR_USER_ID: ${WORKER_ACTOR_USER_ID:-}
-      MODULAR_OPERATIONS_ENABLED: ${MODULAR_OPERATIONS_ENABLED:-false}
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-false}
-      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
-      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_BROWSER_MODEL: ${GEMINI_BROWSER_MODEL:-gemini-3.8-flash}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
-      GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-60000}
-      PORT: "3001"
-      RABBITMQ_URL: ${RABBITMQ_DOCKER_URL:-amqp://${RABBITMQ_USER:-atez}:${RABBITMQ_PASSWORD:-atezpassword}@rabbitmq:5672}
-      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
-      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
-      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
-      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
-      GRAPH_SENDER_ADDRESS: ${GRAPH_SENDER_ADDRESS:-}
-      GRAPH_SENDER_NAME: ${GRAPH_SENDER_NAME:-ATEZ Mevzuat Radarı}
-      SCAN_TIMEZONE: ${SCAN_TIMEZONE:-Europe/Istanbul}
-      SOURCE_HOSTS: ${SOURCE_HOSTS:-resmigazete.gov.tr,www.resmigazete.gov.tr}
-      SOURCE_DELAY_MS: ${SOURCE_DELAY_MS:-750}
-      SOURCE_TIMEOUT_MS: ${SOURCE_TIMEOUT_MS:-30000}
-      SOURCE_MAX_ATTEMPTS: ${SOURCE_MAX_ATTEMPTS:-3}
-      NODE_EXTRA_CA_CERTS: /app/certs/GeoTrustTLSRSACAG1.pem
-      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-104857600}
-      MAX_RUN_BYTES: ${MAX_RUN_BYTES:-2147483648}
-      S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT is required}
-      S3_REGION: ${S3_REGION:?S3_REGION is required}
-      S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is required}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID is required}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY is required}
-      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+    environment: *backend-env
+    secrets: [vertex_credentials]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s
@@ -78,24 +120,67 @@ services:
     restart: unless-stopped
 
   worker:
-    build:
-      context: ./backend
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-backend:${IMAGE_TAG:-main}
     command: ["npm", "run", "start:worker"]
-    environment: *backend-environment
+    environment: *backend-env
+    secrets: [vertex_credentials]
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      backend: {condition: service_healthy}
+    restart: unless-stopped
+
+  v2-migrate:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-v2:${IMAGE_TAG:-main}
+    command: ["pnpm", "db:migrate"]
+    environment: *v2-env
+
+  v2-api:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-v2:${IMAGE_TAG:-main}
+    command: ["pnpm", "api"]
+    environment: *v2-env
+    secrets: [vertex_credentials]
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  v2-worker:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-v2:${IMAGE_TAG:-main}
+    command: ["pnpm", "worker"]
+    environment: *v2-env
+    secrets: [vertex_credentials]
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+      rabbitmq-init: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  v2-relay:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-v2:${IMAGE_TAG:-main}
+    command: ["pnpm", "relay"]
+    environment: *v2-env
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+      rabbitmq-init: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  v2-scheduler:
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-v2:${IMAGE_TAG:-main}
+    command: ["pnpm", "scheduler"]
+    environment: *v2-env
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+      rabbitmq-init: {condition: service_completed_successfully}
     restart: unless-stopped
 
   web:
-    build:
-      context: ./frontend
-    ports:
-      - "8888:80"
+    image: ${IMAGE_REGISTRY:-ghcr.io/ozkan-atez/atez-mevzuat}-web:${IMAGE_TAG:-main}
+    ports: ["${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8888}:80"]
     depends_on:
-      backend:
-        condition: service_healthy
+      backend: {condition: service_healthy}
+      v2-api: {condition: service_started}
     restart: unless-stopped
+
+secrets:
+  vertex_credentials:
+    file: ${VERTEX_CREDENTIALS_FILE:?VERTEX_CREDENTIALS_FILE (service-account JSON path) is required}
 
 volumes:
   rabbitmqdata:

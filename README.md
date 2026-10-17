@@ -42,25 +42,22 @@ docker compose up -d db object-storage gotenberg rabbitmq
 
 Uygulama `http://127.0.0.1:5173` veya `http://localhost:8888` üzerinden açılır. Sağlık kontrolü `/api/health` adresindedir. Günlükler `~/Library/Logs/ATEZ` altında tutulur. Kod değişikliklerinden sonra ön yüz derlemesini ve kurulum betiğini yeniden çalıştırın. Aynı anda Docker backend/worker/web servislerini başlatmayın. Veritabanı silme veya sıfırlama bu kurulumun parçası değildir.
 
-## Docker ile yerelde çalıştırma
+## Docker ile tek komutla çalıştırma
 
-Docker Desktop açıkken proje kökünde:
-
-```bash
-docker compose up --build -d
-docker compose ps
-docker compose logs -f backend worker
-```
-
-İlk taramadan önce AI bağlantısı yapılandırılmalıdır. Vertex AI için aşağıdaki ayarları kullanın; Developer API için `GOOGLE_GENAI_USE_VERTEXAI=false` ve geçerli `GEMINI_API_KEY` gerekir. Varsayılan geliştirme modeli `gemini-3.7-flash` olup topic analizleri `TOPIC_ANALYSIS_CONCURRENCY` sınırıyla birbirinden bağımsız çalışır.
-
-İlk açılışta backend veritabanı migration'larını otomatik uygular. Gerekirse elle tekrar çalıştırılabilir:
+Bütün yığın (eski uygulama + v2 + web + yerel Keycloak) Docker Desktop açıkken proje kökünden çalışır:
 
 ```bash
-docker compose exec backend npm run prisma:migrate
+cp .env.example .env   # Vertex/TARIFF/Graph değerlerini doldurun; dosya Git'e girmez
+docker compose up -d --build
 ```
 
-Uygulama `http://localhost:8888`, API sağlık bilgisi `http://localhost:8888/api/health`, MinIO yönetim ekranı ise `http://localhost:9001` adresindedir. Yerel MinIO kullanıcı bilgileri `.env.example` içindeki geliştirme değerleridir.
+- Uygulama: `http://localhost:8890` (giriş: `.local/docker-auth/accounts.json` içindeki `admin` / `editor` / `viewer`)
+- Keycloak: `http://localhost:48080` · Postgres: `127.0.0.1:35432`
+- Portlar `WEB_PORT`, `KEYCLOAK_PORT`, `DB_PORT` ile değişir; makinedeki diğer yerel kurulumlarla çakışmaz (proje adı `atez-mevzuat`).
+- İlk açılışta realm ve test hesapları `.local/docker-auth/` altında üretilir, backend migration ve hesap bağlamasını kendisi yapar, v2 kendi veritabanını (`atez_v2`) migrate eder.
+- `/api/v2/*` (şablon stüdyosu, bileşen havuzu) web katmanında oturum kontrolünden (`/api/auth/me`) geçer.
+- Vertex servis hesabı anahtarı `.env`'deki `GOOGLE_APPLICATION_CREDENTIALS` host yolundan salt okunur bağlanır.
+- Frontend'i Vite ile canlı geliştirmek için: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
 
 Yerel nesne deposundaki `resmi-gazete` bucket'ı backend ve worker tarafından idempotent biçimde oluşturulur. Aynı dosyanın tekrar indirilmesi yeni bir byte kopyası üretmez; SHA-256 anahtarıyla mevcut nesne kullanılır.
 
@@ -68,15 +65,19 @@ Her topic için kanıt manifesti, değişmez `analysis.json`, kapsamlı `analysi
 
 Resmî Gazete sunucusu ara sertifikasını TLS el sıkışmasında göndermediği için image içinde DigiCert tarafından yayımlanan `GeoTrust TLS RSA CA G1` ara sertifikası bulunur ve Node'a ek güven zinciri olarak tanıtılır. TLS doğrulaması kapatılmaz.
 
-## Üretim
+## Dal düzeni, CI ve dağıtım
 
-Sabit digest ile tanımlanan MinIO servisi yalnızca yerel geliştirme içindir. `docker-compose.prod.yml` yerel nesne deposu veya erişim anahtarı içermez. Üretimde `DATABASE_URL`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` ve `S3_SECRET_ACCESS_KEY` değerleri deployment secret store üzerinden verilmeli; standart S3 servisleri için `S3_FORCE_PATH_STYLE=false` kullanılmalıdır.
-
-Üretim yapılandırmasını doğrulama örneği:
+- `dev` → günlük geliştirme; `test` → test ortamı; `main` → üretim. Değişiklikler PR ile `dev`'e, oradan `test`'e ve `main`'e ilerler.
+- **CI** (`.github/workflows/ci.yml`): her PR ve itişte frontend (tip + test + build), backend (tip + Postgres/RabbitMQ ile tüm testler), v2 (tip + Postgres/RabbitMQ/MinIO ile tüm testler) ve üç imajın derlenmesi.
+- **İmajlar** (`.github/workflows/images.yml`): `dev`/`test`/`main` itişlerinde `ghcr.io/<owner>/atez-mevzuat-{backend,v2,web}:<dal>` ve `:sha-<kısa>` olarak GHCR'ye itilir.
+- **Ortam kurulumu**: sunucuda `docker-compose.prod.yml` ile `IMAGE_TAG=<dal>` imajları çekilir. PostgreSQL (eski uygulama ve v2 için ayrı veritabanı), S3 ve şirket Keycloak'ı dışarıdadır; değerler secret store'dan gelen env dosyasıyla verilir:
 
 ```bash
-docker compose -f docker-compose.prod.yml config
+IMAGE_TAG=test docker compose -f docker-compose.prod.yml --env-file /etc/atez/mevzuat.env pull
+IMAGE_TAG=test docker compose -f docker-compose.prod.yml --env-file /etc/atez/mevzuat.env up -d
 ```
+
+Gerekli değişkenler compose dosyasında `:?` ile işaretlidir (`DATABASE_URL`, `V2_DATABASE_URL`, `S3_*`, `V2_S3_BUCKET`, `RABBITMQ_PASSWORD`, `AUTH_PROFILE=company` ve OIDC ayarları, `VERTEX_CREDENTIALS_FILE`). Standart S3 için `S3_FORCE_PATH_STYLE=false`. Yapılandırmayı doğrulamak için `docker compose -f docker-compose.prod.yml config`.
 
 ## Cron işleri ve RabbitMQ
 
@@ -117,14 +118,7 @@ GEMINI_BROWSER_MODEL=gemini-3.8-flash
 
 Bölge şirketin veri politikası ve model desteğine göre seçilmelidir. Yerel servis çalıştırıcısı kök `.env` dosyasını okur; ayar değişince API/worker yeniden başlatılır. Google Cloud üzerinde bağlı servis hesabı veya yerel ADC kullanılıyorsa `GOOGLE_APPLICATION_CREDENTIALS` gerekmez. Vertex seçiliyken eksik proje/bölge hatadır; eski API anahtarına otomatik dönüş yapılmaz.
 
-JSON anahtarı Git'e veya Docker imajına eklemeyin. Docker ile JSON kullanırken:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.vertex.yml up --build -d
-# Üretimde ilk dosya yerine docker-compose.prod.yml kullanın.
-```
-
-Override, host üzerindeki `GOOGLE_APPLICATION_CREDENTIALS` dosyasını API ve worker'a salt okunur secret olarak bağlar. Google Cloud bağlı kimlik kullanımında bu override gerekmez.
+JSON anahtarı Git'e veya Docker imajına eklemeyin. `docker-compose.yml` anahtarı `.env`'deki host yolundan, `docker-compose.prod.yml` ise `VERTEX_CREDENTIALS_FILE` secret'ından salt okunur bağlar.
 
 Yeni uygulama çağrıları `provider=vertex` ile mevcut kullanım tablosuna kaydedilir. Girdi, çıktı, toplam, önbellek ve düşünme tokenları sağlayıcının bildirdiği değerlerdir; akış ara toplamları tekrar eklenmez. Eksik tüketim sıfır kabul edilmez. Token ekranı parasal fatura hesabı değildir; arama gibi ek hizmet ücretleri Cloud Billing'den izlenmelidir. Eski kayıtlar değiştirilmez.
 

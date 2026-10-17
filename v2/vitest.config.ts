@@ -13,7 +13,8 @@ const defaults = {
 }
 // globalSetup ana süreçte çalışır; varsayılanlar oraya da görünsün.
 for (const [k, v] of Object.entries(defaults)) process.env[k] ??= v
-const env = defaults
+// Test süreçlerine ortamdaki değerler (CI) ya da yerel varsayılanlar geçer.
+const env = Object.fromEntries(Object.keys(defaults).map((k) => [k, process.env[k]!]))
 
 export default defineConfig({
   test: {
