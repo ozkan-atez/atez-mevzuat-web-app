@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Empty, Form, Input, Modal, Popover, Skeleton, Spin, Tag, Typography, message } from 'antd'
-import { ArrowLeftOutlined, ArrowRightOutlined, CheckOutlined, EyeOutlined, LayoutOutlined, PlusOutlined, SearchOutlined, StarFilled, ThunderboltOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ArrowRightOutlined, CheckOutlined, EyeOutlined, PlusOutlined, SearchOutlined, StarFilled, ThunderboltOutlined } from '@ant-design/icons'
 import { Can } from '../auth/Can'
 import { studioApi, StudioRequestError } from './studioApi'
 import { CATEGORY_LABELS, MISSING_RULE_LABELS, type ComponentCategory, type StudioComponent, type TemplateDefinitionV2, type TemplateFullV2, type TemplateRowV2, type TemplateSectionV2 } from './studio-types'
@@ -112,9 +112,6 @@ export function TemplatesPage() {
               </div>
               {visible.map((t) => (
                 <article key={t.id} className="connector-row tpl-columns">
-                  <div className="connector-mark">
-                    <LayoutOutlined />
-                  </div>
                   <div className="connector-identity">
                     <h3>{t.title}</h3>
                     <p>{t.description || 'Açıklama yok'}</p>
