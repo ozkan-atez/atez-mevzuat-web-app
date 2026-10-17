@@ -42,6 +42,7 @@ Bu proje şirketin GitHub'ına **yeni bir repo** olarak taşınacak. Belge bu y�
 | Ek dosyası alan adları (2026-10-17) | Belgelerin ek dosyalarının bulunduğu alan adları (ör. `files.igmd.org.tr`) **kaynak değildir**. Eski uygulamadaki gibi belge URL'lerinden otomatik "kaynak" eklenmez (`ensureWorkspaceCatalog` REFERENCE kaynakları v2'ye taşınmaz). Bu alan adları ilgili kaynak tanımının `attachments.allowHosts` listesinde durur ve kaynak listesinde görünmez (§9.3). |
 | Mevzuat.Net kapsamı (2026-10-17) | Kullanıcı adı ve şifre verilene kadar yalnızca anasayfadaki **Son Dakika** listesinin son ~20 kaydıyla çalışılır. `Guncellik.aspx` ve `rgicerik` kapsam kontrolü olarak kalır. Kimlik bilgisi sonradan girilirse abonelikli erişim ayrı bir kararla açılır; o zamana kadar kapalıdır. |
 | Kaynak kimlik bilgileri (2026-10-17) | Kaynaklar ekranında yönetilir (§9.3): "Kaynak ekle", satır bazında "Düzenle", sunucuda AES-256-GCM ile şifreli saklama, şifrenin arayüze asla geri dönmemesi, "Test et". TARIFF bilgileri de bu ekrandan girilir; `.env` yalnızca yerel geliştirmede yedek kaynaktır. |
+| Şablon ve analiz (2026-10-17 kararı) | Eksik veri kuralı yalnızca `NOTE` ("bu bilgi kaynakta yer almıyor" notu) ve `OMIT` (bölümü gizle); BLOCK ve "eksik bilgi" rapor durumu yoktur, rapor her durumda `READY` olur. `topic.analyze` şablon brief'ini ve açık bölümlerin açıklamalarını alır, istenen bilgiyi bilerek arar, bulamadığını "kaynakta yok" olarak işaretler; önbellek anahtarına şablonun hash'i girer. Belge Profili şablondan bağımsızdır (§10.1). |
 | TARIFF silinmiş kayıt (2026-10-17 kararı) | Bir TARIFF kaydı yalnızca `was_deleted = true` ise ya da `deleted_at` dolu olup kayıt o tarihten sonra güncellenmemişse silinmiş sayılır. Gerekçe: 31.12.2025 gözetim örneğinde (2018/1 değişikliği, 8714.91.10.00.11/.19) yürürlükteki kayıt `deleted_at: 2020-10-23` ama `updated_at: 2026-01-03` taşıyordu, 29.01.2026'ya kadar geçerliydi ve değeri RG'deki 2018/1 tebliğiyle örtüşüyordu. Böyle bir kayıttan alınan değer raporda satır notuyla gösterilir (§7). Kabul edilen risk: gerçekten silinmiş ama sonradan güncellenmiş bir kayıt yanlışlıkla kullanılabilir. |
 
 ## 1. Ürün kapsamı ve ekranlar
@@ -699,13 +700,15 @@ Kaynaklar ve web arayüzü aşamasından önce yapılır. Dalın (`codex/source-
   - `heading`;
   - **`sectionDescription`**: bölümde nelere önem verileceği ve içerikte neler istendiği. **En önemli alandır; `report.compose` prompt'unun girdisidir.**
   - `required`;
-  - `missingDataRule`: `NOTE | OMIT | BLOCK`.
+  - `missingDataRule`: `NOTE | OMIT`. NOTE "bu bilgi kaynakta yer almıyor" notu gösterir, OMIT bölümü gizler. **BLOCK yoktur** (2026-10-17 kararı).
 - **Yeni şablonda havuzdaki bütün ACTIVE bileşenler varsayılan olarak açık gelir.** Kullanıcı istediğini kapatır, sırasını değiştirir, havuzdan yenisini ekler.
 - Rapor üretilirken şablon sürümü dondurulur.
 - **Şablon oluşturma ile bileşen oluşturma ayrı süreçlerdir.** Şablon editörü bileşen üretmez; yalnızca "Havuzdan ekle" ve bileşen stüdyosuna giden "Yeni bileşen oluştur" bağlantısı vardır.
 
 **3) Rapor üretimine etkisi**
 
+- Rapor her durumda, şablonun istediklerinden kaynakta ne bulunduysa onunla üretilir ve durumu `READY` olur; "eksik bilgi" gibi ayrı bir durum yoktur (K1).
+- **Analiz şablonu bilir** (2026-10-17 kararı): `topic.analyze` prompt'u şablon brief'ini ve açık bölümlerin `sectionDescription` metinlerini alır; şablonun istediği bilgileri bilerek arar ve çıkarır. Uydurma ve tahmin yasağı aynen geçerlidir; bulunamayan bilgi `requestedInfo` içinde `NOT_IN_SOURCE` ("kaynakta yok") olarak işaretlenir ve rapor bunu böyle yazar. Analizin önbellek anahtarına şablonun analize giden kısmının (brief + açık bölümlerin başlık/açıklama/bileşeni) hash'i girer; tema gibi görsel değişiklikler analizi yeniden çalıştırmaz. **Belge Profili şablondan bağımsızdır.**
 - `report.compose` prompt'u her açık bölüm için bileşen türünü, veri bağlarını, `heading`, `sectionDescription` ve şablon brief'ini alır. Metin alanlarını bunlara göre doldurur; yeni bilgi eklemez.
 - Sayısal alanlar ve tablolar kodla doldurulur.
 - `sectionDescription` analize yeni iddia ekletmez; yalnızca vurguyu ve içerik seçimini yönlendirir.
@@ -962,7 +965,7 @@ config/
 | TARIFF kesin alan seçimi ve ham yanıt hash'i | `tariff-retrieval.ts`, `tariff-snapshot.ts`, `tariff-lookup.ts` (`parseTariffMeasures`, `inForceOn`) | `platform/tariff-client` + §7 |
 | Kanıt disiplini: birebir alıntı doğrulama, okunamayan materyalde OUT değil REVIEW, belge otorite sınıfı (`USER_PROVIDED`, `SOURCE_UNVERIFIED`, `SUPPORTING_NON_AUTHORITATIVE`, `VERIFIED_OFFICIAL`) | `operations/executors.ts` | Profil, analiz, rapor |
 | Kullanım defteri: her AI çağrısı kaydedilir, token alanı `null` = "ölçülmedi" (0 değil) | `modules/usage/*` | `ai_call` (fiyat ve maliyet hesabı eklenir) |
-| Şablon tanımı v2: `requirements/components/layout/theme/shell`, eksik veri kuralı `NOTE/OMIT/BLOCK`, `expectedRevision` | `workspace/template-definition.ts`, `template-renderer.ts` | Raporlama, `report.compose` |
+| Şablon tanımı v2: `requirements/components/layout/theme/shell`, eksik veri kuralı `NOTE/OMIT/BLOCK` (v2: yalnız `NOTE/OMIT`, §10.1), `expectedRevision` | `workspace/template-definition.ts`, `template-renderer.ts` | Raporlama, `report.compose` |
 | Sohbet kapsamı: `ChatContext {sourceIds, documentVersionIds, templateId}`; cevaplar yalnızca seçilen kaynaklara dayanır; kapsam sunucuda zorlanır | plan 02 (kodu geri alındı) | Asistan §11 |
 | DB'den deterministik cevaplar: rapor, tarama ve arşiv soruları LLM'siz cevaplanır | `chat/application/report-query.ts`, `workspace-query.ts` | Asistan `knowledge` paketi |
 | Web grounding: atıf ofsetlerini UTF-8'den UTF-16'ya çevirme | `chat/application/web-grounding.ts` | Asistan `research` paketi |
