@@ -39,6 +39,9 @@ Bu proje şirketin GitHub'ına **yeni bir repo** olarak taşınacak. Belge bu y�
 | Konu eşleştirme | Kesin eşleşme (RG bağlantısı veya resmî numara) ya da AI ile "aynı olay" tespiti yapılamazsa belge **ayrı konu** olarak kalır. |
 | Mevzuat.Net | Günlük işlemde anasayfadaki **Son Dakika haberleri** ve haberlerin içinde ek bağlantısı varsa o ekler okunur (ekler resmî veya herkese açık bir hedefe gidiyorsa). Chat'ten geçmişe dönük bir tarih sorulduğunda kayıt son ~20 haber içinde yoksa şu mesaj verilir: *"Bu tarihe ait kayıt bulunamadı. Geçmiş kayıtlara erişmek için lütfen Kaynaklar ekranından Mevzuat.Net aboneliğinizi aktifleştirin."* Güncellik listesi kapsam kontrolü olarak kalır. |
 | mevzuat.gov.tr | Sonraya bırakıldı. |
+| Ek dosyası alan adları (2026-10-17) | Belgelerin ek dosyalarının bulunduğu alan adları (ör. `files.igmd.org.tr`) **kaynak değildir**. Eski uygulamadaki gibi belge URL'lerinden otomatik "kaynak" eklenmez (`ensureWorkspaceCatalog` REFERENCE kaynakları v2'ye taşınmaz). Bu alan adları ilgili kaynak tanımının `attachments.allowHosts` listesinde durur ve kaynak listesinde görünmez (§9.3). |
+| Mevzuat.Net kapsamı (2026-10-17) | Kullanıcı adı ve şifre verilene kadar yalnızca anasayfadaki **Son Dakika** listesinin son ~20 kaydıyla çalışılır. `Guncellik.aspx` ve `rgicerik` kapsam kontrolü olarak kalır. Kimlik bilgisi sonradan girilirse abonelikli erişim ayrı bir kararla açılır; o zamana kadar kapalıdır. |
+| Kaynak kimlik bilgileri (2026-10-17) | Kaynaklar ekranında yönetilir (§9.3): "Kaynak ekle", satır bazında "Düzenle", sunucuda AES-256-GCM ile şifreli saklama, şifrenin arayüze asla geri dönmemesi, "Test et". TARIFF bilgileri de bu ekrandan girilir; `.env` yalnızca yerel geliştirmede yedek kaynaktır. |
 
 ## 1. Ürün kapsamı ve ekranlar
 
@@ -631,6 +634,23 @@ discovered-item → (ön kontrol) → capture-manifest → classify.profile (Bel
 
 - Profil adımı, manifestteki `hints` alanını **ipucu olarak** alır. Model bunları doğrular veya düzeltir; ipucu kanıt yerine geçmez.
 - `rgReferences` alanı topic eşleştirmesinde ve önceki kaynak aramasında ilk denenen yoldur.
+
+### 9.3 Kaynak yönetimi ve kimlik bilgileri (2026-10-17 kararları)
+
+- **Ek alan adları kaynak değildir.**
+  - Bir belgenin ek dosyaları başka bir alan adında durabilir (ör. İGMD → `files.igmd.org.tr`). Bu alan adları ilgili kaynak tanımında `attachments.allowHosts` altında listelenir.
+  - Kaynak listesine otomatik olarak eklenmezler, kaynak olarak görünmezler.
+  - Eski uygulamadaki belge URL'lerinden REFERENCE kaynağı türetme davranışı (`ensureWorkspaceCatalog`) v2'ye taşınmaz.
+- **Mevzuat.Net:** Kimlik bilgisi yokken yalnızca anasayfadaki Son Dakika listesinin son ~20 kaydı okunur. `Guncellik.aspx` ve `rgicerik` kapsam kontrolüdür (§9.1). Abonelikli erişim, kimlik bilgisi girildikten sonra ayrı bir kararla açılır.
+- **Kaynaklar ekranı:**
+  - Listenin üstünde **"Kaynak ekle"** butonu bulunur; onboarding akışını (§9) başlatır.
+  - Her satırda küçük bir **"Düzenle"** butonu bulunur. Düzenleme ekranında şunlar değiştirilebilir: URL, listeler/profil (kaynak tanımı sürümü), aktif/pasif durumu ve **kimlik bilgileri** (kullanıcı adı, şifre, gerekiyorsa token).
+  - **"Test et"** butonu, kayıtlı bilgilerle girişi canlı olarak doğrular. Sonuç ve tarih kaynak sağlığına yazılır; şifre loglanmaz.
+- **Kimlik bilgilerinin saklanması:**
+  - Sunucuda AES-256-GCM ile şifrelenir. AAD = `workspaceId + sourceId + alan`. Desen Ek B.2'deki `source-secrets` uygulamasıdır; `workspaceId` sabit `local` olarak kodlanmaz.
+  - Kaydedilen şifre ve token API'den **asla geri dönmez**. Arayüz yalnızca "kayıtlı" durumunu gösterir ve "değiştir" seçeneği sunar.
+  - Şifreleme anahtarı uygulama gizli anahtarından gelir. Anahtar döndürme sürüm alanıyla yapılır.
+- **TARIFF** de bu ekrandan yönetilir: kullanıcı adı ve şifre şifreli saklanır, "Test et" Keycloak (`agsw` / `tarife`) girişini dener. `.env` içindeki `TARIFF_USERNAME` / `TARIFF_PASSWORD` yalnızca yerel geliştirmede, ekranda kayıt yoksa yedek olarak kullanılır.
 
 ## 10. Raporlama, onay ve revizyon (K1)
 
