@@ -73,8 +73,7 @@ export function selectTariffMeasure(
       activeOn(m, req.date, 'effective_start_date', 'effective_end_date') &&
       m.is_import === true &&
       !m.isSuspended &&
-      !m.was_deleted &&
-      !m.deleted_at,
+      !isDeleted(m),
   )
   const scope = (m: Row) => rows(Array.isArray(m.areaDetails) ? m.areaDetails : [m.areaDetails]).map((a) => String(a.geographical_area_code ?? ''))
   const selected = req.origin ? candidates.filter((m) => scope(m).includes(req.origin!)) : candidates.length === 1 && scope(candidates[0]!).includes('1011') ? candidates : []
@@ -89,8 +88,7 @@ export function selectTariffMeasure(
     const refs: string[] = rows(m.legalActViews).map((a) => String(a.regulation_code ?? '')).join(' ').match(/\b\d{4}\/\d+\b/g) ?? []
     if (!req.legalReferences.some((r) => refs.includes(r))) return { ...base, status: 'AMBIGUOUS', legalSources, issues: [...base.issues, 'Temel mevzuat numarası sağlayıcı kaydında eşleşmedi'] }
   }
-  const rawValue = typeof m.base_duty_formatted === 'string' ? m.base_duty_formatted : typeof m.base_duty === 'string' ? m.base_duty : null
-  const parsed = parseProviderValue(rawValue)
+  const { rawValue, parsed } = measureValue(m)
   const out: TariffSelection = {
     ...base,
     status: 'FOUND',
@@ -113,4 +111,37 @@ export function selectTariffMeasure(
     }
   }
   return out
+}
+
+/**
+ * Silinmiş kayıt: `was_deleted === true` ya da `deleted_at` dolu ve kayıt o tarihten sonra
+ * güncellenmemiş. Canlı veride (2026-10-17) 2007–2026 geçerli bir gözetim kaydı `deleted_at:
+ * 2020-10-23` ama `updated_at: 2026-01-03` taşıyordu ve önlem fiilen yürürlükteydi.
+ */
+export function isDeleted(m: Row): boolean {
+  if (m.was_deleted === true) return true
+  if (!m.deleted_at) return false
+  return !(typeof m.updated_at === 'string' && m.updated_at > String(m.deleted_at))
+}
+
+/**
+ * Değer önceliği: yapılandırılmış `dutyExpr` (tek bileşen) → `base_duty` → `base_duty_formatted`.
+ * `base_duty_formatted` canlı veride önlemin geçmiş değerlerinin aralığını gösterebiliyor
+ * ("200.00 USD / p/st - 300.00 USD / p/st"); tek değer sayılmaz.
+ */
+export function measureValue(m: Row): { rawValue: string | null; parsed: { value: string | null; currency: string | null; unit: string | null } } {
+  const parts = rows(m.dutyExpr)
+  if (parts.length === 1 && typeof parts[0]!.amount === 'number') {
+    const p = parts[0]!
+    const qty = typeof p.quantity === 'number' && p.quantity !== 1 ? `${p.quantity} ` : ''
+    const raw = p.type === 'percent' || (!p.currencyCode && !p.uom) ? `${p.amount} %` : `${p.amount} ${p.currencyCode ?? ''} / ${qty}${p.uom ?? ''}`.replace(/\s+/g, ' ').trim()
+    return { rawValue: raw, parsed: parseProviderValue(raw) }
+  }
+  for (const raw of [m.base_duty, m.base_duty_formatted]) {
+    if (typeof raw !== 'string') continue
+    const parsed = parseProviderValue(raw)
+    if (parsed.value) return { rawValue: raw, parsed }
+  }
+  const raw = typeof m.base_duty_formatted === 'string' ? m.base_duty_formatted : typeof m.base_duty === 'string' ? m.base_duty : null
+  return { rawValue: raw, parsed: parseProviderValue(raw) }
 }

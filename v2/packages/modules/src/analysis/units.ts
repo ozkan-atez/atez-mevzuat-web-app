@@ -12,7 +12,8 @@ const UNIT: [RegExp, string][] = [
   [/^(%|yüzde|pct|percent)$/i, 'PCT'],
   [/^(ton|tne|1000 ?kg|1 ?ton|brüt ton)$/i, 'TNE'],
   [/^(kg|kgm|kilogram|brüt kg|kg brüt)$/i, 'KGM'],
-  [/^(adet|pce|unit|çift|nar)$/i, 'PCE'],
+  [/^(adet|pce|unit|nar|p\/st|piece|pieces)$/i, 'PCE'],
+  [/^(çift|pair|npr)$/i, 'NPR'],
   [/^(m2|m²|mtk|metrekare)$/i, 'MTK'],
   [/^(lt|l|ltr|litre)$/i, 'LTR'],
 ]

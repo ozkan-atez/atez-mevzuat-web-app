@@ -75,6 +75,20 @@ describe('TARIFF kesin seçim (Ek B.2)', () => {
     expect(r).toMatchObject({ status: 'PARTIAL', value: null })
     expect(selectTariffMeasure(p, { ...req, field: 'GOZETIM_DEGERI', expected: { unit: 'ton', currency: 'ABD Doları' } })).toMatchObject({ status: 'FOUND', value: '5500' })
   })
+  it('canlı veri: deleted_at eski ama kayıt sonradan güncellenmiş → geçerli; değer dutyExpr\'den (formatted aralık)', () => {
+    const live = measure({
+      measureType: { measure_type_code: 'TRC057' },
+      effective_start_date: '2007-01-25',
+      effective_end_date: '2026-01-29',
+      deleted_at: '2020-10-23T11:49:02.257Z',
+      updated_at: '2026-01-03T21:17:00.426Z',
+      base_duty: '200.00 USD / p/st',
+      base_duty_formatted: '200.00 USD / p/st - 300.00 USD / p/st',
+      dutyExpr: [{ type: 'perquantity', amount: 200, currencyCode: 'USD', quantity: 1, uom: 'NAR' }],
+    })
+    expect(selectTariffMeasure(payload([live]), { ...req, field: 'GOZETIM_DEGERI', expected: { unit: 'Adet', currency: 'ABD Doları' } })).toMatchObject({ status: 'FOUND', value: '200', currency: 'USD', unit: 'PCE' })
+    expect(selectTariffMeasure(payload([{ ...live, updated_at: null }]), { ...req, field: 'GOZETIM_DEGERI' }).status).toBe('NOT_FOUND')
+  })
   it('askıda/silinmiş ya da ithalat dışı önlem seçilmez', () => {
     expect(selectTariffMeasure(payload([measure({ isSuspended: true })]), req).status).toBe('NOT_FOUND')
     expect(selectTariffMeasure(payload([measure({ is_import: false })]), req).status).toBe('NOT_FOUND')
