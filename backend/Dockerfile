@@ -11,6 +11,7 @@ COPY tsconfig.json ./
 COPY config ./config
 COPY src ./src
 COPY scripts/test-browser-source-access.ts scripts/test-google-search.ts ./scripts/
+COPY scripts/docker ./scripts/docker
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
@@ -30,4 +31,5 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx playwright install --with-deps chromium && chmod -R a+rX /ms-playwright
 USER node
 EXPOSE 3001
+ENTRYPOINT ["scripts/docker/start.sh"]
 CMD ["npm", "run", "start:api"]

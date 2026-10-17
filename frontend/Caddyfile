@@ -12,8 +12,18 @@
         }
     }
 
+    # v2 (şablon stüdyosu, bileşen havuzu). v2 API'nin kendi oturum katmanı yok: her istek önce
+    # eski API'nin oturum kontrolünden (/api/auth/me) geçer, sonra /api önekiyle v2'ye iletilir.
+    handle /api/v2/* {
+        forward_auth backend:3001 {
+            uri /api/auth/me
+        }
+        uri replace /api/v2/ /api/
+        reverse_proxy {$V2_API_UPSTREAM:v2-api:3100}
+    }
+
     handle /api/* {
-        reverse_proxy backend:3001
+        reverse_proxy {$BACKEND_UPSTREAM:backend:3001}
     }
 
     # Asset filenames carry a content hash, so they may be cached indefinitely.

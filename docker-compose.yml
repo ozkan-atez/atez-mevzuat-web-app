@@ -1,6 +1,90 @@
-name: resmi-gazete-manual-ingestion
+# ATEZ Mevzuat Radarı — tek komutla bütün yığın (eski uygulama + v2 + web + yerel Keycloak).
+#
+#   docker compose up -d --build
+#   → http://localhost:8890  (hesaplar: .local/docker-auth/accounts.json)
+#
+# Sırlar ve harici servis ayarları kök .env'den okunur (Git'e girmez; örnek: .env.example).
+# Host portları WEB_PORT / KEYCLOAK_PORT / DB_PORT ile değiştirilebilir. Üretim için
+# docker-compose.prod.yml kullanılır; vite ile canlı frontend için docker-compose.dev.yml eklenir.
+name: atez-mevzuat
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  OIDC_LOOPBACK_TARGET: keycloak:8080
+  MODULAR_OPERATIONS_ENABLED: ${MODULAR_OPERATIONS_ENABLED:-true}
+  DATABASE_URL: postgresql://atez:${POSTGRES_PASSWORD:-atezpassword}@db:5432/atez_db?schema=public
+  PORT: "3001"
+  API_HOST: 0.0.0.0
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-atez}:${RABBITMQ_PASSWORD:-atezpassword}@rabbitmq:5672
+  GOTENBERG_URL: http://gotenberg:3000
+  COMPONENT_STUDIO_URL: http://v2-api:3100
+  GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
+  GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+  GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+  GRAPH_SENDER_ADDRESS: ${GRAPH_SENDER_ADDRESS:-}
+  GRAPH_SENDER_NAME: ${GRAPH_SENDER_NAME:-ATEZ Mevzuat Radarı}
+  SCAN_TIMEZONE: ${SCAN_TIMEZONE:-Europe/Istanbul}
+  SOURCE_HOSTS: ${SOURCE_HOSTS:-resmigazete.gov.tr,www.resmigazete.gov.tr}
+  NODE_EXTRA_CA_CERTS: /app/certs/GeoTrustTLSRSACAG1.pem
+  S3_ENDPOINT: http://object-storage:9000
+  S3_REGION: eu-central-1
+  S3_BUCKET: resmi-gazete
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-atez-local-access}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-atez-local-secret-change-me}
+  S3_FORCE_PATH_STYLE: "true"
+  GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-false}
+  GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+  GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-key.json
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+  GEMINI_BROWSER_MODEL: ${GEMINI_BROWSER_MODEL:-gemini-3.8-flash}
+  GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-60000}
+  TARIFF_ENABLED: ${TARIFF_ENABLED:-false}
+  TARIFF_USERNAME: ${TARIFF_USERNAME:-}
+  TARIFF_PASSWORD: ${TARIFF_PASSWORD:-}
+
+x-v2-env: &v2-env
+  DATABASE_URL: postgresql://atez:${POSTGRES_PASSWORD:-atezpassword}@db:5432/atez_v2
+  AMQP_URL: amqp://${RABBITMQ_USER:-atez}:${RABBITMQ_PASSWORD:-atezpassword}@rabbitmq:5672/atez-mevzuat
+  S3_ENDPOINT: http://object-storage:9000
+  S3_REGION: eu-central-1
+  S3_BUCKET: atez-v2
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-atez-local-access}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-atez-local-secret-change-me}
+  S3_FORCE_PATH_STYLE: "true"
+  VERTEX_PROJECT: ${VERTEX_PROJECT:-}
+  VERTEX_LOCATION: ${VERTEX_LOCATION:-global}
+  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-key.json
+  GOTENBERG_URL: http://gotenberg:3000
+  TARIFF_USERNAME: ${TARIFF_USERNAME:-}
+  TARIFF_PASSWORD: ${TARIFF_PASSWORD:-}
+
+x-gcp-key: &gcp-key
+  # Vertex servis hesabı anahtarı: host yolu kök .env'deki GOOGLE_APPLICATION_CREDENTIALS.
+  type: bind
+  source: ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}
+  target: /run/secrets/gcp-key.json
+  read_only: true
 
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: atez
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atezpassword}
+      POSTGRES_DB: atez_db
+    ports: ["127.0.0.1:${DB_PORT:-35432}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-v2.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atez -d atez_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
   rabbitmq:
     image: rabbitmq:4.1-management
     environment:
@@ -13,25 +97,18 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 20
+      retries: 30
     restart: unless-stopped
 
-  db:
-    image: postgres:15-alpine
+  rabbitmq-init:
+    image: curlimages/curl:8.10.1
+    entrypoint: ["sh", "/init.sh"]
     environment:
-      POSTGRES_USER: atez
-      POSTGRES_PASSWORD: atezpassword
-      POSTGRES_DB: atez_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U atez -d atez_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    restart: unless-stopped
+      RABBITMQ_USER: ${RABBITMQ_USER:-atez}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-atezpassword}
+    volumes: ["./deploy/docker/rabbitmq-init.sh:/init.sh:ro"]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
 
   object-storage:
     image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
@@ -39,11 +116,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-atez-local-access}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-atez-local-secret-change-me}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - miniodata:/data
+    volumes: [miniodata:/data]
     restart: unless-stopped
 
   gotenberg:
@@ -51,104 +124,126 @@ services:
     command: ["gotenberg", "--chromium-disable-javascript=true", "--chromium-allow-list=file:///tmp/.*"]
     restart: unless-stopped
 
+  # Yerel kimlik: realm + test hesapları bir kez üretilir (.local/docker-auth), Keycloak içeri alır.
+  auth-init:
+    image: atez-mevzuat-backend:local
+    build: {context: ./backend}
+    entrypoint: ["node", "scripts/docker/auth-init.cjs"]
+    user: root
+    environment:
+      WEB_PORT: ${WEB_PORT:-8890}
+      KEYCLOAK_PORT: ${KEYCLOAK_PORT:-48080}
+    volumes: ["./.local/docker-auth:/out"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-48080}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "false"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-change-me-local}
+      KC_HEALTH_ENABLED: "true"
+    ports: ["127.0.0.1:${KEYCLOAK_PORT:-48080}:8080"]
+    volumes:
+      - ./.local/docker-auth/realm:/opt/keycloak/data/import:ro
+      - keycloakdata:/opt/keycloak/data/h2
+    depends_on:
+      auth-init: {condition: service_completed_successfully}
+    restart: unless-stopped
+
   backend:
     image: atez-mevzuat-backend:local
-    build:
-      context: ./backend
-    command: ["sh", "-c", "npm run prisma:migrate && npm run start:api"]
-    environment: &backend-environment
-      AUTH_PROFILE: ${AUTH_PROFILE:-}
-      APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:-}
-      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
-      OIDC_POST_LOGOUT_REDIRECT_URI: ${OIDC_POST_LOGOUT_REDIRECT_URI:-}
-      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:-}
-      SESSION_ENCRYPTION_KEY_ID: ${SESSION_ENCRYPTION_KEY_ID:-v1}
-      SESSION_IDLE_TTL_SECONDS: ${SESSION_IDLE_TTL_SECONDS:-1800}
-      SESSION_ABSOLUTE_TTL_SECONDS: ${SESSION_ABSOLUTE_TTL_SECONDS:-28800}
-      AUTH_WORKSPACE_KEY: ${AUTH_WORKSPACE_KEY:-atez}
-      OIDC_CA_FILE: ${OIDC_CA_FILE:-}
-      AUTH_API_ALLOWED_HOSTS: ${AUTH_API_ALLOWED_HOSTS:-}
-      WORKER_ACTOR_USER_ID: ${WORKER_ACTOR_USER_ID:-}
-      MODULAR_OPERATIONS_ENABLED: ${MODULAR_OPERATIONS_ENABLED:-false}
-      DATABASE_URL: postgresql://atez:atezpassword@db:5432/atez_db?schema=public
-      PORT: "3001"
-      RABBITMQ_URL: ${RABBITMQ_DOCKER_URL:-amqp://${RABBITMQ_USER:-atez}:${RABBITMQ_PASSWORD:-atezpassword}@rabbitmq:5672}
-      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
-      GRAPH_TENANT_ID: ${GRAPH_TENANT_ID:-}
-      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
-      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
-      GRAPH_SENDER_ADDRESS: ${GRAPH_SENDER_ADDRESS:-}
-      GRAPH_SENDER_NAME: ${GRAPH_SENDER_NAME:-ATEZ Mevzuat Radarı}
-      SCAN_TIMEZONE: ${SCAN_TIMEZONE:-Europe/Istanbul}
-      SOURCE_HOSTS: ${SOURCE_HOSTS:-resmigazete.gov.tr,www.resmigazete.gov.tr}
-      SOURCE_DELAY_MS: ${SOURCE_DELAY_MS:-750}
-      SOURCE_TIMEOUT_MS: ${SOURCE_TIMEOUT_MS:-30000}
-      SOURCE_MAX_ATTEMPTS: ${SOURCE_MAX_ATTEMPTS:-3}
-      NODE_EXTRA_CA_CERTS: /app/certs/GeoTrustTLSRSACAG1.pem
-      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-104857600}
-      MAX_RUN_BYTES: ${MAX_RUN_BYTES:-2147483648}
-      S3_ENDPOINT: http://object-storage:9000
-      S3_REGION: ${S3_REGION:-eu-central-1}
-      S3_BUCKET: ${S3_BUCKET:-resmi-gazete}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-atez-local-access}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-atez-local-secret-change-me}
-      S3_FORCE_PATH_STYLE: "true"
-      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-false}
-      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
-      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      TARIFF_ENABLED: ${TARIFF_ENABLED:-false}
-      TARIFF_USERNAME: ${TARIFF_USERNAME:-}
-      TARIFF_PASSWORD: ${TARIFF_PASSWORD:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
-      GEMINI_TIMEOUT_MS: ${GEMINI_TIMEOUT_MS:-30000}
-      GEMINI_MAX_ATTEMPTS: ${GEMINI_MAX_ATTEMPTS:-3}
-      GEMINI_MAX_CONTENT_BYTES: ${GEMINI_MAX_CONTENT_BYTES:-8000000}
-      PREVIOUS_SOURCE_CONCURRENCY: ${PREVIOUS_SOURCE_CONCURRENCY:-3}
-      TOPIC_ANALYSIS_CONCURRENCY: ${TOPIC_ANALYSIS_CONCURRENCY:-3}
+    build: {context: ./backend}
+    command: ["sh", "-c", "npm run prisma:migrate && node scripts/docker/auth-provision.cjs && npm run start:api"]
+    environment: *backend-env
+    volumes:
+      - ./.local/docker-auth:/auth:ro
+      - *gcp-key
     depends_on:
-      rabbitmq:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-      object-storage:
-        condition: service_started
+      db: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      object-storage: {condition: service_started}
+      auth-init: {condition: service_completed_successfully}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
-      retries: 30
+      retries: 60
     restart: unless-stopped
 
   worker:
     image: atez-mevzuat-backend:local
-    build:
-      context: ./backend
+    build: {context: ./backend}
     command: ["npm", "run", "start:worker"]
-    environment: *backend-environment
+    environment: *backend-env
+    volumes:
+      - ./.local/docker-auth:/auth:ro
+      - *gcp-key
     depends_on:
-      rabbitmq:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-      object-storage:
-        condition: service_started
+      backend: {condition: service_healthy}
+    restart: unless-stopped
+
+  v2-migrate:
+    image: atez-mevzuat-v2:local
+    build: {context: ./v2}
+    command: ["pnpm", "db:migrate"]
+    environment: *v2-env
+    depends_on:
+      db: {condition: service_healthy}
+
+  v2-api:
+    image: atez-mevzuat-v2:local
+    build: {context: ./v2}
+    command: ["pnpm", "api"]
+    environment: *v2-env
+    volumes: [*gcp-key]
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  v2-worker:
+    image: atez-mevzuat-v2:local
+    build: {context: ./v2}
+    command: ["pnpm", "worker"]
+    environment: *v2-env
+    volumes: [*gcp-key]
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+      rabbitmq-init: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  v2-relay:
+    image: atez-mevzuat-v2:local
+    build: {context: ./v2}
+    command: ["pnpm", "relay"]
+    environment: *v2-env
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+      rabbitmq-init: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  v2-scheduler:
+    image: atez-mevzuat-v2:local
+    build: {context: ./v2}
+    command: ["pnpm", "scheduler"]
+    environment: *v2-env
+    depends_on:
+      v2-migrate: {condition: service_completed_successfully}
+      rabbitmq-init: {condition: service_completed_successfully}
     restart: unless-stopped
 
   web:
-    build:
-      context: ./frontend
-    ports:
-      - "8888:80"
+    image: atez-mevzuat-web:local
+    build: {context: ./frontend}
+    ports: ["127.0.0.1:${WEB_PORT:-8890}:80"]
     depends_on:
-      backend:
-        condition: service_healthy
+      backend: {condition: service_healthy}
+      v2-api: {condition: service_started}
     restart: unless-stopped
 
 volumes:
   pgdata:
-  miniodata:
   rabbitmqdata:
+  miniodata:
+  keycloakdata:
