@@ -55,6 +55,8 @@ export interface TemplateRowV2 { id: string; title: string; description?: string
 export interface TemplateFullV2 { id: string; isDefault: boolean; version: number; versionId: string; definition: TemplateDefinitionV2; versions: { id: string; version: number; createdAt: string }[] }
 export interface ComponentDraft {
   ok: boolean
+  /** Asistanın sohbet cevabı (eski sunucularda olmayabilir). */
+  reply?: string
   name: string
   description: string
   category: ComponentCategory

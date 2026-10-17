@@ -7,6 +7,7 @@ import { openTestDb, truncateAll } from '@atez/platform/testing'
 const CONFIG = fileURLToPath(new URL('../../../config', import.meta.url))
 
 const zebraDraft = (bad: boolean) => ({
+  reply: 'Sade bir GTİP değer tablosu hazırladım.',
   name: 'GTİP değer tablosu (sade)',
   description: 'Karşılaştırma satırlarını GTİP ve yeni değerle gösterir.',
   category: 'GTIP_TABLOSU',
@@ -89,6 +90,12 @@ describe('Şablon stüdyosu ve bileşen havuzu (§10.1)', () => {
     expect(draft.repairRounds).toBe(1)
     expect(draft.ok).toBe(true)
     expect(draft.previewHtml).toContain('data-table')
+    expect(draft.reply).toMatch(/GTİP/)
+    // Few-shot: yerleşik örnekler tanım + ürettikleri HTML ile verilir; prompt tasarım dilini anlatır
+    const first = JSON.parse((calls.at(-2)!.parts[0] as { text: string }).text.split('\n\nBileşen tanımını üret.')[0]!)
+    expect(first.örnekler.length).toBeGreaterThanOrEqual(5)
+    expect(first.örnekler[0].html).toContain('<')
+    expect(calls.at(-2)!.system).toMatch(/Genel tasarım dilimiz/)
     // Onarım turunda doğrulama hataları modele verildi
     expect((calls.at(-1)!.parts.at(-1) as { text: string }).text).toMatch(/olmayanAlan/)
     const saved = await components.create({ name: draft.name, description: draft.description, category: draft.category, origin: 'AI', definition: draft.definition })

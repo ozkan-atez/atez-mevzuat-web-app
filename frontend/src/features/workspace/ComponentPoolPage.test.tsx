@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { cleanup, render, screen, waitFor, within } from '../../test/test-utils'
+import { cleanup, render, screen, waitFor } from '../../test/test-utils'
 import { ComponentPoolPage } from './ComponentPoolPage'
 
 const comps = [
@@ -48,23 +48,12 @@ describe('bileşen havuzu (§10.1)', () => {
       <MemoryRouter initialEntries={['/templates/components']}>
         <Routes>
           <Route path="/templates/components" element={<ComponentPoolPage />} />
-          <Route path="/chat" element={<p>sohbet ekranı</p>} />
+          <Route path="/chat/component" element={<p>sohbet ekranı</p>} />
         </Routes>
       </MemoryRouter>,
     )
     expect(await screen.findByRole('radio', { name: /Şablonlar/ })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /Bileşen oluştur/ }))
     expect(await screen.findByText('sohbet ekranı')).toBeInTheDocument()
-  })
-
-  it('AI paneli taslak üretir, önizler ve kullanıcı onayıyla kaydeder', async () => {
-    render(<MemoryRouter initialEntries={['/templates/components?ai=1']}><ComponentPoolPage /></MemoryRouter>)
-    const drawer = await screen.findByRole('dialog')
-    await userEvent.type(within(drawer).getByLabelText('Bileşen isteği'), 'Yapılacaklar kutusu')
-    await userEvent.click(within(drawer).getByRole('button', { name: /Oluştur/ }))
-    expect(await within(drawer).findByTitle('Taslak önizlemesi')).toBeInTheDocument()
-    expect(calls.some((c) => c.url === '/api/v2/components' && c.method === 'POST')).toBe(false) // otomatik kayıt yok
-    await userEvent.click(within(drawer).getByRole('button', { name: /Kaydet ve aktifleştir/ }))
-    await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({ url: '/api/v2/components', method: 'POST', body: expect.objectContaining({ name: 'Eylem kutusu', origin: 'AI', activate: true }) })))
   })
 })

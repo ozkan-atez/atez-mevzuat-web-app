@@ -139,3 +139,18 @@
 @media (prefers-reduced-motion: reduce) {
   .atez-chat-stop-icon { transition: none; }
 }
+/* Bileşen asistanı (sohbetten bileşen oluşturma) */
+.cchat-header-actions{display:flex;align-items:center;gap:14px;margin-left:auto;font-size:13px}
+.cchat-starters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:min(680px,100%);margin-top:8px}
+.cchat-starters button{padding:12px 14px;text-align:left;font:inherit;font-size:13px;line-height:1.5;color:var(--atez-text,#eee9f5);background:var(--atez-surface,#1e1928);border:1px solid var(--atez-border,#383145);border-radius:12px;cursor:pointer;transition:border-color .15s,transform .15s}
+.cchat-starters button:hover{border-color:var(--atez-accent,#c5aff5);transform:translateY(-1px)}
+.cchat-text{margin:0 0 10px;white-space:pre-wrap}
+.cchat-thinking{color:var(--atez-muted,#a9a0b7)}
+.cchat-send{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px}
+.atez-chat-message.assistant .atez-chat-message-body{flex:1}
+.cchat-card{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--atez-border,#383145);border-radius:14px;background:var(--atez-surface,#1e1928);transition:opacity .15s}
+.cchat-card.is-old{opacity:.7}
+.cchat-card-head{display:flex;align-items:center;gap:8px}.cchat-card-head .ant-input{padding:0;font-size:15px;font-weight:550;color:var(--atez-text,#eee9f5)}.cchat-card-head .ant-tag{margin:0}
+.cchat-card-desc{margin:0;font-size:12px;line-height:1.6;color:var(--atez-muted,#a9a0b7)}
+.cchat-card-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap}.cchat-card-actions .ant-typography{margin-right:auto;font-size:12px}
+@media(max-width:760px){.cchat-starters{grid-template-columns:1fr}.cchat-header-actions a{display:none}}

@@ -8,6 +8,7 @@ import { LoginPage } from './features/auth/LoginPage';
 import { RequireSession, RequirePermission } from './features/auth/RequireSession';
 import './app-shell.css';
 
+const ComponentChatPage = lazy(() => import('./features/chat/ComponentChatPage').then((module) => ({ default: module.ComponentChatPage })));
 const ChatScreen = lazy(() => import('./features/chat/ChatScreen').then((module) => ({ default: module.ChatScreen })));
 const ReportDetail = lazy(() => import('./features/reports/ReportDetail').then((module) => ({ default: module.ReportDetail })));
 const ReportsIndex = lazy(() => import('./features/reports/ReportsIndex').then((module) => ({ default: module.ReportsIndex })));
@@ -47,7 +48,7 @@ export default function App() {
           <Route path="/operations/:id" element={<OperationDetail />} />
           <Route path="/sources" element={<SourcesPage />} />
           <Route path="/source-runs/:id" element={<SourceRunDetail />} />
-          <Route element={<RequirePermission permission="config.manage" />}><Route path="/templates" element={<TemplatesPage />} /><Route path="/templates/components" element={<ComponentPoolPage />} /></Route>
+          <Route element={<RequirePermission permission="config.manage" />}><Route path="/templates" element={<TemplatesPage />} /><Route path="/templates/components" element={<ComponentPoolPage />} /><Route path="/chat/component" element={<ComponentChatPage />} /></Route>
           <Route path="/usage" element={<UsagePage />} />
           <Route path="/academy" element={<AcademyPage />} />
           <Route element={<RequirePermission permission="admin.manage" />}><Route path="/admin" element={<AdminPage />} /></Route>

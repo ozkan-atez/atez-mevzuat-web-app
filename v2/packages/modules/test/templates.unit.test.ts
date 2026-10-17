@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_COMPONENTS, SAMPLE_CONTEXT, appliesTo, renderComponent, validateComponent } from '../src/index'
+import { BUILTIN_COMPONENTS, SAMPLE_CONTEXT, appliesTo, pairOrphanSlot, renderComponent, validateComponent } from '../src/index'
 
 describe('yerleşik bileşenler', () => {
   for (const b of BUILTIN_COMPONENTS) {
@@ -59,5 +59,20 @@ describe('şablon eksik veri kuralı', () => {
     const sec = { id: 'ozet', componentKey: 'ozet', componentVersion: 1, enabled: true, order: 0, heading: 'Özet', sectionDescription: '', required: false }
     expect(TemplateDefinition.safeParse({ ...base, sections: [{ ...sec, missingDataRule: 'NOTE' }] }).success).toBe(true)
     expect(TemplateDefinition.safeParse({ ...base, sections: [{ ...sec, missingDataRule: 'BLOCK' }] }).success).toBe(false)
+  })
+})
+
+describe('pairOrphanSlot', () => {
+  const base = {
+    reply: '', name: 'x', description: '', category: 'NOT_UYARI' as const, appliesWhen: '', sampleSlots: [],
+    slots: [{ key: 'warning', kind: 'text' as const, instruction: 'uyarı' }, { key: 'actions', kind: 'list' as const, instruction: 'adımlar' }],
+  }
+  it('kaynaksız tek metin node\'u ile kullanılmayan tek text slot\'unu eşler', () => {
+    const out = pairOrphanSlot({ ...base, nodes: [{ type: 'note', variant: 'alert', parent: null }, { type: 'list', slot: 'actions', parent: null }] } as never)
+    expect(out.nodes[0]!.slot).toBe('warning')
+  })
+  it('belirsizse dokunmaz', () => {
+    const two = { ...base, nodes: [{ type: 'note', parent: null }, { type: 'text', parent: null }, { type: 'list', slot: 'actions', parent: null }] } as never
+    expect(pairOrphanSlot(two)).toBe(two)
   })
 })

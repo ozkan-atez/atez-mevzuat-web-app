@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Drawer, Empty, List, Popconfirm, Select, Segmented, Skeleton, Space, Switch, Tag, Tooltip, Typography, message } from 'antd'
 import { DeleteOutlined, HistoryOutlined, InboxOutlined, MessageOutlined } from '@ant-design/icons'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Can } from '../auth/Can'
 import { studioApi } from './studioApi'
 import { CATEGORY_LABELS, ORIGIN_LABELS, STATUS_LABELS, type StudioComponent, type StudioComponentDetail } from './studio-types'
 import { StudioHeader } from './StudioHeader'
 import { StudioPreview } from './StudioPreview'
-import { ComponentComposerDrawer } from './ComponentComposerDrawer'
 import './template-studio.css'
 
 const originColor = { BUILTIN: 'default', USER: 'processing', AI: 'purple' } as const
@@ -159,7 +158,6 @@ function ComponentDetailDrawer({ id, onClose, onChanged }: { id: string | null; 
 }
 
 export function ComponentPoolPage() {
-  const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const [items, setItems] = useState<StudioComponent[]>([])
   const [loading, setLoading] = useState(true)
@@ -169,7 +167,6 @@ export function ComponentPoolPage() {
   const [origin, setOrigin] = useState<string | undefined>()
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
-  const composerOpen = params.get('ai') === '1'
   const load = useCallback(async () => {
     setError('')
     try {
@@ -195,7 +192,7 @@ export function ComponentPoolPage() {
         searchLabel="Bileşen ara"
         action={
           <Can permission="config.manage">
-            <Button type="primary" size="large" icon={<MessageOutlined />} onClick={() => navigate('/chat')}>
+            <Button type="primary" size="large" icon={<MessageOutlined />} onClick={() => navigate('/chat/component')}>
               Bileşen oluştur
             </Button>
           </Can>
@@ -235,13 +232,12 @@ export function ComponentPoolPage() {
         </div>
       ) : (
         <Empty description="Bu filtrelerle bileşen yok.">
-          <Button icon={<MessageOutlined />} onClick={() => navigate('/chat')}>
+          <Button icon={<MessageOutlined />} onClick={() => navigate('/chat/component')}>
             Sohbette oluştur
           </Button>
         </Empty>
       )}
       <ComponentDetailDrawer id={openId} onClose={() => setOpenId(null)} onChanged={() => void load()} />
-      <ComponentComposerDrawer open={composerOpen} onClose={() => setParams({})} onSaved={() => void load()} />
     </div>
   )
 }

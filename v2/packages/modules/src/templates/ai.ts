@@ -4,10 +4,12 @@ import { PermanentError, toGeminiJsonSchema, type AiCallContext, type AiGateway 
 import { loadPrompt } from '../config/loaders'
 import { BUILTIN_COMPONENTS } from './builtins'
 import { BINDING_CATALOG, SAMPLE_CONTEXT } from './context'
-import { ALLOWED_CLASSES, renderComponentPreview, type Shell } from './render'
+import { ALLOWED_CLASSES, renderComponent, renderComponentPreview, type Shell } from './render'
 import { validateComponent } from './validate'
 
-const COMPONENT_PROMPT = 'component-create.v1'
+const COMPONENT_PROMPT = 'component-create.v2'
+/** Few-shot örnekleri: tanım + örnek veriyle ürettiği HTML; farklı node türlerini kapsar. */
+const EXAMPLE_KEYS = ['ozet', 'karsilastirma-tablosu', 'yururluk', 'etkilenenler', 'onerilen-aksiyonlar', 'sure-uzatimi', 'yururlukten-kaldirma']
 const DESCRIBE_PROMPT = 'template-describe.v1'
 const COMPILE_PROMPT = 'template-compile.v1'
 
@@ -20,6 +22,8 @@ const AiNode = ComponentNode.omit({ children: true }).extend({ parent: z.number(
 
 /** AI çıktısı: record yerine dizi (Gemini şeması için); tanım kodla kurulur. */
 export const ComponentDraftOutput = z.object({
+  /** Kullanıcıya sohbet cevabı (kısa). */
+  reply: z.string().max(1500),
   name: z.string().min(1).max(120),
   description: z.string().max(1000),
   category: ComponentCategory,
@@ -32,6 +36,8 @@ export type ComponentDraftOutput = z.infer<typeof ComponentDraftOutput>
 
 export interface ComponentDraft {
   ok: boolean
+  /** Asistanın sohbet cevabı. */
+  reply: string
   name: string
   description: string
   category: z.infer<typeof ComponentCategory>
@@ -45,6 +51,22 @@ export interface ComponentDraft {
 }
 
 /** Düz listeden iki seviyeli ağaç: parent'ı geçersiz olan node kök kalır (doğrulama yakalar). */
+const TEXT_NODES = new Set(['heading', 'text', 'badge', 'note'])
+/**
+ * Dar, deterministik onarım: model metin node'unun kaynağını boş bırakıp tanımladığı bir slot'u
+ * hiç kullanmadığında (canlıda `note` için tekrarlanan hata, 2026-10-17) — kaynaksız metin node'u
+ * ile kullanılmayan text slot'u birer taneyse ikisi eşlenir. Başka durumda dokunulmaz.
+ */
+export function pairOrphanSlot(o: ComponentDraftOutput): ComponentDraftOutput {
+  const empty = (v: unknown) => v === null || v === undefined || v === ''
+  const orphans = o.nodes.map((n, i) => ({ n, i })).filter(({ n }) => TEXT_NODES.has(n.type) && empty(n.text) && empty(n.bind) && empty(n.slot))
+  const used = new Set(o.nodes.flatMap((n) => [n.slot, n.before?.slot, n.after?.slot]).filter(Boolean))
+  const unused = o.slots.filter((s) => s.kind === 'text' && !used.has(s.key))
+  if (orphans.length !== 1 || unused.length !== 1) return o
+  const at = orphans[0]!.i
+  return { ...o, nodes: o.nodes.map((n, i) => (i === at ? { ...n, slot: unused[0]!.key } : n)) }
+}
+
 export function buildTree(nodes: ComponentDraftOutput['nodes']): unknown[] {
   const roots: Record<string, unknown>[] = []
   const byIndex = new Map<number, Record<string, unknown>>()
@@ -94,7 +116,9 @@ export class AiStudio {
 
   async draftComponent(input: { request: string; base?: { name: string; description: string; category: string; definition: ComponentDefinition } | null; conversation?: { role: 'user' | 'assistant'; content: string }[]; context?: AiCallContext }): Promise<ComponentDraft> {
     const prompt = loadPrompt(this.configDir, COMPONENT_PROMPT)
-    const examples = BUILTIN_COMPONENTS.filter((b) => ['ozet', 'karsilastirma-tablosu', 'etkilenenler'].includes(b.key)).map((b) => ({ name: b.name, description: b.description, category: b.category, definition: { ...b.definition, nodes: flattenTree(b.definition.nodes) } }))
+    const examples = EXAMPLE_KEYS.map((k) => BUILTIN_COMPONENTS.find((b) => b.key === k))
+      .filter((b) => !!b)
+      .map((b) => ({ name: b.name, description: b.description, category: b.category, tanım: { ...b.definition, nodes: flattenTree(b.definition.nodes) }, html: renderComponent(b.definition, SAMPLE_CONTEXT, b.definition.sampleData.slots) }))
     const payload = {
       istek: input.request,
       mevcutTaslak: input.base ? { ...input.base, definition: { ...input.base.definition, nodes: flattenTree(input.base.definition.nodes) } } : null,
@@ -118,7 +142,7 @@ export class AiStudio {
         context: input.context,
       })
       aiCallIds.push(res.aiCallId)
-      return res.data
+      return pairOrphanSlot(res.data)
     }
     let out = await call()
     let v = validateComponent(toDefinition(out))
@@ -130,6 +154,7 @@ export class AiStudio {
     }
     return {
       ok: v.ok,
+      reply: out.reply,
       name: out.name,
       description: out.description,
       category: out.category,
