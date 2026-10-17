@@ -48,7 +48,7 @@ describe('bileşen havuzu (§10.1)', () => {
       <MemoryRouter initialEntries={['/templates/components']}>
         <Routes>
           <Route path="/templates/components" element={<ComponentPoolPage />} />
-          <Route path="/chat/component" element={<p>sohbet ekranı</p>} />
+          <Route path="/chat" element={<p>sohbet ekranı</p>} />
         </Routes>
       </MemoryRouter>,
     )

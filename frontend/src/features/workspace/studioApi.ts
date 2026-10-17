@@ -29,7 +29,8 @@ export const studioApi = {
     studioRequest<StudioComponent[]>(`components?${new URLSearchParams(Object.entries(q).filter(([, v]) => !!v) as [string, string][])}`),
   component: (id: string) => studioRequest<StudioComponentDetail>(`components/${id}`),
   componentPreview: (id: string, version?: number) => studioRequest<{ html: string }>(`components/${id}/preview${version ? `?version=${version}` : ''}`),
-  createComponent: (b: { name: string; description: string; category: string; origin: 'USER' | 'AI'; definition: unknown; activate: boolean }) => studioRequest<StudioComponent>('components', json('POST', b)),
+  addComponentVersion: (id: string, b: { definition: unknown; note?: string; name?: string; description?: string }) => studioRequest<StudioComponent>(`components/${id}/versions`, json('POST', b)),
+  createComponent: (b: { key?: string; name: string; description: string; category: string; origin: 'USER' | 'AI'; definition: unknown; activate: boolean }) => studioRequest<StudioComponent>('components', json('POST', b)),
   setStatus: (id: string, status: 'ACTIVE' | 'INACTIVE') => studioRequest<{ ok: true }>(`components/${id}`, json('PATCH', { status })),
   removeComponent: (id: string) => studioRequest<{ result: 'DELETED' | 'ARCHIVED'; usage: number }>(`components/${id}`, json('DELETE')),
   draftComponent: (b: { request: string; base?: { name: string; description: string; category: string; definition: ComponentDefinition } | null; conversation?: { role: 'user' | 'assistant'; content: string }[] }) =>

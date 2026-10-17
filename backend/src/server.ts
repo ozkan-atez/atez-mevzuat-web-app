@@ -1,3 +1,4 @@
+import { HttpComponentStudio } from './modules/chat/application/component-studio'
 import { backgroundUsageModel } from './modules/usage/background-usage'
 import { PrismaUsageRecorder } from './modules/usage/prisma-usage-recorder'
 import { GeminiAiModelClient } from './modules/ai/infrastructure/gemini-ai-model-client'
@@ -32,6 +33,7 @@ async function start() {
       return {...(response.text ? {text:response.text} : {}),...(response.responseId ? {responseId:response.responseId} : {}),...(response.usageMetadata ? {usageMetadata:response.usageMetadata} : {})}
     }}, {timeoutMs:env.gemini.timeoutMs}), new PrismaUsageRecorder(prisma), {conversationType:'TEMPLATE', mode:'TEMPLATE', usageLabel:'Şablon oluşturma / düzenleme'})} : {}),
     ...(tariffCredentials ? { tariffLookup: new SingleWindowTariffLookup(tariffCredentials) } : {}),
+    ...(env.componentStudioUrl ? { componentStudio: new HttpComponentStudio({ baseUrl: env.componentStudioUrl }) } : {}),
     pdfRenderer: new GotenbergPdfRenderer({ url: env.gotenberg.url, timeoutMs: env.gotenberg.timeoutMs }),
     mailSender: new GraphMailSender(env.graph),
     mailSenderIdentity: { address: env.graph.senderAddress, name: env.graph.senderName },

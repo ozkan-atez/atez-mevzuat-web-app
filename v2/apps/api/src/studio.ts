@@ -65,7 +65,7 @@ export async function registerStudio(app: FastifyInstance, deps: { db: Db; ai: A
   })
   app.post('/components', async (req, reply) => {
     const body = z
-      .object({ name: z.string().min(1).max(120), description: z.string().max(1000), category: ComponentCategory, origin: z.enum(['USER', 'AI']), definition: z.unknown(), activate: z.boolean().default(false) })
+      .object({ key: z.string().regex(/^[a-z][a-z0-9-]{1,47}$/).optional(), name: z.string().min(1).max(120), description: z.string().max(1000), category: ComponentCategory, origin: z.enum(['USER', 'AI']), definition: z.unknown(), activate: z.boolean().default(false) })
       .parse(req.body)
     return reply.code(201).send(await components.create(body))
   })

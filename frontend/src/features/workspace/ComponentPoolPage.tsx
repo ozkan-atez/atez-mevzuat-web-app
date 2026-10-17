@@ -192,7 +192,7 @@ export function ComponentPoolPage() {
         searchLabel="Bileşen ara"
         action={
           <Can permission="config.manage">
-            <Button type="primary" size="large" icon={<MessageOutlined />} onClick={() => navigate('/chat/component')}>
+            <Button type="primary" size="large" icon={<MessageOutlined />} onClick={() => navigate('/chat')}>
               Bileşen oluştur
             </Button>
           </Can>
@@ -232,7 +232,7 @@ export function ComponentPoolPage() {
         </div>
       ) : (
         <Empty description="Bu filtrelerle bileşen yok.">
-          <Button icon={<MessageOutlined />} onClick={() => navigate('/chat/component')}>
+          <Button icon={<MessageOutlined />} onClick={() => navigate('/chat')}>
             Sohbette oluştur
           </Button>
         </Empty>

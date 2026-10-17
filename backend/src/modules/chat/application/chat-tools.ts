@@ -6,6 +6,8 @@ import { normalizeTurkish } from './resolve-date'
 import type { AssistantKnowledge } from './assistant-knowledge'
 import { createScanRunSchema } from '../../scan-runs/scan-runs.schemas'
 import { normalizeGtip, type TariffLookup } from '../../tariff/tariff-lookup'
+import { randomUUID } from 'node:crypto'
+import { draftSummaryForModel, type ComponentDraftCard, type ComponentStudio } from './component-studio'
 
 export interface ChatScanStarter {
   startScan(input: { targetDate: string; requestKey: string }): Promise<{ id: string; status: string; targetDate: string }>
@@ -27,6 +29,35 @@ const isoDate = { type: 'string', description: 'YYYY-AA-GG biçiminde tarih.' } 
  * more reliable than a translated one.
  */
 export const CHAT_TOOLS: ChatToolDeclaration[] = [
+  {
+    name: 'bilesenleri_listele',
+    description: 'Rapor bileşen havuzundaki bileşenleri (anahtar, ad, kategori, durum, açıklama) listeler. Mevcut bir bileşeni değiştirmeden önce doğru bileşeni bulmak için kullan.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'bilesen_olustur',
+    description: 'Kullanıcının tarifine göre yeni bir rapor bileşeni taslağı üretir (ör. "yürürlük tarihini öne çıkaran kart", "GTİP tablosu", "eylem kutusu"). Taslak tasarım dilimize ve bileşen formatımıza uygun üretilir, doğrulanır ve kullanıcıya önizleme kartıyla gösterilir; havuza kaydetmez. Aynı sohbette önceki taslağı düzeltmek için oncekiTaslakId ver.',
+    parameters: {
+      type: 'object',
+      properties: {
+        istek: { type: 'string', description: 'Kullanıcının bileşen tarifi; sohbetteki ayrıntılarla birlikte eksiksiz ve Türkçe.' },
+        oncekiTaslakId: { type: 'string', description: 'Düzeltilecek önceki taslağın taslakId değeri (bilesen_olustur/bilesen_degistir sonucundan).' },
+      },
+      required: ['istek'],
+    },
+  },
+  {
+    name: 'bilesen_degistir',
+    description: 'Havuzdaki mevcut bir bileşeni kullanıcının isteğine göre değiştiren taslak üretir; kullanıcı kart üzerinden yeni sürüm olarak kaydeder. Bileşen anahtarını bilesenleri_listele ile bul.',
+    parameters: {
+      type: 'object',
+      properties: {
+        bilesenAnahtari: { type: 'string', description: 'Değiştirilecek bileşenin anahtarı (key).' },
+        istek: { type: 'string', description: 'Yapılacak değişiklik; eksiksiz ve Türkçe.' },
+      },
+      required: ['bilesenAnahtari', 'istek'],
+    },
+  },
   { name: 'bagimsiz_islem_baslat', description: 'Yalnız kullanıcının açıkça istediği tek aşamayı kuyruğa alır. DISCOVER keşif, CAPTURE indirme, FILTER filtre, PREVIOUS_SOURCES önceki kaynak araştırması, TARIFF_LOOKUP tarife, BUILD_REPORT taslak ve REVISE_* revizyondur. Belge sürümleri mesajdaki seçimden alınır. Yayımlama veya e-posta göndermez. Kaynak kimliğini islem_kaynaklari_listele ile bulun; görev kimliklerini kayıtlı işlem çıktısından alın.', parameters: { type: 'object', properties: { operation: {type:'string',enum:['DISCOVER','CAPTURE','FILTER','PREVIOUS_SOURCES','TARIFF_LOOKUP','BUILD_REPORT','REVISE_ANALYSIS','REVISE_REPORT']}, mode:{type:'string',enum:['REUSE_ONLY','FILL_MISSING','FORCE']}, sourceId:{type:'string'},date:isoDate,url:{type:'string'},code:{type:'string'},origin:{type:'string'},previousDate:isoDate,analysisTaskId:{type:'string'},reportTaskId:{type:'string'},templateId:{type:'string'},instruction:{type:'string'},reportEdits:{type:'object',properties:{title:{type:'string'},summary:{type:'string'},detailedAnalysis:{type:'string'}}} }, required:['operation'] } },
   { name: 'islem_kaynaklari_listele', description: 'Bağımsız keşif ve indirme için yapılandırılmış kaynak kimliklerini okur; hesap veya erişim anahtarı döndürmez.', parameters:{type:'object',properties:{}} },
   { name: 'islem_durumu_getir', description: 'Kayıtlı bağımsız işlemin adım ve çıktı durumunu getirir. Yeni işlem başlatmaz.', parameters: { type: 'object', properties: { islemId: { type: 'string' } }, required: ['islemId'] } },
@@ -157,6 +188,13 @@ export const CHAT_TOOLS: ChatToolDeclaration[] = [
   },
 ]
 
+/** Sohbet turuna özel bileşen bağlamı: stüdyo istemcisi, geçmişteki taslağı bulma, yeni taslağı toplama. */
+export interface ChatComponentContext {
+  studio: ComponentStudio
+  findDraft(id: string): Promise<ComponentDraftCard | null>
+  onDraft(card: ComponentDraftCard): void
+}
+
 export class UnknownChatToolError extends Error {
   override name = 'UnknownChatToolError'
 }
@@ -172,13 +210,43 @@ export async function runChatTool(
   name: string,
   args: Record<string, unknown>,
   knowledge: AssistantKnowledge,
-  context?: ChatScanStarter | { scanStarter?: ChatScanStarter | undefined; tariffLookup?: TariffLookup | undefined; operations?: ChatOperations | undefined; selectedVersionIds?: string[]; templateId?: string; userContent?: string },
+  context?: ChatScanStarter | { scanStarter?: ChatScanStarter | undefined; tariffLookup?: TariffLookup | undefined; operations?: ChatOperations | undefined; selectedVersionIds?: string[]; templateId?: string; userContent?: string; components?: ChatComponentContext | undefined },
   requestKey?: string,
 ): Promise<unknown> {
   const scanStarter = context && 'startScan' in context ? context : context?.scanStarter
   const tariffLookup = context && !('startScan' in context) ? context.tariffLookup : undefined
   const operationContext = context && !('startScan' in context) ? context : undefined
+  const components = context && !('startScan' in context) ? context.components : undefined
   switch (name) {
+    case 'bilesenleri_listele': {
+      if (!components) return { durum: 'kullanilamiyor', aciklama: 'Bileşen stüdyosu yapılandırılmamış.' }
+      const list = await components.studio.listComponents()
+      return { bilesenler: list.filter((c) => c.status !== 'ARCHIVED').map((c) => ({ anahtar: c.key, ad: c.name, kategori: c.category, durum: c.status, aciklama: c.description.slice(0, 200) })) }
+    }
+    case 'bilesen_olustur': {
+      if (!components) return { durum: 'kullanilamiyor', aciklama: 'Bileşen stüdyosu yapılandırılmamış.' }
+      const request = requireText(args.istek, 'istek').slice(0, 2000)
+      const previousId = typeof args.oncekiTaslakId === 'string' ? args.oncekiTaslakId.trim() : ''
+      const previous = previousId ? await components.findDraft(previousId) : null
+      if (previousId && !previous) throw new UnknownChatToolError('Önceki taslak bu sohbette bulunamadı.')
+      const base = previous?.definition ? { name: previous.name, description: previous.description, category: previous.category, definition: previous.definition } : null
+      const draft = await components.studio.draft({ request, base })
+      const card: ComponentDraftCard = { id: randomUUID(), ...(previous?.target ? { target: previous.target } : {}), ok: draft.ok, name: draft.name, description: draft.description, category: draft.category, definition: draft.definition, issues: draft.issues, previewHtml: draft.previewHtml }
+      components.onDraft(card)
+      return draftSummaryForModel(card, draft.reply)
+    }
+    case 'bilesen_degistir': {
+      if (!components) return { durum: 'kullanilamiyor', aciklama: 'Bileşen stüdyosu yapılandırılmamış.' }
+      const key = requireText(args.bilesenAnahtari, 'bilesenAnahtari')
+      const summary = (await components.studio.listComponents()).find((c) => c.key === key)
+      if (!summary) return { bulunamadi: `"${key}" anahtarlı bileşen havuzda yok; bilesenleri_listele ile doğru anahtarı bulun.` }
+      const full = await components.studio.getComponent(summary.id)
+      if (!full) return { bulunamadi: `"${key}" bileşeni okunamadı.` }
+      const draft = await components.studio.draft({ request: requireText(args.istek, 'istek').slice(0, 2000), base: { name: full.name, description: full.description, category: full.category, definition: full.definition } })
+      const card: ComponentDraftCard = { id: randomUUID(), target: { id: full.id, key: full.key, name: full.name, version: full.currentVersion, origin: full.origin }, ok: draft.ok, name: draft.name, description: draft.description, category: draft.category, definition: draft.definition, issues: draft.issues, previewHtml: draft.previewHtml }
+      components.onDraft(card)
+      return draftSummaryForModel(card, draft.reply)
+    }
     case 'islem_durumu_getir':
       if (!operationContext?.operations) throw new UnknownChatToolError('İşlem servisi kullanılamıyor.')
       return operationContext.operations.get(requireText(args.islemId, 'islemId'))

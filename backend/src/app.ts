@@ -71,6 +71,7 @@ interface BuildAppOptions {
   chatKnowledge?: AssistantKnowledge
   chatScanStarter?: ChatScanStarter
   tariffLookup?: TariffLookup | undefined
+  componentStudio?: import('./modules/chat/application/component-studio').ComponentStudio | undefined
   healthChecks?: HealthChecks
 }
 
@@ -145,6 +146,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     ...(options.browserResearch?{browserResearch:options.browserResearch}:{}),
     ...(operations ? { operations } : {}),
     tariffLookup: options.tariffLookup,
+    componentStudio: options.componentStudio,
     modelName: options.chatModelName ?? 'gemini-3.6-flash',
     knowledge: options.chatKnowledge ?? new PrismaAssistantKnowledge(prisma, {
       getContent: async (objectKey: string) => {

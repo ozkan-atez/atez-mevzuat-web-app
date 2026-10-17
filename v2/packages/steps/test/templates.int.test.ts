@@ -156,6 +156,14 @@ describe('Şablon stüdyosu ve bileşen havuzu (§10.1)', () => {
     await expect(templates.remove(def.id)).rejects.toThrow(/Varsayılan şablon silinemez/)
   })
 
+  it('açık anahtarla ikinci kayıt reddedilir; aynı tanım yeni sürüm açmaz', async () => {
+    const def = { schemaVersion: 1, nodes: [{ type: 'note', text: 'İdempotent' }], slots: [], appliesWhen: '', bindings: [], sampleData: { slots: {} } }
+    const c = await components.create({ key: 'ai-1234abcd', name: 'Sohbet taslağı', description: '', category: 'NOT_UYARI', origin: 'AI', definition: def })
+    await expect(components.create({ key: 'ai-1234abcd', name: 'Sohbet taslağı', description: '', category: 'NOT_UYARI', origin: 'AI', definition: def })).rejects.toThrow(/zaten havuza kaydedildi/)
+    expect((await components.addVersion(c.id, { definition: def })).currentVersion).toBe(1)
+    expect((await components.addVersion(c.id, { definition: { ...def, nodes: [{ type: 'note', text: 'Yeni' }] } })).currentVersion).toBe(2)
+  })
+
   it('chat aracı propose_template_change kaydetmez, aksiyon kartı döner', async () => {
     const t = (await templates.list()).find((x) => x.title === 'Müşteri bülteni')!
     const before = (await templates.get(t.id))!.version

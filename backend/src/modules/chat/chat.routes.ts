@@ -23,6 +23,7 @@ export interface ChatRouteOptions {
   scanStarter: ChatScanStarter
   tariffLookup?: TariffLookup | undefined
   operations?: ChatOperations | undefined
+  componentStudio?: import('./application/component-studio').ComponentStudio | undefined
 }
 
 const messageBodySchema = z.object({

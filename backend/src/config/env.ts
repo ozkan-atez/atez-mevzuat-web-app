@@ -30,6 +30,8 @@ const schema = z.object({
   TOPIC_ANALYSIS_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
   GOTENBERG_URL: z.string().url().default('http://gotenberg:3000'),
   GOTENBERG_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  /** v2 şablon stüdyosu (bileşen havuzu + AI bileşen servisi); boşsa sohbetin bileşen araçları kapalıdır. */
+  COMPONENT_STUDIO_URL: z.string().url().optional(),
   GRAPH_TENANT_ID: optionalText,
   GRAPH_CLIENT_ID: optionalText,
   GRAPH_CLIENT_SECRET: optionalText,
@@ -65,6 +67,7 @@ export interface AppEnv {
     previousSourceConcurrency: number
     topicConcurrency: number
   }
+  componentStudioUrl: string | undefined
   gotenberg: {
     url: string
     timeoutMs: number
@@ -108,6 +111,7 @@ export function loadEnv(input: NodeJS.ProcessEnv = process.env): AppEnv {
       previousSourceConcurrency: value.PREVIOUS_SOURCE_CONCURRENCY,
       topicConcurrency: value.TOPIC_ANALYSIS_CONCURRENCY,
     },
+    componentStudioUrl: value.COMPONENT_STUDIO_URL,
     gotenberg: {
       url: value.GOTENBERG_URL,
       timeoutMs: value.GOTENBERG_TIMEOUT_MS,

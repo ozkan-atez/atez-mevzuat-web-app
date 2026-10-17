@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Alert, Tag } from 'antd'
 import { GlobalOutlined, SearchOutlined } from '@ant-design/icons'
 import { OperationTaskCard } from '../operations/OperationTaskCard'
+import { ComponentDraftCardView } from './ComponentDraftCardView'
 import { renderMarkdown } from './renderMarkdown'
 import { STREAMING_MESSAGE_ID } from './useConversation'
 import type { ChatMessage } from './types'
@@ -50,6 +51,7 @@ export function ConversationMessages({ messages, isSending, activity }: Props) {
               </div>}
               {message.documentVersionIds?.length ? <Tag>{message.documentVersionIds.length} belge eklendi</Tag> : null}
               {message.operationRequestIds?.map(id => <OperationTaskCard key={id} requestId={id} />)}
+              {message.context?.componentDrafts?.map(draft => <ComponentDraftCardView key={draft.id} draft={draft} />)}
               {isStreaming && isSending && (
                 activity
                   ? <Tag icon={<SearchOutlined />}>{activity}…</Tag>

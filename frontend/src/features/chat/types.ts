@@ -25,6 +25,21 @@ export interface ChatMessage {
   createdAt: string
   documentVersionIds?: string[]
   operationRequestIds?: string[]
+  /** Sunucunun mesaj bağlamı; burada yalnızca sohbetten üretilen bileşen taslak kartları okunur. */
+  context?: { componentDrafts?: ComponentDraftCard[] }
+}
+
+/** Sohbette `bilesen_olustur` / `bilesen_degistir` aracının ürettiği taslak (backend ComponentDraftCard). */
+export interface ComponentDraftCard {
+  id: string
+  target?: { id: string; key: string; name: string; version: number; origin: string }
+  ok: boolean
+  name: string
+  description: string
+  category: string
+  definition: unknown
+  issues: string[]
+  previewHtml: string | null
 }
 
 export interface ChatSession {

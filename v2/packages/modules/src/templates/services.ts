@@ -106,6 +106,8 @@ export class ComponentService {
   async create(input: { key?: string; name: string; description: string; category: ComponentCategory; origin: 'USER' | 'AI'; definition: unknown; activate?: boolean }): Promise<ComponentRecord> {
     const v = validateComponent(input.definition)
     if (!v.ok) throw new ValidationFailed(v.issues)
+    // Açık anahtar idempotency anahtarıdır (ör. sohbet taslağı): ikinci kayıt yeni bileşen açmaz.
+    if (input.key && (await this.keyExists(input.key))) throw new PermanentError('Bu taslak zaten havuza kaydedildi.', 'ALREADY_EXISTS')
     let key = input.key ?? slugify(input.name)
     for (let i = 2; await this.keyExists(key); i++) key = `${slugify(input.name).slice(0, 36)}-${i}`
     return this.db.transaction(async (tx) => {
@@ -125,6 +127,9 @@ export class ComponentService {
       const [c] = await tx.select().from(component).where(eq(component.id, id)).for('update')
       if (!c) throw new PermanentError('Bileşen yok', 'NOT_FOUND')
       if (c.origin === 'BUILTIN') throw new PermanentError('Yerleşik bileşenler koddan sürümlenir; kopyalayıp düzenleyin', 'BUILTIN_READONLY')
+      // Aynı tanımın tekrar kaydı (ör. karttaki butona ikinci kez basmak) yeni sürüm açmaz.
+      const [cur] = await tx.select().from(componentVersion).where(and(eq(componentVersion.componentId, id), eq(componentVersion.version, c.currentVersion)))
+      if (cur && canonicalJson(cur.definition) === canonicalJson(v.definition)) return toRecord(c, v.definition!)
       const next = c.currentVersion + 1
       await tx.insert(componentVersion).values({ componentId: id, version: next, definition: v.definition!, note: input.note ?? null })
       const [u] = await tx
