@@ -266,6 +266,7 @@ function TemplateEditor({ id, onBack }: { id: string; onBack: () => void }) {
           <Typography.Title level={3}>Rapor şablonu</Typography.Title>
           <Tag>Sürüm {base.version}</Tag>
           {base.isDefault && <Tag color="success" icon={<StarFilled />}>Varsayılan</Tag>}
+          <StudioNav />
         </Space>
         <Space>
           <Typography.Text type="secondary">{dirty ? 'Kaydedilmemiş değişiklikler' : 'Kaydedildi'}</Typography.Text>
