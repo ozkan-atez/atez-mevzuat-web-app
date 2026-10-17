@@ -2,3 +2,5 @@ export { SourcesPage, TemplatesPage, UsagePage, AdminPage } from './CatalogPages
 export { AutomationsPage, AutomationDetailPage } from './AutomationPages'
 export { AcademyPage } from './AcademyPage'
 export { SourceRunDetail } from './SourceRunDetail'
+export { ComponentPoolPage } from './ComponentPoolPage'
+export { LegacyTemplatesPage } from './LegacyTemplatesPage'

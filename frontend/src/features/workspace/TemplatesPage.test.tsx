@@ -1,75 +1,94 @@
-import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest'
-import { cleanup,fireEvent,render,screen,waitFor } from '../../test/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
+import { cleanup, render, screen, waitFor, within } from '../../test/test-utils'
 import { TemplatesPage } from './TemplatesPage'
-import type { TemplateDefinition } from './template-types'
-const mocks=vi.hoisted(()=>({list:vi.fn(),request:vi.fn()}))
-vi.mock('./api',async()=>({...await vi.importActual('./api'),listTemplates:mocks.list,workspaceRequest:mocks.request}))
-const definition:TemplateDefinition={schemaVersion:2,requirements:[{id:'summary',heading:'Yönetici özeti',instruction:'Kararları kaynaklardan özetle.',required:true,enabled:true,scope:'REPORT',length:'SHORT',condition:'',missing:'NOTE'}],components:[{id:'text',name:'Metin',description:'Paragraf',nodes:[{id:'body',type:'paragraph',field:'body',label:'',text:''}]}],layout:[{id:'slot-summary',requirementId:'summary',componentId:'auto',enabled:true,title:'',staticText:'',columns:1,tone:'plain'}],theme:{accent:'#58358c',background:'#ffffff',fontSize:14,spacing:16},shell:{heading:'ATEZ',footer:'',showHeader:true,showLogo:true,showFooter:true}}
-const template={id:'t1',name:'Yönetim',description:'',definition,sections:[{id:'summary',heading:'Eski özet',html:'<p>İçerik</p>',enabled:true}],html:'{{sections}}',isActive:true,revision:3}
-beforeEach(()=>{vi.clearAllMocks();mocks.list.mockResolvedValue({templates:[template],components:[],defaultHtml:'{{sections}}',defaultSections:template.sections,defaultDefinition:definition});mocks.request.mockImplementation(async(path:string)=>path==='templates/preview'?{html:'<p>Önizleme</p>',components:{text:'<p>Metin</p>','rate-card':'<p>Oran</p>'}}:{...template,revision:4})})
-afterEach(cleanup)
-describe('template studio',()=>{
- it('edits requirements, undoes changes and saves with a revision precondition',async()=>{
-  render(<TemplatesPage/>);fireEvent.click(await screen.findByRole('button',{name:'Şablonu düzenle'}))
-  fireEvent.change(screen.getByLabelText('Şablon açıklaması'),{target:{value:'Yeni gereksinim'}})
-  fireEvent.click(screen.getByRole('button',{name:'Geri al'}));expect(screen.getByLabelText('Şablon açıklaması')).toHaveValue('Yönetici özeti: Kararları kaynaklardan özetle.')
-  fireEvent.click(screen.getByRole('button',{name:'İleri al'}));expect(screen.getByLabelText('Şablon açıklaması')).toHaveValue('Yeni gereksinim')
-  fireEvent.click(screen.getByRole('button',{name:'Şablonu kaydet'}));await waitFor(()=>expect(mocks.request).toHaveBeenCalledWith('templates/t1',expect.objectContaining({method:'PATCH'})))
-  const call=mocks.request.mock.calls.find(c=>c[0]==='templates/t1')!;expect(JSON.parse(call[1].body)).toMatchObject({expectedRevision:3,description:'Yeni gereksinim',definition:{brief:'Yeni gereksinim'}})
- })
- it('keeps manual edits when an AI response arrives late',async()=>{
-  let resolve!:(value:unknown)=>void
-  mocks.request.mockImplementation((path:string)=>path==='templates/ai'?new Promise(r=>{resolve=r}):Promise.resolve({components:{text:'<p>Metin</p>'}}))
-  render(<TemplatesPage/>);fireEvent.click(await screen.findByRole('button',{name:'Şablonu düzenle'}))
-  fireEvent.change(screen.getByLabelText('AI düzenleme isteği'),{target:{value:'Rengi değiştir'}});fireEvent.click(screen.getByRole('button',{name:'Gönder'}))
-  fireEvent.change(screen.getByLabelText('Şablon açıklaması'),{target:{value:'Beklerken yaptığım düzenleme'}})
-  resolve({definition,componentId:'text'})
-  expect(await screen.findByRole('button',{name:'Havuza ekle'})).toBeDisabled();expect(screen.getByLabelText('Şablon açıklaması')).toHaveValue('Beklerken yaptığım düzenleme')
- })
- it('keeps the editor usable after AI failure',async()=>{
-  mocks.request.mockImplementation(async(path:string)=>{if(path==='templates/ai')throw new Error('Sağlayıcı yanıt vermedi');return {components:{text:'<p>Metin</p>'}}})
-  render(<TemplatesPage/>);fireEvent.click(await screen.findByRole('button',{name:'Şablonu düzenle'}))
-  fireEvent.change(screen.getByLabelText('AI düzenleme isteği'),{target:{value:'Yeni kart'}});fireEvent.click(screen.getByRole('button',{name:'Gönder'}))
-  expect(await screen.findByText('Sağlayıcı yanıt vermedi')).toBeInTheDocument();expect(screen.getByLabelText('Şablon açıklaması')).toBeEnabled();expect(screen.getByRole('button',{name:'Şablonu kaydet'})).toBeEnabled()
- })
- it('adds an AI component to the pool without forcing it into the layout',async()=>{
-  const component={...definition.components[0],id:'rate-card',name:'Oran kartı',description:'Oran değişikliği varsa kullan.'}
-  mocks.request.mockImplementation(async(path:string)=>path==='templates/ai'?{definition:{...definition,brief:'Yönetici özeti: Kararları kaynaklardan özetle.',components:[...definition.components,component]},componentId:'rate-card'}:path==='templates/preview'?{components:{text:'<p>Metin</p>','rate-card':'<p>Oran</p>'}}:{...template,revision:4})
-  render(<TemplatesPage/>);fireEvent.click(await screen.findByRole('button',{name:'Şablonu düzenle'}))
-  expect(screen.queryByRole('tab')).toBeNull();expect(screen.queryByRole('button',{name:'Metin ekle'})).toBeNull()
-  fireEvent.change(screen.getByLabelText('AI düzenleme isteği'),{target:{value:'Oran kartı oluştur'}});fireEvent.click(screen.getByRole('button',{name:'Gönder'}))
-  fireEvent.click(await screen.findByRole('button',{name:'Havuza ekle'}));fireEvent.click(screen.getByRole('button',{name:'Şablonu kaydet'}))
-  await waitFor(()=>expect(mocks.request).toHaveBeenCalledWith('templates/t1',expect.anything()))
-  const saved=JSON.parse(mocks.request.mock.calls.find(c=>c[0]==='templates/t1')![1].body)
-  expect(saved.definition.components).toHaveLength(2);expect(saved.definition.layout).toEqual(definition.layout)
-  expect(JSON.parse(mocks.request.mock.calls.find(c=>c[0]==='templates/ai')![1].body).mode).toBe('COMPONENT')
- })
- it('shows isolated HTML previews and includes prior suggestions in follow-up messages',async()=>{
-  const component={...definition.components[0]!,id:'rate-card',name:'Oran kartı',description:'Oran değişince kullan.'}
-  mocks.request.mockImplementation(async(path:string)=>path==='templates/ai'?{definition:{...definition,components:[...definition.components,component]},componentId:'rate-card'}:{components:{text:'<p>Metin</p>','rate-card':'<table><tr><td>Örnek oran</td></tr></table>'}})
-  render(<TemplatesPage/>);fireEvent.click(await screen.findByRole('button',{name:'Şablonu düzenle'}))
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Metin önizlemesini aç'})).toBeEnabled())
-  fireEvent.click(screen.getByRole('button',{name:'Metin önizlemesini aç'}));expect(await screen.findByRole('dialog')).toHaveTextContent('Metin');fireEvent.click(screen.getByRole('button',{name:'Kapat'}))
-  fireEvent.change(screen.getByLabelText('AI düzenleme isteği'),{target:{value:'Oran kartı oluştur'}});fireEvent.click(screen.getByRole('button',{name:'Gönder'}))
-  await screen.findByRole('button',{name:'Havuza ekle'})
-  fireEvent.change(screen.getByLabelText('AI düzenleme isteği'),{target:{value:'Son öneriye kısa bir açıklama ekle'}});fireEvent.click(screen.getByRole('button',{name:'Gönder'}))
-  await waitFor(()=>expect(mocks.request.mock.calls.filter(c=>c[0]==='templates/ai')).toHaveLength(2))
-  const body=JSON.parse(mocks.request.mock.calls.filter(c=>c[0]==='templates/ai')[1]![1].body)
-  expect(body.conversation).toEqual([{role:'user',content:'Oran kartı oluştur'},{role:'assistant',content:JSON.stringify(component)}])
-  expect(body.instruction).toBe('Son öneriye kısa bir açıklama ekle')
-  expect(screen.getAllByTitle('Metin HTML önizlemesi')[0]).toHaveAttribute('sandbox','')
- })
+import type { TemplateDefinitionV2 } from './studio-types'
 
- it('recovers failed previews and keeps them stable while the brief is edited',async()=>{
-  let attempts=0
-  mocks.request.mockImplementation(async(path:string)=>{if(path==='templates/preview'&&attempts++===0)throw new Error('Geçici bağlantı sorunu');return {components:{text:'<p>Metin</p>'}}})
-  render(<TemplatesPage/>);fireEvent.click(await screen.findByRole('button',{name:'Şablonu düzenle'}))
-  expect(await screen.findByText('Önizlemeler yüklenemedi')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button',{name:'Yeniden dene'}))
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Metin önizlemesini aç'})).toBeEnabled())
-  fireEvent.change(screen.getByLabelText('Şablon açıklaması'),{target:{value:''}})
-  expect(screen.getByRole('button',{name:'Metin önizlemesini aç'})).toBeEnabled()
-  expect(mocks.request.mock.calls.filter(c=>c[0]==='templates/preview')).toHaveLength(2)
- })
+const definition: TemplateDefinitionV2 = {
+  schemaVersion: 1,
+  title: 'Standart bülten',
+  description: '',
+  brief: 'Müşavirler için kısa bülten.',
+  theme: { tokens: {} },
+  shell: { heading: 'ATEZ', showFooter: true },
+  sections: [
+    { id: 'ozet', componentKey: 'ozet', componentVersion: 1, enabled: true, order: 0, heading: 'Özet', sectionDescription: '', required: true, missingDataRule: 'NOTE' },
+    { id: 'kaynaklar', componentKey: 'kaynaklar', componentVersion: 1, enabled: true, order: 1, heading: 'Kaynaklar', sectionDescription: '', required: false, missingDataRule: 'OMIT' },
+  ],
+}
+const comps = [
+  { id: 'c1', key: 'ozet', name: 'Özet', description: 'Giriş', category: 'OZET', origin: 'BUILTIN', status: 'ACTIVE', currentVersion: 1, definition: {} },
+  { id: 'c2', key: 'kaynaklar', name: 'Kaynaklar', description: 'Belgeler', category: 'KAYNAKLAR', origin: 'BUILTIN', status: 'ACTIVE', currentVersion: 1, definition: {} },
+  { id: 'c3', key: 'istisnalar', name: 'İstisnalar', description: 'Geçiş hükümleri', category: 'NOT_UYARI', origin: 'AI', status: 'ACTIVE', currentVersion: 2, definition: {} },
+]
+let saved: unknown[] = []
+const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
 
+beforeEach(() => {
+  saved = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v2/templates' && method === 'GET') return json([{ id: 't1', title: 'Standart bülten', isDefault: true, currentVersion: 3, updatedAt: '2026-10-17T10:00:00Z' }])
+      if (url === '/api/v2/templates/t1' && method === 'GET') return json({ id: 't1', isDefault: true, version: 3, versionId: 'v3', definition, versions: [] })
+      if (url === '/api/v2/templates/t1' && method === 'PUT') {
+        saved.push(JSON.parse(String(init!.body)))
+        return json({ version: 4 })
+      }
+      if (url.startsWith('/api/v2/components')) return json(comps)
+      if (url === '/api/v2/templates/preview') return json({ html: '<p>önizleme</p>', sections: [{ id: 'ozet', state: 'RENDERED' }, { id: 'kaynaklar', state: 'OMITTED' }] })
+      return json({ error: 'NOT_FOUND' }, 404)
+    }),
+  )
+})
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+describe('v2 şablon editörü (§10.1)', () => {
+  it('bölümleri yapılandırılmış liste olarak gösterir; açıklama, kural ve sıra değişikliği yeni sürüm olarak kaydedilir', async () => {
+    render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Şablonu düzenle' }))
+    const list = await screen.findByRole('list', { name: 'Rapor bölümleri' })
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.queryByLabelText('Şablon açıklaması')).toBeNull() // eski tek metin kutusu yok
+    await userEvent.type(screen.getByLabelText('Bölüm açıklaması'), 'Gözetim belgesini öne çıkar.')
+    await userEvent.click(within(list).getByText('Kaynaklar'))
+    await userEvent.click(screen.getByRole('radio', { name: '“Kaynakta yok” notu' }).closest('label')!)
+    await userEvent.click(screen.getByRole('button', { name: 'Kaynaklar yukarı' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Şablonu kaydet' }))
+    await waitFor(() => expect(saved).toHaveLength(1))
+    const d = (saved[0] as { definition: TemplateDefinitionV2 }).definition
+    const byId = Object.fromEntries(d.sections.map((s) => [s.id, s]))
+    expect(byId.ozet!.sectionDescription).toBe('Gözetim belgesini öne çıkar.')
+    expect(byId.kaynaklar!.missingDataRule).toBe('NOTE')
+    expect(byId.kaynaklar!.order).toBe(0)
+    expect(byId.ozet!.order).toBe(1)
+  })
+
+  it('havuzdan aktif bileşen ekler ve bölümü kapatır', async () => {
+    render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Şablonu düzenle' }))
+    await userEvent.click(await screen.findByRole('switch', { name: 'Kaynaklar açık' }))
+    await userEvent.click(screen.getByRole('button', { name: /Havuzdan ekle/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Havuzdan ekle' })
+    const row = within(dialog).getByText('İstisnalar').closest('li')!
+    await userEvent.click(within(row).getByRole('button', { name: 'Ekle' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Şablonu kaydet' }))
+    await waitFor(() => expect(saved).toHaveLength(1))
+    const d = (saved[0] as { definition: TemplateDefinitionV2 }).definition
+    expect(d.sections.find((s) => s.id === 'kaynaklar')!.enabled).toBe(false)
+    expect(d.sections.find((s) => s.id === 'istisnalar')).toMatchObject({ componentKey: 'istisnalar', componentVersion: 2, enabled: true, order: 2 })
+  })
+
+  it('zorunlu bölümde "gizle" kuralı seçilemez', async () => {
+    render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Şablonu düzenle' }))
+    await screen.findByRole('list', { name: 'Rapor bölümleri' })
+    expect(screen.getByRole('radio', { name: 'Bölümü gizle' })).toBeDisabled()
+  })
 })
