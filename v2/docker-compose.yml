@@ -1,0 +1,57 @@
+# Yerel geliştirme altyapısı (v2). Üretimde şirketin mevcut RabbitMQ / PostgreSQL / MinIO
+# kurulumları kullanılır (§0.1); bu dosya yalnızca geliştirici makinesi içindir.
+# Portlar eski sistemle (5432/5672/9000) çakışmasın diye 55xxx aralığındadır.
+name: atez-radar-v2
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: atez
+      POSTGRES_PASSWORD: atez-local
+      POSTGRES_DB: atez_v2
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atez -d atez_v2"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: atez-rabbit
+    environment:
+      RABBITMQ_DEFAULT_USER: atez
+      RABBITMQ_DEFAULT_PASS: atez-local
+      RABBITMQ_DEFAULT_VHOST: atez-mevzuat
+    ports:
+      - "127.0.0.1:55672:5672"
+      - "127.0.0.1:55673:15672"
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: atez-local
+      MINIO_ROOT_PASSWORD: atez-local-secret
+    ports:
+      - "127.0.0.1:55900:9000"
+      - "127.0.0.1:55901:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  rabbitdata:
+  miniodata:

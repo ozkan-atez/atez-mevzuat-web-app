@@ -1,0 +1,1 @@
+ALTER TABLE "gtip_value" ADD COLUMN "note" text;

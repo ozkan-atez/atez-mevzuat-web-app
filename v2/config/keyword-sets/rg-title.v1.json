@@ -1,0 +1,8 @@
+{
+  "key": "rg-title.v1",
+  "description": "RG başlık ön elemesinde kodla verilen kararlar. Yalnızca mevzuat olmayan içerikler baştan OUT'tur (§6.2 kurallar); torba kanun ve yalnızca kurum adı içeren başlıklar burada OUT edilmez.",
+  "outTitlePatterns": [
+    "Merkez Bankasınca Belirlenen Döviz Kurları",
+    "Devlet İç Borçlanma Senetlerinin Günlük Değerleri"
+  ]
+}

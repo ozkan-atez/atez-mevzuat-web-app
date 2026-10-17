@@ -1,0 +1,19 @@
+{
+  "key": "daily-scan",
+  "version": 1,
+  "title": "Günlük tarama → READY rapor",
+  "description": "§5.2 daily-scan: ön kontrol + keşif → başlık elemesi → indirme → normalizasyon → Belge Profili → (IN) tablo çıkarma → önceki hal (TARIFF → RG → tek kaynak) → konu → kümülatif analiz → rapor (READY; onay ve otomatik e-posta yok).",
+  "nodes": [
+    { "id": "discover", "step": "source.discover", "with": { "sourceId": "resmi-gazete" } },
+    { "id": "title", "step": "classify.title", "after": ["discover"], "when": "size(item.candidates) > 0" },
+    { "id": "fetch", "step": "doc.fetch", "after": ["title"], "fanOut": "items", "when": "item.decision != 'OUT'" },
+    { "id": "normalize", "step": "doc.normalize", "after": ["fetch"] },
+    { "id": "profile", "step": "classify.profile", "after": ["normalize"] },
+    { "id": "extract", "step": "extract.table", "after": ["profile"], "when": "item.decision == 'IN'" },
+    { "id": "lineage", "step": "lineage.resolve", "after": ["extract"] },
+    { "id": "link", "step": "topic.link", "after": ["lineage"] },
+    { "id": "analyze", "step": "topic.analyze", "after": ["link"] },
+    { "id": "compose", "step": "report.compose", "after": ["analyze"] },
+    { "id": "render", "step": "report.render", "after": ["compose"] }
+  ]
+}

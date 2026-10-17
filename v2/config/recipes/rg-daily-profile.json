@@ -1,0 +1,13 @@
+{
+  "key": "rg-daily-profile",
+  "version": 1,
+  "title": "Resmî Gazete günlük tarama → Belge Profili",
+  "description": "Aşama 2 çekirdeği (§5.2 daily-scan'in ilk yarısı): ön kontrol + keşif → başlık elemesi → (IN/MAYBE) indirme → normalizasyon → Belge Profili. Ön kontrol değişiklik bulmazsa aday listesi boş döner ve hiçbir AI çağrısı yapılmaz.",
+  "nodes": [
+    { "id": "discover", "step": "source.discover", "with": { "sourceId": "resmi-gazete" } },
+    { "id": "title", "step": "classify.title", "after": ["discover"], "when": "size(item.candidates) > 0" },
+    { "id": "fetch", "step": "doc.fetch", "after": ["title"], "fanOut": "items", "when": "item.decision != 'OUT'" },
+    { "id": "normalize", "step": "doc.normalize", "after": ["fetch"] },
+    { "id": "profile", "step": "classify.profile", "after": ["normalize"] }
+  ]
+}
