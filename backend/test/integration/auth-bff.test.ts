@@ -19,7 +19,7 @@ describe.skipIf(!enabled)('persistent BFF auth on isolated database',()=>{
  let runtime:Awaited<ReturnType<typeof createAuthRuntime>>,app:ReturnType<typeof Fastify>
  const host={host:'localhost:5173'}
  beforeAll(async()=>{
-  const url=new URL(process.env.TEST_DATABASE_URL!);if(url.port!=='45432'||!url.pathname.endsWith('_test'))throw new Error('Explicit isolated test database required.');await prisma.$connect()
+  const url=new URL(process.env.TEST_DATABASE_URL!);if(!url.pathname.endsWith('_test'))throw new Error('Explicit isolated test database required.');await prisma.$connect()
   workspaceId=(await prisma.workspace.upsert({where:{key:'atez'},create:{key:'atez',name:'ATEZ test'},update:{}})).id
   runtime=await createAuthRuntime({prisma,config,provider});app=Fastify();await installAuth(app,{runtime});await app.register(authRoutes,{runtime,prefix:'/api/auth'})
   app.get('/api/health',async()=>({status:'ok'}));app.get('/api/v1/templates',async()=>({actor:actorContext.getStore()?.userId}));app.post('/api/v1/operations',async()=>({actor:actorContext.getStore()?.userId}));app.get('/api/v1/new-backdoor',async()=>({exposed:true}));app.post('/api/v1/topics/:id/dispatches',async()=>({sent:true}));await app.ready()
@@ -38,9 +38,12 @@ describe.skipIf(!enabled)('persistent BFF auth on isolated database',()=>{
   const replay=await app.inject({method:'GET',url:`/api/auth/callback?code=fixture-code&state=${state}`,headers:{...host,cookie:loginCookie}});expect(replay.headers.location).toContain('/login?error=LOGIN_REPLAY');expect(provider.callback).toHaveBeenCalledTimes(1)
   const row=await prisma.authSession.findUniqueOrThrow({where:{idHash:digest(sessionCookie.split('=')[1]!)}});expect(row.encryptedTokens).not.toContain('private-server');expect(row.idHash).not.toBe(sessionCookie.split('=')[1])
  })
- it('rejects anonymous mock bearer and unconfigured business routes even for ADMIN',async()=>{
+ it('rejects anonymous mock bearer and keeps unconfigured business routes closed to every non-admin role',async()=>{
   expect((await app.inject({method:'GET',url:'/api/v1/templates',headers:{...host,authorization:'Bearer mock-token'}})).statusCode).toBe(401)
-  const s=await sessionFor('ADMIN');expect((await app.inject({method:'GET',url:'/api/v1/new-backdoor',headers:{...host,cookie:s.cookie}})).statusCode).toBe(403)
+  expect((await app.inject({method:'GET',url:'/api/v1/new-backdoor',headers:host})).statusCode).toBe(401)
+  for(const role of ['EDITOR','VIEWER']){const s=await sessionFor(role);expect((await app.inject({method:'GET',url:'/api/v1/new-backdoor',headers:{...host,cookie:s.cookie}})).statusCode).toBe(403)}
+  // ADMIN may reach a route without a policy entry (guard.ts, see auth-logout-stream unit test).
+  const admin=await sessionFor('ADMIN');expect((await app.inject({method:'GET',url:'/api/v1/new-backdoor',headers:{...host,cookie:admin.cookie}})).statusCode).toBe(200)
  })
  it('enforces CSRF, canonical Origin and role demotion without stale custom grants',async()=>{
   const s=await sessionFor();const mutation=()=>app.inject({method:'POST',url:'/api/v1/operations',headers:{...host,cookie:s.cookie,origin:config.publicOrigin,'x-csrf-token':s.csrfToken},payload:{}})

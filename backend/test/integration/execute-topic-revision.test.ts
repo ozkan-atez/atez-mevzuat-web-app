@@ -7,6 +7,7 @@ import type { AnalysisResult } from '../../src/modules/topic-analysis/domain/ana
 import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
 import { PrismaReportDraftRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-report-draft-repository'
 import { buildReportSpec } from '../../src/modules/topic-analysis/application/build-report-spec'
+import { resetScanStorage } from '../helpers/database'
 
 const prisma = new PrismaClient()
 const repository = new PrismaTopicAnalysisRepository(prisma)
@@ -30,8 +31,7 @@ function analysis(topicId: string, summary = 'İthalat kuralı değişti.'): Ana
 
 describe('executeTopicRevision', () => {
   beforeEach(async () => {
-    await prisma.scanRun.deleteMany()
-    await prisma.storedObject.deleteMany()
+    await resetScanStorage(prisma)
   })
   afterAll(() => prisma.$disconnect())
 

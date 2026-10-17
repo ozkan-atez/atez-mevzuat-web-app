@@ -15,15 +15,10 @@ import { S3ObjectStore } from '../../src/modules/scan-runs/infrastructure/s3-obj
 import { fixtureFile } from '../helpers/files'
 import type { AiModelClient, StructuredAiRequest, StructuredAiResult } from '../../src/modules/ai/application/ai-model-client'
 import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import { resetScanStorage } from '../helpers/database'
+import { s3TestConfig, s3TestEnabled } from '../helpers/s3'
 
-const s3Config = {
-  endpoint: 'http://localhost:59000',
-  region: 'eu-central-1',
-  bucket: 'resmi-gazete-test',
-  accessKeyId: 'atez-local-access',
-  secretAccessKey: 'atez-local-secret-change-me',
-  forcePathStyle: true,
-}
+const s3Config = s3TestConfig
 
 class FixtureOfficialHttp implements OfficialHttp {
   constructor(private readonly indexHtml: string, private readonly documentHtml: string) {}
@@ -118,7 +113,8 @@ const aiModel = new MixedDecisionAi()
 const gemini = { model: 'gemini-3.7-flash', maxAttempts: 3, maxContentBytes: 8_000_000, previousSourceConcurrency: 2, topicConcurrency: 2 }
 const previousSourceSearch = new EmptyPreviousSourceSearch()
 
-describe('manual scan acceptance', () => {
+// Needs the isolated test database and a real S3-compatible store (MinIO).
+describe.skipIf(!process.env.TEST_DATABASE_URL || !s3TestEnabled)('manual scan acceptance', () => {
   beforeAll(async () => {
     const fixtureRoot = resolve('test/fixtures/resmi-gazete/2026-09-11')
     http = new FixtureOfficialHttp(
@@ -129,8 +125,7 @@ describe('manual scan acceptance', () => {
   })
 
   beforeEach(async () => {
-    await prisma.scanRun.deleteMany()
-    await prisma.storedObject.deleteMany()
+    await resetScanStorage(prisma)
   })
 
   afterAll(async () => {

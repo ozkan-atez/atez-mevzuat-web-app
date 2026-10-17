@@ -11,7 +11,7 @@ describe.skipIf(!enabled)('source report corrections', () => {
   afterAll(async()=>{await prisma.scanRun.deleteMany({where:{id:{in:runs}}});await prisma.$disconnect()})
   it('lists, edits and publishes source reports using its original report identity and immutable revisions', async()=>{
     const dbUrl=new URL(process.env.TEST_DATABASE_URL!)
-    if(dbUrl.port!=='45432' || !dbUrl.pathname.endsWith('_test')) throw new Error('Isolated test database required')
+    if(!dbUrl.pathname.endsWith('_test')) throw new Error('Isolated test database required')
     const run=await prisma.scanRun.create({data:{requestKey:randomUUID(),targetDate:new Date('2026-10-12')}})
     runs.push(run.id)
     const id=randomUUID(), basename=`belge-raporu-${id}`, specKey=`${id}/spec.json`, htmlKey=`${id}/original.html`

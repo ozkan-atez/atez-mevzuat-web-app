@@ -13,7 +13,7 @@ import type {TopicObjectStore} from '../../src/modules/topic-analysis/applicatio
 const enabled=Boolean(process.env.TEST_DATABASE_URL)
 describe.skipIf(!enabled)('report correction Save boundaries on isolated database',()=>{
  const prisma=new PrismaClient(),topics=new PrismaTopicAnalysisRepository(prisma),drafts=new PrismaReportDraftRepository(prisma),runs:string[]=[]
- beforeAll(async()=>{const url=new URL(process.env.TEST_DATABASE_URL!);if(url.port!=='45432'||!url.pathname.endsWith('_test'))throw new Error('Dedicated port45432 test database required.');await prisma.$connect()})
+ beforeAll(async()=>{const url=new URL(process.env.TEST_DATABASE_URL!);if(!url.pathname.endsWith('_test'))throw new Error('Dedicated _test database required.');await prisma.$connect()})
  afterAll(async()=>{await prisma.scanRun.deleteMany({where:{id:{in:runs}}});await prisma.$disconnect()})
  const seed=async()=>{
   const run=await prisma.scanRun.create({data:{requestKey:randomUUID(),targetDate:new Date('2026-10-11'),editions:{create:{publicationDate:new Date('2026-10-11'),type:'MAIN',indexUrl:'https://www.resmigazete.gov.tr/11.10.2026',discoveryOrder:0,documents:{create:{title:'İthalat Tebliği',sourceUrl:'https://www.resmigazete.gov.tr/current',publicationOrder:0}}}}},include:{editions:{include:{documents:true}}}});runs.push(run.id)

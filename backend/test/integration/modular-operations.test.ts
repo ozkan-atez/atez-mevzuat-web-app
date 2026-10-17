@@ -29,7 +29,7 @@ describe.skipIf(!enabled)('modular workflow on isolated test database',()=>{
  let templateId:string
  beforeAll(async()=>{
   const url=new URL(process.env.TEST_DATABASE_URL!)
-  if(!url.pathname.endsWith('_test') || url.port!=='45432') throw new Error('Integration requires explicit isolated port 45432 test database.')
+  if(!url.pathname.endsWith('_test')) throw new Error('Integration requires an explicit isolated _test database.')
   await db.$connect()
   templateId=(await db.reportTemplate.create({data:{name:`Test-${scope}`,html:templateHtml,sections:defaultSections}})).id
  })

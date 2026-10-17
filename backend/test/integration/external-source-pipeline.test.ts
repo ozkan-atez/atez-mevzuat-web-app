@@ -15,15 +15,26 @@ const runIds:string[]=[]
 const objects=new Map<string,Buffer>()
 const store:ObjectStore={ensureBucket:async()=>{},exists:async key=>objects.has(key),getContent:async key=>{const body=objects.get(key);if(!body)throw new Error(key);return body},putContent:async()=>{throw new Error('Snapshots must use stored source text')},putRunFile:async(key,body,mediaType)=>{objects.set(key,body);return {bucket:'test',objectKey:key,sha256:createHash('sha256').update(body).digest('hex'),mediaType,byteSize:BigInt(body.length)}}}
 class Model implements AiModelClient {
-  filterCalls=0;analysisCalls=0; unavailable=false
+  filterCalls=0;contentCalls=0;analysisCalls=0; unavailable=false
   async generateStructured(request:StructuredAiRequest) {
     if(this.unavailable)throw new AiProviderError('PROVIDER_UNAVAILABLE',true,'AI kullanılamıyor')
     const serialized=request.parts.map(part=>'text' in part?part.text:'').join('\n')
     let json:unknown
+    const decide=(doc:{id:string;title:string})=>({documentId:doc.id,decision:doc.title.startsWith('Kapsam dışı')?'OUT':'IN',reason:'AI kapsam değerlendirmesi',confidence:0.95})
     if(request.responseJsonSchema.properties && 'decisions' in (request.responseJsonSchema.properties as object)) {
-      this.filterCalls++
-      const input=JSON.parse(request.parts[0] && 'text' in request.parts[0]?request.parts[0].text:'{}') as {documents:Array<{id:string;title:string}>}
-      json={decisions:input.documents.map(doc=>({documentId:doc.id,decision:doc.title.startsWith('Kapsam dışı')?'OUT':'IN',reason:'AI kapsam değerlendirmesi',confidence:0.95}))}
+      const first=request.parts[0] && 'text' in request.parts[0]?request.parts[0].text:''
+      if(first.trimStart().startsWith('{')) {
+        // Title pass: one JSON list of every captured document.
+        this.filterCalls++
+        const input=JSON.parse(first) as {documents:Array<{id:string;title:string}>}
+        json={decisions:input.documents.map(decide)}
+      } else {
+        // Content pass: external documents are always read in full (title verdicts become MAYBE).
+        this.contentCalls++
+        const documents=new Map<string,string>()
+        for(const match of serialized.matchAll(/Belge kimliği: (\S+)\nBaşlık: ([^\n]*)/g))if(!documents.has(match[1]!))documents.set(match[1]!,match[2]!)
+        json={decisions:[...documents].map(([id,title])=>decide({id,title}))}
+      }
     } else {
       this.analysisCalls++
       const topicId=serialized.match(/Topic kimliği: ([a-f0-9-]+)/)?.[1]
@@ -75,7 +86,7 @@ describe('external source AI pipeline',()=>{
     await processSourceDocuments(prisma,run.id,dependencies(model))
     expect(await prisma.topicReport.count({where:{topicId:inDoc.topicId!}})).toBe(1)
     expect(await prisma.analysisRevision.count({where:{topicId:inDoc.topicId!}})).toBe(1)
-    expect(model.filterCalls).toBe(1);expect(model.analysisCalls).toBe(1)
+    expect(model.filterCalls).toBe(1);expect(model.contentCalls).toBe(1);expect(model.analysisCalls).toBe(1)
   })
   it('creates an actual standalone scan and truthful official source report',async()=>{
     const {run}=await seed('OFFICIAL')

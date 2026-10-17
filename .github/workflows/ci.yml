@@ -44,8 +44,13 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://atez:atez-ci@127.0.0.1:5432/atez_backend_test?schema=public
       RABBITMQ_TEST_URL: amqp://atez:atez-ci@127.0.0.1:5672
+      S3_TEST_ENDPOINT: http://127.0.0.1:9000
+      S3_TEST_ACCESS_KEY_ID: atez-ci
+      S3_TEST_SECRET_ACCESS_KEY: atez-ci-secret
     steps:
       - uses: actions/checkout@v4
+      - run: docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=atez-ci -e MINIO_ROOT_PASSWORD=atez-ci-secret minio/minio server /data
+        working-directory: .
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm, cache-dependency-path: backend/package-lock.json}
       - run: npm ci

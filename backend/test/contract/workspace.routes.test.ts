@@ -4,6 +4,14 @@ import type { PrismaClient } from '@prisma/client'
 import { rabbitQueue } from '../../src/platform/rabbitmq'
 import { workspaceRoutes } from '../../src/modules/workspace/workspace.routes'
 
+function jobHistory() {
+  return {
+    findMany: vi.fn().mockImplementation(async (args: { distinct?: string[] }) => args.distinct ? [{ queue: 'atez-source-scan' }] : []),
+    count: vi.fn().mockResolvedValue(0),
+    groupBy: vi.fn().mockResolvedValue([{ status: 'COMPLETED', _count: { _all: 3 } }]),
+  }
+}
+
 describe('persisted workspace routes', () => {
   it('partial updates retain disabled flags and other omitted user fields', async () => {
     const update = vi.fn().mockResolvedValue({ id: 'u1', name: 'Changed', isActive: false })
@@ -33,20 +41,30 @@ describe('persisted workspace routes', () => {
     const queues = [{ name: 'atez-source-scan', consumers: 1, waiting: 0, retrying: 0, failed: 0 }]
     vi.spyOn(rabbitQueue, 'status').mockResolvedValue(queues)
     const app = Fastify()
-    await app.register(workspaceRoutes, { prisma: { backgroundJob: { findMany: vi.fn().mockResolvedValue([]) } } as unknown as PrismaClient })
+    await app.register(workspaceRoutes, { prisma: { backgroundJob: jobHistory() } as unknown as PrismaClient })
     const response = await app.inject({ method: 'GET', url: '/api/v1/background-jobs' })
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toEqual({ broker: 'RabbitMQ', connected: true, queues, jobs: [] })
+    expect(response.json()).toEqual({ connected: true, queues, jobs: [], total: 0, page: 1, types: ['atez-source-scan'], counts: { COMPLETED: 3 }, checkedAt: expect.any(String) })
     await app.close()
   })
   it('reports an unavailable monitor without exposing connection details', async () => {
     vi.spyOn(rabbitQueue, 'status').mockRejectedValue(new Error('Internal connection details'))
     const app = Fastify()
-    await app.register(workspaceRoutes, { prisma: { backgroundJob: { findMany: vi.fn().mockResolvedValue([]) } } as unknown as PrismaClient })
-    const response = await app.inject({ method: 'GET', url: '/api/v1/background-jobs' })
+    await app.register(workspaceRoutes, { prisma: { backgroundJob: jobHistory() } as unknown as PrismaClient })
+    // A broker outage still serves the persisted job history, flagged as disconnected.
+    const brokerDown = await app.inject({ method: 'GET', url: '/api/v1/background-jobs' })
+    expect(brokerDown.statusCode).toBe(200)
+    expect(brokerDown.json()).toMatchObject({ connected: false, queues: [], jobs: [] })
+    expect(brokerDown.body).not.toContain('Internal connection details')
+    await app.close()
+    // A history store outage is a 503 that still hides internal details.
+    const failing = { ...jobHistory(), count: vi.fn().mockRejectedValue(new Error('Internal connection details')) }
+    const broken = Fastify()
+    await broken.register(workspaceRoutes, { prisma: { backgroundJob: failing } as unknown as PrismaClient })
+    const response = await broken.inject({ method: 'GET', url: '/api/v1/background-jobs' })
     expect(response.statusCode).toBe(503)
     expect(response.body).not.toContain('Internal connection details')
-    await app.close()
+    await broken.close()
   })
 
 })

@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { PrismaAssistantKnowledge } from '../../src/modules/chat/infrastructure/prisma-assistant-knowledge'
 import { runChatTool } from '../../src/modules/chat/application/chat-tools'
 import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
+import { resetScanStorage } from '../helpers/database'
 
 const prisma = new PrismaClient()
 const topicRepository = new PrismaTopicAnalysisRepository(prisma)
@@ -58,8 +59,7 @@ async function seedPublishedReport() {
 describe('PrismaAssistantKnowledge', () => {
   beforeEach(async () => {
     objects.clear()
-    await prisma.scanRun.deleteMany()
-    await prisma.storedObject.deleteMany()
+    await resetScanStorage(prisma)
     await prisma.customerGroup.deleteMany()
   })
   afterAll(() => prisma.$disconnect())

@@ -2,15 +2,9 @@ import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { S3ObjectStore } from '../../src/modules/scan-runs/infrastructure/s3-object-store'
 import { fixtureFile } from '../helpers/files'
+import { s3TestConfig, s3TestEnabled } from '../helpers/s3'
 
-const config = {
-  endpoint: 'http://localhost:59000',
-  region: 'eu-central-1',
-  bucket: 'resmi-gazete-test',
-  accessKeyId: 'atez-local-access',
-  secretAccessKey: 'atez-local-secret-change-me',
-  forcePathStyle: true,
-}
+const config = s3TestConfig
 const client = new S3Client({
   endpoint: config.endpoint,
   region: config.region,
@@ -19,7 +13,7 @@ const client = new S3Client({
 })
 const store = new S3ObjectStore(config)
 
-describe('S3ObjectStore', () => {
+describe.skipIf(!s3TestEnabled)('S3ObjectStore', () => {
   beforeAll(() => store.ensureBucket())
 
   it('stores equal bytes at one content-addressed key', async () => {

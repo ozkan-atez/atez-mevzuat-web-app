@@ -10,7 +10,7 @@ describe.skipIf(!enabled)('empty-day report corrections', () => {
   afterAll(async()=>{await prisma.scanRun.deleteMany({where:{id:{in:runs}}});await prisma.$disconnect()})
   it('lists, edits and publishes K6 using its original report identity and immutable revisions', async()=>{
     const dbUrl=new URL(process.env.TEST_DATABASE_URL!)
-    if(dbUrl.port!=='45432' || !dbUrl.pathname.endsWith('_test')) throw new Error('Isolated test database required')
+    if(!dbUrl.pathname.endsWith('_test')) throw new Error('Isolated test database required')
     const run=await prisma.scanRun.create({data:{requestKey:randomUUID(),targetDate:new Date('2026-10-12')}})
     runs.push(run.id)
     const id=randomUUID(), basename='00-degisiklik-yok.html', specKey=`${id}/spec.json`, htmlKey=`${id}/original.html`
