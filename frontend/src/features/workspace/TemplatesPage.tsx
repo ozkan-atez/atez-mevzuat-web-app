@@ -1,37 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Empty, Form, Input, List, Modal, Segmented, Skeleton, Space, Switch, Tabs, Tag, Tooltip, Typography, message } from 'antd'
-import { AppstoreAddOutlined, ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, DeleteOutlined, HolderOutlined, PlusOutlined, RedoOutlined, RobotOutlined, StarFilled, UndoOutlined } from '@ant-design/icons'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Alert, Button, Card, Checkbox, Collapse, Empty, Form, Input, Modal, Segmented, Skeleton, Space, Tag, Tooltip, Typography, message } from 'antd'
+import { ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, CheckOutlined, EyeOutlined, PlusOutlined, RobotOutlined, StarFilled } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { Can } from '../auth/Can'
 import { studioApi, StudioRequestError } from './studioApi'
 import { CATEGORY_LABELS, MISSING_RULE_LABELS, type StudioComponent, type TemplateDefinitionV2, type TemplateFullV2, type TemplateRowV2, type TemplateSectionV2 } from './studio-types'
 import { StudioNav } from './StudioNav'
-import { StudioPreview } from './StudioPreview'
 import './template-studio.css'
 
-const STATE_LABELS: Record<string, { text: string; color: string }> = {
-  RENDERED: { text: 'görünür', color: 'success' },
-  OMITTED: { text: 'kaynakta yok · gizlenir', color: 'default' },
-  NOTE: { text: 'kaynakta yok · not', color: 'warning' },
-}
 /** Sunucu jsonb anahtarlarını yeniden sıralar; kirli/temiz karşılaştırması sıradan bağımsız. */
 const stable = (v: unknown) => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x))
 const sorted = (d: TemplateDefinitionV2) => [...d.sections].sort((a, b) => a.order - b.order)
-
-function useDebounced<T>(value: T, ms: number) {
-  const [v, setV] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms)
-    return () => clearTimeout(t)
-  }, [value, ms])
-  return v
-}
+const renumber = (list: TemplateSectionV2[]) => list.map((s, i) => ({ ...s, order: i }))
 
 export function TemplatesPage() {
   const [rows, setRows] = useState<TemplateRowV2[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [editing, setEditing] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [form] = Form.useForm<{ title: string; description?: string; brief?: string }>()
   const [feedback, holder] = message.useMessage()
@@ -55,19 +41,19 @@ export function TemplatesPage() {
       setCreating(false)
       form.resetFields()
       await load()
-      setEditing(t.id)
+      setOpen(t.id)
     } catch (e) {
       void feedback.error((e as Error).message)
     }
   }
-  if (editing) return <TemplateEditor id={editing} onBack={() => { setEditing(null); void load() }} />
+  if (open) return <TemplateDetail id={open} onBack={() => { setOpen(null); void load() }} />
   return (
     <div className="atez-demo-page studio-page">
       {holder}
       <div className="atez-demo-heading">
         <div>
           <Typography.Title level={1}>Rapor şablonları</Typography.Title>
-          <Typography.Paragraph type="secondary">Raporun hangi bölümlerden, hangi sırayla ve hangi vurguyla oluşacağı. Yeni şablonda havuzdaki bütün aktif bileşenler açık gelir.</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">Her şablon, rapora girecek bileşenlerin seçimidir. Bileşenler “Bileşen havuzu”nda oluşturulur ve yönetilir.</Typography.Paragraph>
         </div>
         <Can permission="config.manage">
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
@@ -80,24 +66,27 @@ export function TemplatesPage() {
       </div>
       {error && <Alert type="error" showIcon title="Şablonlar yüklenemedi" description={error} action={<Button onClick={() => void load()}>Yeniden dene</Button>} />}
       {loading ? (
-        <div className="template-card-grid">{[0, 1].map((i) => <Card key={i}><Skeleton active /></Card>)}</div>
+        <div className="tpl-list">{[0, 1].map((i) => <Card key={i}><Skeleton active /></Card>)}</div>
       ) : rows.length ? (
-        <div className="template-card-grid">
+        <div className="tpl-list">
           {rows.map((t) => (
-            <Card key={t.id} title={t.title} extra={<Space size={4}>{t.isDefault && <Tag color="success" icon={<StarFilled />}>Varsayılan</Tag>}<Tag>v{t.currentVersion}</Tag></Space>}>
-              <Typography.Paragraph type="secondary">Güncellendi: {new Date(t.updatedAt).toLocaleString('tr-TR')}</Typography.Paragraph>
-              <div className="atez-source-footer">
-                <Can permission="config.manage">
-                  <Button onClick={() => setEditing(t.id)}>Şablonu düzenle</Button>
-                </Can>
+            <button key={t.id} className="tpl-row" onClick={() => setOpen(t.id)}>
+              <div>
+                <strong>{t.title}</strong>
+                <span>Güncellendi {new Date(t.updatedAt).toLocaleString('tr-TR')} · sürüm {t.currentVersion}</span>
               </div>
-            </Card>
+              <Space size={6}>
+                {t.isDefault && <Tag color="success" icon={<StarFilled />}>Varsayılan</Tag>}
+                <span className="tpl-row-open">Aç →</span>
+              </Space>
+            </button>
           ))}
         </div>
       ) : (
         <Empty description="İlk rapor şablonunuzu oluşturun." />
       )}
       <Modal title="Yeni şablon" open={creating} onCancel={() => setCreating(false)} onOk={() => void create()} okText="Oluştur" cancelText="Vazgeç">
+        <Typography.Paragraph type="secondary">Havuzdaki bütün aktif bileşenler seçili gelir; istemediklerinizi kapatırsınız.</Typography.Paragraph>
         <Form form={form} layout="vertical" requiredMark={false}>
           <Form.Item name="title" label="Şablon adı" rules={[{ required: true, message: 'Şablon adı gerekli' }]}>
             <Input maxLength={160} placeholder="ör. Müşteri bülteni — otomotiv" />
@@ -106,7 +95,7 @@ export function TemplatesPage() {
             <Input maxLength={1000} />
           </Form.Item>
           <Form.Item name="brief" label="Brief" tooltip="Raporun amacı, hedef kitle, ton ve genel vurgu. Analiz ve rapor yazımı bu metni görür.">
-            <Input.TextArea autoSize={{ minRows: 3, maxRows: 6 }} maxLength={4000} placeholder="ör. Otomotiv ithalatçıları için; kısa ve uygulamaya dönük; önce maliyet etkisini, sonra belge yükümlülüklerini öne çıkar." />
+            <Input.TextArea autoSize={{ minRows: 3, maxRows: 6 }} maxLength={4000} />
           </Form.Item>
         </Form>
       </Modal>
@@ -114,122 +103,101 @@ export function TemplatesPage() {
   )
 }
 
-function TemplateEditor({ id, onBack }: { id: string; onBack: () => void }) {
+/** Bileşen kutucuğu: küçük canlı önizleme + isim uzunluğunda aç/kapa. */
+function ComponentTile({ c, selected, onToggle }: { c: StudioComponent; selected: boolean; onToggle: () => void }) {
+  const [html, setHtml] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    void studioApi.componentPreview(c.id).then((r) => live && setHtml(r.html)).catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [c.id, c.currentVersion])
+  return (
+    <div className={`tpl-tile ${selected ? 'is-on' : ''}`}>
+      <button type="button" className="tpl-thumb" onClick={onToggle} tabIndex={-1} aria-hidden="true">
+        {html ? <iframe title={`${c.name} küçük önizleme`} sandbox="" srcDoc={html} loading="lazy" tabIndex={-1} /> : <Skeleton.Node active className="tpl-thumb-skeleton" />}
+      </button>
+      <Tooltip title={c.description} mouseEnterDelay={0.6}>
+        <button type="button" role="switch" aria-checked={selected} aria-label={c.name} className={`tpl-pill ${selected ? 'is-on' : ''}`} onClick={onToggle}>
+          <span className="tpl-pill-dot">{selected && <CheckOutlined />}</span>
+          <span className="tpl-pill-name">{c.name}</span>
+        </button>
+      </Tooltip>
+      <span className="tpl-tile-cat">{CATEGORY_LABELS[c.category]}{c.status !== 'ACTIVE' ? ' · pasif' : ''}</span>
+    </div>
+  )
+}
+
+function TemplateDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [base, setBase] = useState<TemplateFullV2 | null>(null)
-  const [draft, setDraftState] = useState<TemplateDefinitionV2 | null>(null)
-  const [past, setPast] = useState<TemplateDefinitionV2[]>([])
-  const [future, setFuture] = useState<TemplateDefinitionV2[]>([])
+  const [draft, setDraft] = useState<TemplateDefinitionV2 | null>(null)
   const [components, setComponents] = useState<StudioComponent[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState('section')
+  const [category, setCategory] = useState<string>('ALL')
   const [saving, setSaving] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{ html: string; sections: { id: string; state: string }[] } | null>(null)
-  const [previewError, setPreviewError] = useState('')
-  const [suggesting, setSuggesting] = useState(false)
-  const [suggestions, setSuggestions] = useState<{ sectionId: string; sectionDescription: string }[] | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [feedback, holder] = message.useMessage()
-  const draftRef = useRef(draft)
-  draftRef.current = draft
 
   const reload = useCallback(async () => {
     const [t, c] = await Promise.all([studioApi.template(id), studioApi.components()])
     setBase(t)
-    setDraftState(t.definition)
+    setDraft(t.definition)
     setComponents(c)
-    setSelected((s) => s ?? sorted(t.definition)[0]?.id ?? null)
   }, [id])
   useEffect(() => {
     void reload().catch((e) => void feedback.error((e as Error).message))
   }, [reload, feedback])
 
-  const change = (fn: (d: TemplateDefinitionV2) => TemplateDefinitionV2) => {
-    const cur = draftRef.current
-    if (!cur) return
-    const next = fn(cur)
-    setPast((p) => [...p, cur].slice(-80))
-    setFuture([])
-    setDraftState(next)
-    draftRef.current = next
-  }
-  const undo = () => {
-    const last = past.at(-1)
-    if (!last || !draft) return
-    setFuture((f) => [draft, ...f])
-    setPast((p) => p.slice(0, -1))
-    setDraftState(last)
-  }
-  const redo = () => {
-    const next = future[0]
-    if (!next || !draft) return
-    setPast((p) => [...p, draft])
-    setFuture((f) => f.slice(1))
-    setDraftState(next)
-  }
   const dirty = !!draft && !!base && stable(draft) !== stable(base.definition)
-
-  const debounced = useDebounced(draft, 400)
-  useEffect(() => {
-    if (!debounced) return
-    let live = true
-    studioApi
-      .previewTemplate(debounced)
-      .then((p) => {
-        if (live) {
-          setPreview(p)
-          setPreviewError('')
-        }
-      })
-      .catch((e) => live && setPreviewError((e as Error).message))
-    return () => {
-      live = false
-    }
-  }, [debounced])
-
-  const byKey = useMemo(() => new Map(components.map((c) => [c.key, c])), [components])
-  const states = useMemo(() => new Map((preview?.sections ?? []).map((s) => [s.id, s.state])), [preview])
   const sections = draft ? sorted(draft) : []
-  const sel = sections.find((s) => s.id === selected) ?? null
+  const selected = sections.filter((s) => s.enabled)
+  const isOn = (key: string) => sections.some((s) => s.componentKey === key && s.enabled)
+  // Havuzdaki aktif bileşenler + şablonda olup artık pasif/arşiv olanlar.
+  const tiles = useMemo(() => {
+    const inTemplate = new Set(sections.map((s) => s.componentKey))
+    return components.filter((c) => c.status === 'ACTIVE' || inTemplate.has(c.key))
+  }, [components, sections])
+  const categories = useMemo(() => [...new Set(tiles.map((c) => c.category))], [tiles])
+  const shown = tiles.filter((c) => category === 'ALL' || c.category === category)
+  const byKey = useMemo(() => new Map(components.map((c) => [c.key, c])), [components])
 
-  const patch = (sid: string, p: Partial<TemplateSectionV2>) => change((d) => ({ ...d, sections: d.sections.map((s) => (s.id === sid ? { ...s, ...p } : s)) }))
-  const move = (from: string, to: string) =>
-    change((d) => {
+  const update = (fn: (d: TemplateDefinitionV2) => TemplateDefinitionV2) => setDraft((d) => (d ? fn(d) : d))
+  const toggle = (c: StudioComponent) =>
+    update((d) => {
       const list = sorted(d)
-      const i = list.findIndex((s) => s.id === from)
-      const j = list.findIndex((s) => s.id === to)
-      if (i < 0 || j < 0 || i === j) return d
-      const [m] = list.splice(i, 1)
-      list.splice(j, 0, m!)
-      return { ...d, sections: list.map((s, k) => ({ ...s, order: k })) }
+      const existing = list.find((s) => s.componentKey === c.key)
+      if (existing) return { ...d, sections: list.map((s) => (s.componentKey === c.key ? { ...s, enabled: !s.enabled } : s)) }
+      return { ...d, sections: renumber([...list, { id: c.key, componentKey: c.key, componentVersion: c.currentVersion, enabled: true, order: list.length, heading: c.name, sectionDescription: '', required: false, missingDataRule: 'OMIT' }]) }
     })
-  const step = (sid: string, delta: number) => {
-    const i = sections.findIndex((s) => s.id === sid)
-    const target = sections[i + delta]
-    if (target) move(sid, target.id)
-  }
-  const addFromPool = (c: StudioComponent) => {
-    change((d) => {
-      let sid = c.key
-      for (let n = 2; d.sections.some((s) => s.id === sid); n++) sid = `${c.key}-${n}`
-      return { ...d, sections: [...d.sections, { id: sid, componentKey: c.key, componentVersion: c.currentVersion, enabled: true, order: d.sections.length, heading: c.name, sectionDescription: '', required: false, missingDataRule: 'OMIT' }] }
+  const setAll = (on: boolean) =>
+    update((d) => {
+      const list = sorted(d).map((s) => ({ ...s, enabled: on }))
+      if (on) for (const c of tiles) if (!list.some((s) => s.componentKey === c.key)) list.push({ id: c.key, componentKey: c.key, componentVersion: c.currentVersion, enabled: true, order: list.length, heading: c.name, sectionDescription: '', required: false, missingDataRule: 'OMIT' })
+      return { ...d, sections: renumber(list) }
     })
-    setAdding(false)
-  }
-  const removeSection = (sid: string) => change((d) => ({ ...d, sections: sorted(d).filter((s) => s.id !== sid).map((s, k) => ({ ...s, order: k })) }))
+  const patch = (sid: string, p: Partial<TemplateSectionV2>) => update((d) => ({ ...d, sections: d.sections.map((s) => (s.id === sid ? { ...s, ...p } : s)) }))
+  const move = (sid: string, delta: number) =>
+    update((d) => {
+      const list = sorted(d)
+      const on = list.filter((s) => s.enabled)
+      const i = on.findIndex((s) => s.id === sid)
+      const target = on[i + delta]
+      if (!target) return d
+      const a = list.findIndex((s) => s.id === sid)
+      const b = list.findIndex((s) => s.id === target.id)
+      ;[list[a], list[b]] = [list[b]!, list[a]!]
+      return { ...d, sections: renumber(list) }
+    })
 
   const save = async () => {
     if (!draft) return
-    if (!draft.title.trim()) {
-      void feedback.error('Şablon adı gerekli.')
-      return
-    }
+    if (!draft.title.trim()) return void feedback.error('Şablon adı gerekli.')
+    if (!selected.length) return void feedback.error('En az bir bileşen seçin.')
     setSaving(true)
     try {
       const r = await studioApi.saveTemplate(id, draft)
       await reload()
-      setPast([])
-      setFuture([])
       void feedback.success(`Şablon kaydedildi (sürüm ${r.version}).`)
     } catch (e) {
       const err = e as StudioRequestError
@@ -238,245 +206,167 @@ function TemplateEditor({ id, onBack }: { id: string; onBack: () => void }) {
       setSaving(false)
     }
   }
-  const back = () => {
-    if (dirty) Modal.confirm({ title: 'Kaydedilmemiş değişiklikler var', content: 'Çıkarsanız bu değişiklikler kaybolur.', okText: 'Kaydetmeden çık', cancelText: 'Düzenlemeye devam et', onOk: onBack })
-    else onBack()
-  }
-  const suggest = async () => {
+  const openPreview = async () => {
     if (!draft) return
-    setSuggesting(true)
+    setPreviewOpen(true)
+    setPreview(null)
     try {
-      setSuggestions((await studioApi.describe(draft)).suggestions)
+      setPreview((await studioApi.previewTemplate(draft)).html)
     } catch (e) {
       void feedback.error((e as Error).message)
-    } finally {
-      setSuggesting(false)
     }
   }
+  const back = () => {
+    if (dirty) Modal.confirm({ title: 'Kaydedilmemiş değişiklikler var', content: 'Çıkarsanız bu değişiklikler kaybolur.', okText: 'Kaydetmeden çık', cancelText: 'Devam et', onOk: onBack })
+    else onBack()
+  }
 
-  if (!draft || !base) return <div className="template-studio"><Skeleton active paragraph={{ rows: 10 }} /></div>
+  if (!draft || !base) return <div className="atez-demo-page studio-page"><Skeleton active paragraph={{ rows: 10 }} /></div>
   return (
-    <div className="template-studio v2">
+    <div className="atez-demo-page studio-page tpl-detail">
       {holder}
-      <div className="template-studio-toolbar">
-        <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={back} disabled={saving}>
+      <div className="tpl-bar">
+        <Space size={12} wrap>
+          <Button icon={<ArrowLeftOutlined />} onClick={back}>
             Şablonlar
           </Button>
-          <Typography.Title level={3}>Rapor şablonu</Typography.Title>
-          <Tag>Sürüm {base.version}</Tag>
+          <div className="tpl-bar-title">
+            <strong>{draft.title || 'Adsız şablon'}</strong>
+            <span>
+              Sürüm {base.version} · {selected.length} bileşen seçili {dirty && <em>· kaydedilmemiş değişiklik</em>}
+            </span>
+          </div>
           {base.isDefault && <Tag color="success" icon={<StarFilled />}>Varsayılan</Tag>}
-          <StudioNav />
         </Space>
-        <Space>
-          <Typography.Text type="secondary">{dirty ? 'Kaydedilmemiş değişiklikler' : 'Kaydedildi'}</Typography.Text>
-          <Button aria-label="Geri al" icon={<UndoOutlined />} disabled={!past.length || saving} onClick={undo} />
-          <Button aria-label="İleri al" icon={<RedoOutlined />} disabled={!future.length || saving} onClick={redo} />
-          {!base.isDefault && (
-            <Button onClick={() => void studioApi.setDefault(id).then(reload)} disabled={saving}>
-              Varsayılan yap
-            </Button>
-          )}
+        <Space size={8} wrap>
+          <Button icon={<EyeOutlined />} onClick={() => void openPreview()}>
+            Önizle
+          </Button>
+          {!base.isDefault && <Button onClick={() => void studioApi.setDefault(id).then(reload)}>Varsayılan yap</Button>}
+          {dirty && <Button onClick={() => setDraft(base.definition)}>Vazgeç</Button>}
           <Can permission="config.manage">
             <Button type="primary" loading={saving} disabled={!dirty} onClick={() => void save()}>
-              Şablonu kaydet
+              Kaydet
             </Button>
           </Can>
         </Space>
       </div>
 
-      <Card className="template-info-card" size="small">
-        <div className="template-info v2">
+      <section className="tpl-block">
+        <div className="tpl-fields">
           <label>
-            Şablon adı
-            <Input value={draft.title} maxLength={160} onChange={(e) => change((d) => ({ ...d, title: e.target.value }))} />
+            <span>Şablon adı</span>
+            <Input value={draft.title} maxLength={160} onChange={(e) => update((d) => ({ ...d, title: e.target.value }))} />
           </label>
           <label>
-            Açıklama
-            <Input value={draft.description} maxLength={1000} onChange={(e) => change((d) => ({ ...d, description: e.target.value }))} />
+            <span>Açıklama</span>
+            <Input value={draft.description} maxLength={1000} onChange={(e) => update((d) => ({ ...d, description: e.target.value }))} />
           </label>
-          <label className="brief">
-            <span>
-              Brief <Typography.Text type="secondary">· raporun amacı, hedef kitle, ton, genel vurgu</Typography.Text>
-            </span>
-            <Input.TextArea aria-label="Şablon brief" autoSize={{ minRows: 2, maxRows: 5 }} maxLength={4000} value={draft.brief} onChange={(e) => change((d) => ({ ...d, brief: e.target.value }))} />
+          <label className="wide">
+            <span>Brief — raporun amacı, hedef kitle, ton, genel vurgu</span>
+            <Input.TextArea aria-label="Şablon brief" autoSize={{ minRows: 2, maxRows: 5 }} maxLength={4000} value={draft.brief} onChange={(e) => update((d) => ({ ...d, brief: e.target.value }))} />
           </label>
         </div>
-      </Card>
+      </section>
 
-      <div className="template-editor-grid">
-        <Card
-          className="template-sections-card"
-          title={
-            <span>
-              Rapor bölümleri <Tag>{sections.filter((s) => s.enabled).length}/{sections.length} açık</Tag>
-            </span>
-          }
-          size="small"
-        >
-          <ol className="template-section-list" aria-label="Rapor bölümleri">
-            {sections.map((s, i) => {
-              const c = byKey.get(s.componentKey)
-              const st = s.enabled ? states.get(s.id) : undefined
-              return (
-                <li
-                  key={s.id}
-                  draggable
-                  onDragStart={() => setDragId(s.id)}
-                  onDragEnd={() => setDragId(null)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => dragId && move(dragId, s.id)}
-                  className={[selected === s.id && 'is-selected', !s.enabled && 'is-off', dragId === s.id && 'is-dragging'].filter(Boolean).join(' ')}
-                  onClick={() => {
-                    setSelected(s.id)
-                    setTab('section')
-                  }}
-                >
-                  <HolderOutlined className="section-grip" aria-hidden="true" />
-                  <div className="section-text">
-                    <strong>{s.heading || c?.name || s.componentKey}</strong>
-                    <span>
-                      {c ? CATEGORY_LABELS[c.category] : s.componentKey} · v{s.componentVersion}
-                      {s.sectionDescription.trim() ? ' · açıklamalı' : ''}
-                    </span>
-                    {st && <Tag color={STATE_LABELS[st]?.color} bordered={false}>{STATE_LABELS[st]?.text}</Tag>}
-                  </div>
-                  <span className="section-actions" onClick={(e) => e.stopPropagation()}>
-                    <Tooltip title="Yukarı">
-                      <Button size="small" type="text" aria-label={`${s.heading} yukarı`} icon={<ArrowUpOutlined />} disabled={i === 0} onClick={() => step(s.id, -1)} />
-                    </Tooltip>
-                    <Tooltip title="Aşağı">
-                      <Button size="small" type="text" aria-label={`${s.heading} aşağı`} icon={<ArrowDownOutlined />} disabled={i === sections.length - 1} onClick={() => step(s.id, 1)} />
-                    </Tooltip>
-                    <Switch size="small" aria-label={`${s.heading} açık`} checked={s.enabled} onChange={(v) => patch(s.id, { enabled: v })} />
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
-          <div className="template-section-foot">
-            <Button icon={<AppstoreAddOutlined />} onClick={() => setAdding(true)}>
-              Havuzdan ekle
-            </Button>
-            <Link to="/templates/components?ai=1">Yeni bileşen oluştur →</Link>
+      <section className="tpl-block">
+        <div className="tpl-block-head">
+          <div>
+            <h2>Bileşenler</h2>
+            <p>Raporda yer alacak bileşenleri seçin. Küçük önizleme, bileşenin raporda nasıl görüneceğini gösterir.</p>
           </div>
-        </Card>
+          <Space size={8} wrap>
+            <Button size="small" type="text" onClick={() => setAll(true)}>
+              Tümünü seç
+            </Button>
+            <Button size="small" type="text" onClick={() => setAll(false)}>
+              Hiçbiri
+            </Button>
+            <Link to="/templates/components?ai=1" className="tpl-link">
+              <RobotOutlined /> Yeni bileşen oluştur
+            </Link>
+          </Space>
+        </div>
+        {categories.length > 1 && (
+          <Segmented className="tpl-cats" size="small" value={category} onChange={(v) => setCategory(String(v))} options={[{ value: 'ALL', label: 'Tümü' }, ...categories.map((c) => ({ value: c, label: CATEGORY_LABELS[c] }))]} />
+        )}
+        <div className="tpl-tiles" role="group" aria-label="Bileşen seçimi">
+          {shown.map((c) => (
+            <ComponentTile key={c.id} c={c} selected={isOn(c.key)} onToggle={() => toggle(c)} />
+          ))}
+        </div>
+      </section>
 
-        <Card className="template-preview-card" title="Önizleme · örnek analiz" size="small">
-          {previewError && <Alert type="warning" showIcon title="Önizleme alınamadı" description={previewError} />}
-          <StudioPreview html={preview?.html} title="Rapor önizlemesi" height={880} />
-        </Card>
-
-        <Card className="template-settings-card" size="small">
-          <Tabs
-            activeKey={tab}
-            onChange={setTab}
-            items={[
-              {
-                key: 'section',
-                label: 'Bölüm',
-                children: sel ? (
-                  <Form layout="vertical" className="section-form">
-                    <Typography.Paragraph type="secondary">
-                      Bileşen: <strong>{byKey.get(sel.componentKey)?.name ?? sel.componentKey}</strong> <Tag bordered={false}>v{sel.componentVersion}</Tag>
-                    </Typography.Paragraph>
-                    <Form.Item label="Başlık">
-                      <Input aria-label="Bölüm başlığı" value={sel.heading} maxLength={160} onChange={(e) => patch(sel.id, { heading: e.target.value })} />
-                    </Form.Item>
-                    <Form.Item
-                      label="Bölüm açıklaması"
-                      extra="Bu bölümde nelere önem verilsin, içerikte ne istensin? Analiz bu bilgiyi kaynakta arar; rapor yazımı bunu en önemli yönlendirme olarak uygular. Kaynakta olmayan bilgi eklenmez."
-                    >
-                      <Input.TextArea
-                        aria-label="Bölüm açıklaması"
-                        autoSize={{ minRows: 7, maxRows: 14 }}
-                        maxLength={4000}
-                        showCount
-                        value={sel.sectionDescription}
-                        placeholder={'ör. Gümrük müşavirinin beyannamede neyi değiştirmesi gerektiğini öne çıkar.\nSayısal artışı tek cümlede yorumla; belge yükümlülüklerini madde madde ver.'}
-                        onChange={(e) => patch(sel.id, { sectionDescription: e.target.value })}
-                      />
-                    </Form.Item>
-                    <Form.Item>
-                      <Checkbox checked={sel.required} onChange={(e) => patch(sel.id, { required: e.target.checked, ...(e.target.checked && sel.missingDataRule === 'OMIT' ? { missingDataRule: 'NOTE' as const } : {}) })}>
-                        Zorunlu bölüm
-                      </Checkbox>
-                    </Form.Item>
-                    <Form.Item label="Kaynakta veri yoksa">
-                      <Segmented
-                        value={sel.missingDataRule}
-                        onChange={(v) => patch(sel.id, { missingDataRule: v as 'NOTE' | 'OMIT' })}
-                        options={(['NOTE', 'OMIT'] as const).map((k) => ({ value: k, label: MISSING_RULE_LABELS[k], disabled: sel.required && k === 'OMIT' }))}
-                      />
-                    </Form.Item>
-                    <Button danger type="text" icon={<DeleteOutlined />} onClick={() => removeSection(sel.id)}>
-                      Bölümü şablondan çıkar
-                    </Button>
-                  </Form>
-                ) : (
-                  <Empty description="Soldan bir bölüm seçin." />
-                ),
-              },
-              {
-                key: 'ai',
-                label: 'AI önerisi',
-                children: (
-                  <div className="section-form">
-                    <Typography.Paragraph type="secondary">Brief’ten her açık bölüm için açıklama önerir. Bölüm yapısı, sırası ve bileşenler değişmez; öneriyi uygulamadan önce görürsünüz.</Typography.Paragraph>
-                    <Button icon={<RobotOutlined />} loading={suggesting} disabled={!draft.brief.trim()} onClick={() => void suggest()}>
-                      Bölüm açıklamalarını öner
-                    </Button>
-                    {!draft.brief.trim() && <Typography.Paragraph type="secondary">Önce brief yazın.</Typography.Paragraph>}
-                    {suggestions && (
-                      <>
-                        <List
-                          size="small"
-                          className="suggestion-list"
-                          dataSource={suggestions}
-                          renderItem={(s) => <List.Item><List.Item.Meta title={sections.find((x) => x.id === s.sectionId)?.heading} description={s.sectionDescription} /></List.Item>}
-                        />
-                        <Space>
-                          <Button onClick={() => setSuggestions(null)}>Vazgeç</Button>
-                          <Button
-                            type="primary"
-                            onClick={() => {
-                              const m = new Map(suggestions.map((s) => [s.sectionId, s.sectionDescription]))
-                              change((d) => ({ ...d, sections: d.sections.map((s) => (m.has(s.id) ? { ...s, sectionDescription: m.get(s.id)! } : s)) }))
-                              setSuggestions(null)
-                            }}
-                          >
-                            Uygula
-                          </Button>
-                        </Space>
-                      </>
-                    )}
+      <section className="tpl-block">
+        <div className="tpl-block-head">
+          <div>
+            <h2>Seçili bölümler</h2>
+            <p>Sıra rapordaki sıradır. Her bölümün açıklaması, analizin neyi arayacağını ve raporda neyin öne çıkacağını yönlendirir.</p>
+          </div>
+        </div>
+        {selected.length ? (
+          <Collapse
+            className="tpl-sections"
+            accordion
+            defaultActiveKey={selected[0]?.id}
+            items={selected.map((s, i) => ({
+              key: s.id,
+              label: (
+                <div className="tpl-sec-label">
+                  <span className="tpl-sec-no">{i + 1}</span>
+                  <strong>{s.heading || byKey.get(s.componentKey)?.name}</strong>
+                  <span className="tpl-sec-meta">
+                    {byKey.get(s.componentKey)?.name}
+                    {s.sectionDescription.trim() ? '' : ' · açıklama yok'}
+                  </span>
+                </div>
+              ),
+              extra: (
+                <span className="tpl-sec-move" onClick={(e) => e.stopPropagation()}>
+                  <Button size="small" type="text" aria-label={`${s.heading} yukarı`} icon={<ArrowUpOutlined />} disabled={i === 0} onClick={() => move(s.id, -1)} />
+                  <Button size="small" type="text" aria-label={`${s.heading} aşağı`} icon={<ArrowDownOutlined />} disabled={i === selected.length - 1} onClick={() => move(s.id, 1)} />
+                </span>
+              ),
+              children: (
+                <div className="tpl-sec-form">
+                  <label>
+                    <span>Başlık</span>
+                    <Input aria-label="Bölüm başlığı" value={s.heading} maxLength={160} onChange={(e) => patch(s.id, { heading: e.target.value })} />
+                  </label>
+                  <label className="wide">
+                    <span>Bölüm açıklaması</span>
+                    <Input.TextArea
+                      aria-label="Bölüm açıklaması"
+                      autoSize={{ minRows: 3, maxRows: 8 }}
+                      maxLength={4000}
+                      value={s.sectionDescription}
+                      placeholder="ör. Gümrük müşavirinin beyannamede neyi değiştirmesi gerektiğini öne çıkar."
+                      onChange={(e) => patch(s.id, { sectionDescription: e.target.value })}
+                    />
+                  </label>
+                  <div className="tpl-sec-rules">
+                    <span>Kaynakta veri yoksa</span>
+                    <Segmented
+                      size="small"
+                      value={s.missingDataRule}
+                      onChange={(v) => patch(s.id, { missingDataRule: v as 'NOTE' | 'OMIT' })}
+                      options={(['NOTE', 'OMIT'] as const).map((k) => ({ value: k, label: MISSING_RULE_LABELS[k], disabled: s.required && k === 'OMIT' }))}
+                    />
+                    <Checkbox checked={s.required} onChange={(e) => patch(s.id, { required: e.target.checked, ...(e.target.checked && s.missingDataRule === 'OMIT' ? { missingDataRule: 'NOTE' as const } : {}) })}>
+                      Zorunlu
+                    </Checkbox>
                   </div>
-                ),
-              },
-            ]}
+                </div>
+              ),
+            }))}
           />
-        </Card>
-      </div>
+        ) : (
+          <Empty description="Henüz bileşen seçilmedi." />
+        )}
+      </section>
 
-      <Modal title="Havuzdan ekle" open={adding} onCancel={() => setAdding(false)} footer={null} width={720}>
-        <Typography.Paragraph type="secondary">Yalnızca aktif bileşenler listelenir. Yeni bileşen için bileşen havuzundaki AI panelini kullanın.</Typography.Paragraph>
-        <List
-          className="pool-pick"
-          dataSource={components.filter((c) => c.status === 'ACTIVE')}
-          renderItem={(c) => (
-            <List.Item actions={[<Button key="add" size="small" onClick={() => addFromPool(c)}>Ekle</Button>]}>
-              <List.Item.Meta
-                title={
-                  <Space>
-                    {c.name}
-                    {sections.some((s) => s.componentKey === c.key) && <Tag bordered={false}>şablonda var</Tag>}
-                  </Space>
-                }
-                description={`${CATEGORY_LABELS[c.category]} · v${c.currentVersion} — ${c.description}`}
-              />
-            </List.Item>
-          )}
-        />
+      <Modal title="Rapor önizlemesi · örnek analiz" open={previewOpen} onCancel={() => setPreviewOpen(false)} footer={null} width={960}>
+        {preview ? <iframe className="tpl-preview-frame" title="Rapor önizlemesi" sandbox="" srcDoc={preview} /> : <Skeleton active paragraph={{ rows: 12 }} />}
       </Modal>
     </div>
   )

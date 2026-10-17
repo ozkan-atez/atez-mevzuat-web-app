@@ -49,46 +49,46 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('v2 şablon editörü (§10.1)', () => {
-  it('bölümleri yapılandırılmış liste olarak gösterir; açıklama, kural ve sıra değişikliği yeni sürüm olarak kaydedilir', async () => {
-    render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Şablonu düzenle' }))
-    const list = await screen.findByRole('list', { name: 'Rapor bölümleri' })
-    expect(within(list).getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.queryByLabelText('Şablon açıklaması')).toBeNull() // eski tek metin kutusu yok
-    await userEvent.type(screen.getByLabelText('Bölüm açıklaması'), 'Gözetim belgesini öne çıkar.')
-    await userEvent.click(within(list).getByText('Kaynaklar'))
-    await userEvent.click(screen.getByRole('radio', { name: '“Kaynakta yok” notu' }).closest('label')!)
-    await userEvent.click(screen.getByRole('button', { name: 'Kaynaklar yukarı' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Şablonu kaydet' }))
-    await waitFor(() => expect(saved).toHaveLength(1))
-    const d = (saved[0] as { definition: TemplateDefinitionV2 }).definition
-    const byId = Object.fromEntries(d.sections.map((s) => [s.id, s]))
-    expect(byId.ozet!.sectionDescription).toBe('Gözetim belgesini öne çıkar.')
-    expect(byId.kaynaklar!.missingDataRule).toBe('NOTE')
-    expect(byId.kaynaklar!.order).toBe(0)
-    expect(byId.ozet!.order).toBe(1)
+const openTemplate = async () => {
+  render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
+  await userEvent.click(await screen.findByRole('button', { name: /Standart bülten/ }))
+  await screen.findByRole('group', { name: 'Bileşen seçimi' })
+}
+const savedDefinition = async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+  await waitFor(() => expect(saved).toHaveLength(1))
+  return (saved[0] as { definition: TemplateDefinitionV2 }).definition
+}
+
+describe('v2 şablon sayfası: bileşen seçimi (§10.1)', () => {
+  it('her bileşen küçük önizleme ve isim düğmesiyle görünür; şablondakiler seçili', async () => {
+    await openTemplate()
+    const group = screen.getByRole('group', { name: 'Bileşen seçimi' })
+    expect(within(group).getAllByRole('switch')).toHaveLength(3)
+    expect(within(group).getByRole('switch', { name: 'Özet' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(group).getByRole('switch', { name: 'Kaynaklar' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(group).getByRole('switch', { name: 'İstisnalar' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('button', { name: 'Kaydet' })).toBeDisabled()
   })
 
-  it('havuzdan aktif bileşen ekler ve bölümü kapatır', async () => {
-    render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Şablonu düzenle' }))
-    await userEvent.click(await screen.findByRole('switch', { name: 'Kaynaklar açık' }))
-    await userEvent.click(screen.getByRole('button', { name: /Havuzdan ekle/ }))
-    const dialog = await screen.findByRole('dialog', { name: 'Havuzdan ekle' })
-    const row = within(dialog).getByText('İstisnalar').closest('li')!
-    await userEvent.click(within(row).getByRole('button', { name: 'Ekle' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Şablonu kaydet' }))
-    await waitFor(() => expect(saved).toHaveLength(1))
-    const d = (saved[0] as { definition: TemplateDefinitionV2 }).definition
+  it('isim düğmesiyle bileşen kapatılır/eklenir ve yeni sürüm olarak kaydedilir', async () => {
+    await openTemplate()
+    await userEvent.click(screen.getByRole('switch', { name: 'Kaynaklar' }))
+    await userEvent.click(screen.getByRole('switch', { name: 'İstisnalar' }))
+    const d = await savedDefinition()
     expect(d.sections.find((s) => s.id === 'kaynaklar')!.enabled).toBe(false)
     expect(d.sections.find((s) => s.id === 'istisnalar')).toMatchObject({ componentKey: 'istisnalar', componentVersion: 2, enabled: true, order: 2 })
   })
 
-  it('zorunlu bölümde "gizle" kuralı seçilemez', async () => {
-    render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Şablonu düzenle' }))
-    await screen.findByRole('list', { name: 'Rapor bölümleri' })
-    expect(screen.getByRole('radio', { name: 'Bölümü gizle' })).toBeDisabled()
+  it('seçili bölümün açıklaması, kuralı ve sırası düzenlenir', async () => {
+    await openTemplate()
+    await userEvent.type(screen.getByLabelText('Bölüm açıklaması'), 'Gözetim belgesini öne çıkar.')
+    expect(screen.getByRole('radio', { name: 'Bölümü gizle' })).toBeDisabled() // zorunlu bölüm
+    await userEvent.click(screen.getByRole('button', { name: 'Kaynaklar yukarı' }))
+    const d = await savedDefinition()
+    const byId = Object.fromEntries(d.sections.map((s) => [s.id, s]))
+    expect(byId.ozet!.sectionDescription).toBe('Gözetim belgesini öne çıkar.')
+    expect(byId.kaynaklar!.order).toBe(0)
+    expect(byId.ozet!.order).toBe(1)
   })
 })
