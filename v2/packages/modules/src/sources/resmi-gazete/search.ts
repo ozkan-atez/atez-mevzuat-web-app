@@ -1,5 +1,5 @@
 import { TransientError, PermanentError, type HttpFetcher } from '@atez/platform'
-import { RG_BASE, clean, dayPageUrl, fihristUrl, parseDayPage, parseFihristPage, type RgListItem } from './parse'
+import { RG_BASE, clean, fihristUrl, parseFihristPage, type RgListItem } from './parse'
 
 /**
  * RG geriye dönük araması (§9.1): `POST /Home/Filter`, ISO tarihler, sayfalı. Sonuç belge değil
@@ -110,8 +110,9 @@ export interface ScoredHit extends RgSearchHit {
 }
 
 /**
- * Deterministik puanlama. Numara sınır kontrollü eşleşirse +3, başlık benzerliği ≥ 0.6 ise +2
- * (≥ 0.35 ise +1). Mevcut belgenin kendisi hariç tutulur. Eşitlikte en yeni tarih önde.
+ * Deterministik puanlama. Numara sınır kontrollü eşleşirse +2, başlık benzerliği ≥ 0.6 ise +2
+ * (≥ 0.35 ise +1). Numara tek başına yetmez: "E: 2018/1" gibi esas numaraları da eşleşir;
+ * kesin seçim için numara + başlık benzerliği gerekir. Mevcut belge hariç; eşitlikte en yeni önde.
  */
 export function scoreHits(hits: RgSearchHit[], targets: PriorTarget[], exclude: { title: string; date: string }): ScoredHit[] {
   const self = titleTokens(exclude.title)
@@ -124,7 +125,7 @@ export function scoreHits(hits: RgSearchHit[], targets: PriorTarget[], exclude: 
         let s = 0
         const r: string[] = []
         if (t.number && (containsNumber(h.title, t.number) || h.number === t.number)) {
-          s += 3
+          s += 2
           r.push(`numara ${t.number}`)
         }
         const j = jaccard(titleTokens(h.title), titleTokens(t.title))
@@ -146,7 +147,7 @@ export function scoreHits(hits: RgSearchHit[], targets: PriorTarget[], exclude: 
     .sort((a, b) => b.score - a.score || b.date.localeCompare(a.date))
 }
 
-/** Kesin seçim: en yüksek puan ≥ 3 ve ikinciden açıkça (≥ 1 puan) yüksekse ya da aynı puanda daha yeniyse. */
+/** Kesin seçim: en yüksek puan ≥ 3 (numara + başlık) ve ikinciden açıkça yüksekse ya da aynı puanda daha yeniyse. */
 export function decideHit(scored: ScoredHit[]): { chosen: ScoredHit | null; ambiguous: boolean } {
   const [a, b] = scored
   if (!a) return { chosen: null, ambiguous: false }
@@ -163,11 +164,11 @@ const normTitle = (s: string) =>
 
 /** `/fihrist?tarih=` bağlantısını belge URL'sine çözer (fihristteki başlık birebir eşleşmeli). */
 export async function resolveHitToItem(http: HttpFetcher, hit: RgSearchHit): Promise<(RgListItem & { issue: string; feed: string }) | null> {
-  const url = hit.mukerrer ? fihristUrl(hit.date, hit.mukerrer) : dayPageUrl(hit.date)
+  // Aramanın döndürdüğü fihrist adresi kullanılır; günlük sayfa (dd.MM.yyyy) eski tarihlerde arşive yönlenir.
+  const url = hit.mukerrer ? fihristUrl(hit.date, hit.mukerrer) : `${RG_BASE}/fihrist?tarih=${hit.date}`
   const res = await http.fetch({ url, noFollow: true })
   if (res.status !== 200) throw new TransientError(`RG fihrist HTTP ${res.status}`, 'RG_HTTP')
-  const html = res.body.toString('utf8')
-  const page = hit.mukerrer ? parseFihristPage(html, hit.date, hit.mukerrer) : parseDayPage(html, hit.date)
+  const page = parseFihristPage(res.body.toString('utf8'), hit.date, hit.mukerrer)
   const want = normTitle(hit.title)
   const matches = page.items.filter((i) => normTitle(i.title) === want)
   if (matches.length !== 1) return null

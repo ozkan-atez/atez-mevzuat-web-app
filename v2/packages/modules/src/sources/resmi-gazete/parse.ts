@@ -33,7 +33,7 @@ export interface RgDayPage {
 export interface RgFihristPage {
   date: string
   issue: string
-  mukerrer: number
+  mukerrer: number | null
   items: RgListItem[]
 }
 
@@ -169,10 +169,11 @@ export function parseDayPage(html: string, date: string): RgDayPage {
   }
 }
 
-export function parseFihristPage(html: string, date: string, mukerrer: number): RgFihristPage {
+/** `/fihrist?tarih=…[&mukerrer=N]` sayfası; mükerrer yoksa o günün ana fihristi (eski tarihlerde de çalışır). */
+export function parseFihristPage(html: string, date: string, mukerrer: number | null): RgFihristPage {
   const $ = load(html)
-  const issue = readIssue($, date, `${mukerrer}. mükerrer`)
+  const issue = readIssue($, date, mukerrer ? `${mukerrer}. mükerrer` : 'fihrist')
   const items = parseItems($, date, mukerrer)
-  if (items.length === 0) throw new RgParseError(`${mukerrer}. mükerrer fihristi boş`, 'RG_EMPTY_INDEX')
+  if (items.length === 0) throw new RgParseError(`${mukerrer ? `${mukerrer}. mükerrer ` : ''}fihristi boş`, 'RG_EMPTY_INDEX')
   return { date, issue, mukerrer, items }
 }

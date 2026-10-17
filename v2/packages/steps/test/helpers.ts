@@ -26,6 +26,7 @@ export class FakeRg implements HttpFetcher {
       return ok(body, 'text/html; charset=utf-8')
     }
     if (u.pathname === '/fihrist') {
+      if (!u.searchParams.get('mukerrer')) return ok(fx(`day-${u.searchParams.get('tarih')}.html`), 'text/html; charset=utf-8')
       try {
         return ok(fx(`fihrist-${u.searchParams.get('tarih')}-m${u.searchParams.get('mukerrer')}.html`), 'text/html; charset=utf-8')
       } catch {

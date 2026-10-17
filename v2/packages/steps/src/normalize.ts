@@ -1,7 +1,7 @@
 import type { FileRef, StepInput, StepOutput } from '@atez/contracts'
 import type { StepHandler } from '@atez/engine'
 import { StorageKeys, sha256, type AiConfig } from '@atez/platform'
-import { MODEL_NATIVE, OFFICE, cleanWordHtml, convertOfficeToPdf, decodeHtml, documents, pdfPageCount, splitPdf, type NewFile } from '@atez/modules'
+import { MODEL_NATIVE, OFFICE, cleanWordHtml, convertOfficeToPdf, decodeHtml, documents, gifToPng, pdfPageCount, splitPdf, type NewFile } from '@atez/modules'
 import { DEFAULT_AI_CONFIG } from '@atez/platform'
 import type { StepDeps } from './deps'
 
@@ -15,7 +15,7 @@ export const docNormalize: StepHandler<StepInput<'doc.normalize'>, StepOutput<'d
   key: 'doc.normalize',
   versions: (ctx) => {
     const l = limits(ctx.deps.ai?.config)
-    return { handler: '1', budget: String(l.budget), maxPages: String(l.maxPages) }
+    return { handler: '2', budget: String(l.budget), maxPages: String(l.maxPages) }
   },
   // Dosya kayıtları sürüme bağlı; aynı içerikli iki belge önbelleği paylaşmaz.
   cacheIdentity: (input) => `${input.documentVersionId}:${input.contentHash}`,
@@ -52,6 +52,15 @@ export const docNormalize: StepHandler<StepInput<'doc.normalize'>, StepOutput<'d
         out.push({ role: 'MODEL_INPUT', label: f.label, url: null, mime: 'text/html', encoding: 'utf-8', bytes: cleaned.length, sha256: stored.sha, objectKey: stored.key, pageRange: null })
       } else if (f.mime === 'application/pdf') {
         await addPdf(f, await store.get(f.objectKey), f.objectKey, f.sha256)
+      } else if (f.mime === 'image/gif') {
+        // Gemini GIF okumaz: piksel verisi PNG'ye taşınır (biçim dönüşümü, OCR değil).
+        try {
+          const png = gifToPng(await store.get(f.objectKey))
+          const stored = await put(png, 'png', 'image/png')
+          out.push({ role: 'MODEL_INPUT', label: f.label, url: null, mime: 'image/png', encoding: null, bytes: png.length, sha256: stored.sha, objectKey: stored.key, pageRange: null })
+        } catch (err) {
+          skipped.push({ label: f.label, reason: `GIF_DECODE_FAILED: ${String(err).slice(0, 80)}` })
+        }
       } else if (MODEL_NATIVE.has(f.mime)) {
         if (f.bytes > budget) skipped.push({ label: f.label, reason: 'IMAGE_TOO_LARGE' })
         else out.push({ role: 'MODEL_INPUT', label: f.label, url: null, mime: f.mime, encoding: null, bytes: f.bytes, sha256: f.sha256, objectKey: f.objectKey, pageRange: null })

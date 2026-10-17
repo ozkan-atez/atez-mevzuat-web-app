@@ -38,6 +38,8 @@ export interface TariffApi {
 export class SingleWindowTariffApi implements TariffApi {
   private readonly accountKey: string
   private readonly key: Buffer
+  /** Kimlik reddedildiyse bu süreçte yeniden denenmez (hesap kilitlenmesin). */
+  private authRejected = false
   constructor(
     private readonly db: Db,
     private readonly creds: TariffCredentials,
@@ -48,6 +50,7 @@ export class SingleWindowTariffApi implements TariffApi {
   }
 
   async fetchMeasures(gtip: string, queryDate: string): Promise<{ url: string; raw: unknown }> {
+    if (this.authRejected) throw new PermanentError('TARIFF kimlik bilgisi daha önce reddedildi; yeniden denenmiyor', 'TARIFF_AUTH')
     const url = `${TARIFF_MEASURES_URL}?${new URLSearchParams({ commodityCode: gtip, countryCode: 'TR', queryType: 'import', queryDate })}`
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = await this.token(attempt > 0)
@@ -86,7 +89,10 @@ export class SingleWindowTariffApi implements TariffApi {
       } catch (err) {
         throw new TransientError(`TARIFF oturum ağ hatası: ${String(err)}`, 'TARIFF_AUTH_NETWORK')
       }
-      if (res.status === 400 || res.status === 401) throw new PermanentError('TARIFF kullanıcı adı veya şifresi kabul edilmedi', 'TARIFF_AUTH')
+      if (res.status === 400 || res.status === 401) {
+        this.authRejected = true
+        throw new PermanentError('TARIFF kullanıcı adı veya şifresi kabul edilmedi', 'TARIFF_AUTH')
+      }
       if (!res.ok) throw new TransientError(`TARIFF oturumu açılamadı (${res.status})`, 'TARIFF_AUTH')
       const payload = (await res.json()) as { access_token?: unknown; expires_in?: unknown }
       if (typeof payload.access_token !== 'string' || !payload.access_token) throw new PermanentError('TARIFF erişim belirteci alınamadı', 'TARIFF_AUTH')

@@ -74,6 +74,8 @@ const GtipCode = z.object({
 
 const GtipTable = z.object({
   title: z.string(),
+  /** Tablonun bulunduğu dosya etiketi (f1, f2…); eski profillerde yok → f1. */
+  file: z.string().optional(),
   pages: z.array(z.number().int().min(1)),
   approxRows: z.number().int().min(0).nullable(),
   columns: z.array(z.string()),

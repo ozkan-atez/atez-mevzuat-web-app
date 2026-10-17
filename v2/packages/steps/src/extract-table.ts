@@ -33,10 +33,10 @@ export async function loadProfile(ctx: StepContext<StepDeps>, documentVersionId:
 }
 
 /** Özgün sayfa numaralarını içeren dosyadan (MODEL_INPUT veya PART) alt PDF üretir. */
-export async function pdfPages(ctx: StepContext<StepDeps>, files: FileRef[], pages: number[]): Promise<Uint8Array | null> {
-  // Tablo sayfaları ana belgeye (f1) aittir; bölünmüşse PART'lar, değilse MODEL_INPUT kullanılır.
-  const parts = files.filter((f) => f.role === 'PART' && f.label.startsWith('f1#'))
-  const pdfs = parts.length ? parts : files.filter((f) => f.role === 'MODEL_INPUT' && f.label === 'f1' && f.mime === 'application/pdf')
+export async function pdfPages(ctx: StepContext<StepDeps>, files: FileRef[], pages: number[], label = 'f1'): Promise<Uint8Array | null> {
+  // Sayfalar etiketi verilen dosyanın kendi numaralarıdır; bölünmüşse PART'lar, değilse MODEL_INPUT.
+  const parts = files.filter((f) => f.role === 'PART' && f.label.startsWith(`${label}#`))
+  const pdfs = parts.length ? parts : files.filter((f) => f.role === 'MODEL_INPUT' && f.label === label && f.mime === 'application/pdf')
   const out = await PDFDocument.create()
   const cache = new Map<string, PDFDocument>()
   let copied = 0
@@ -76,7 +76,7 @@ async function limited<T>(tasks: (() => Promise<T>)[], n: number): Promise<T[]> 
  */
 export const extractTable: StepHandler<StepInput<'extract.table'>, StepOutput<'extract.table'>, StepDeps> = {
   key: 'extract.table',
-  versions: (ctx) => ({ handler: '1', prompt: loadPrompt(ctx.deps.configDir, PROMPT).ref, model: ctx.deps.ai?.modelFor('main') ?? 'none', pages: String(PAGES_PER_GROUP) }),
+  versions: (ctx) => ({ handler: '2', prompt: loadPrompt(ctx.deps.configDir, PROMPT).ref, model: ctx.deps.ai?.modelFor('main') ?? 'none', pages: String(PAGES_PER_GROUP) }),
   cacheIdentity: async (input, ctx) => {
     const p = await documents.latestProfile(ctx.deps.db, input.documentVersionId)
     return p ? `${input.documentVersionId}:p${p.version}` : null
@@ -94,35 +94,44 @@ export async function runExtractTable(documentVersionId: string, ctx: StepContex
   if (!ai) throw new PermanentError('AI geçidi yapılandırılmamış', 'AI_NOT_CONFIGURED')
   const prompt = loadPrompt(ctx.deps.configDir, PROMPT)
   const files = await documents.filesOf(ctx.deps.db, documentVersionId, ['MODEL_INPUT', 'PART'])
-  const html = files.find((f) => f.mime === 'text/html' && f.label === 'f1')
   const issues: string[] = []
 
-  type Group = { table: (typeof profile.gtip.tables)[number]; pages: number[] }
+  type Group = { table: (typeof profile.gtip.tables)[number]; label: string; kind: 'HTML' | 'IMAGE' | 'PDF'; pages: number[] }
   const groups: Group[] = []
   for (const table of profile.gtip.tables) {
-    if (html) {
-      groups.push({ table, pages: [] })
+    const label = table.file ?? 'f1'
+    const own = files.filter((f) => f.label === label || f.label.startsWith(`${label}#`))
+    const main = own[0]
+    if (!main) {
+      issues.push(`"${table.title}" tablosunun dosyası (${label}) model girdilerinde yok`)
       continue
     }
-    if (!table.pages.length) {
-      issues.push(`"${table.title}" tablosunun sayfaları bilinmiyor`)
-      continue
+    if (main.mime === 'text/html') groups.push({ table, label, kind: 'HTML', pages: [] })
+    else if (main.mime.startsWith('image/')) groups.push({ table, label, kind: 'IMAGE', pages: [] })
+    else {
+      const total = own.reduce((a, f) => Math.max(a, f.pageRange?.[1] ?? 0), 0)
+      const pages = table.pages.length ? [...new Set(table.pages)].sort((a, b) => a - b) : total && total <= PAGES_PER_GROUP ? Array.from({ length: total }, (_, i) => i + 1) : []
+      if (!pages.length) {
+        issues.push(`"${table.title}" tablosunun sayfaları bilinmiyor`)
+        continue
+      }
+      for (let i = 0; i < pages.length; i += PAGES_PER_GROUP) groups.push({ table, label, kind: 'PDF', pages: pages.slice(i, i + PAGES_PER_GROUP) })
     }
-    const pages = [...new Set(table.pages)].sort((a, b) => a - b)
-    for (let i = 0; i < pages.length; i += PAGES_PER_GROUP) groups.push({ table, pages: pages.slice(i, i + PAGES_PER_GROUP) })
   }
 
   const raws: unknown[] = []
   const results = await limited(
     groups.map((g) => async () => {
       const parts: AiPart[] = []
-      if (html) parts.push({ text: (await ctx.deps.store.get(html.objectKey)).toString('utf8') })
+      const file = files.find((f) => f.label === g.label)
+      if (g.kind === 'HTML' && file) parts.push({ text: (await ctx.deps.store.get(file.objectKey)).toString('utf8') })
+      else if (g.kind === 'IMAGE' && file) parts.push({ inline: { mime: file.mime, data: await ctx.deps.store.get(file.objectKey) } })
       else {
-        const pdf = await pdfPages(ctx, files, g.pages)
+        const pdf = await pdfPages(ctx, files, g.pages, g.label)
         if (!pdf) return { group: g, rows: [] as z.infer<typeof Rows>['rows'], missing: true }
         parts.push({ inline: { mime: 'application/pdf', data: pdf } })
       }
-      const where = html ? 'HTML belgenin tamamı' : `özgün belgenin ${g.pages.join(', ')}. sayfaları (bu dosyada 1–${g.pages.length})`
+      const where = g.kind === 'HTML' ? `HTML belge (${g.label})` : g.kind === 'IMAGE' ? `görsel (${g.label})` : `${g.label} dosyasının ${g.pages.join(', ')}. sayfaları (bu dosyada 1–${g.pages.length})`
       parts.push({ text: `Tablo: "${g.table.title}" · sütunlar: ${g.table.columns.join(' | ') || 'bilinmiyor'} · kaynak: ${where}.\nBu tablonun satırlarını çıkar.` })
       const res = await ai.generate({
         tier: 'main',
@@ -134,10 +143,10 @@ export async function runExtractTable(documentVersionId: string, ctx: StepContex
         mediaResolution: ai.config.mediaResolution,
         context: { runId: ctx.runId, workItemId: ctx.workItemId, stepKey: 'extract.table' },
       })
-      raws.push({ table: g.table.title, pages: g.pages, aiCallId: res.aiCallId, data: res.data })
-      if (res.data.rowCount !== res.data.rows.length) issues.push(`"${g.table.title}" ${g.pages.join(',')}: modelin bildirdiği satır sayısı (${res.data.rowCount}) ile çıkan satır (${res.data.rows.length}) farklı`)
-      // Sayfa numaraları alt PDF içinden özgün belgeye taşınır.
-      const rows = res.data.rows.map((r) => ({ ...r, page: r.page && !html ? (g.pages[r.page - 1] ?? null) : r.page }))
+      raws.push({ table: g.table.title, file: g.label, pages: g.pages, aiCallId: res.aiCallId, data: res.data })
+      if (res.data.rowCount !== res.data.rows.length) issues.push(`"${g.table.title}" ${g.label} ${g.pages.join(',')}: modelin bildirdiği satır sayısı (${res.data.rowCount}) ile çıkan satır (${res.data.rows.length}) farklı`)
+      // Sayfa numaraları alt PDF içinden özgün dosyaya taşınır.
+      const rows = res.data.rows.map((r) => ({ ...r, page: r.page && g.kind === 'PDF' ? (g.pages[r.page - 1] ?? null) : null }))
       return { group: g, rows, missing: false }
     }),
     PARALLEL,

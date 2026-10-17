@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import type { DiscoveredItem, DocumentProfileV1, StepInput, StepOutput } from '@atez/contracts'
 import type { StepContext, StepHandler } from '@atez/engine'
@@ -63,8 +63,11 @@ export const lineageResolve: StepHandler<StepInput<'lineage.resolve'>, Out, Step
 
     const attempts: Attempt[] = []
     const relations: Out['relations'] = []
-    // Yeniden çalıştırmada aynı ilişkiler/TARIFF satırları çift yazılmasın.
+    // Yeniden çözümde önceki sonuç (ilişkiler, TARIFF satırları) bu çalıştırmanınkiyle değiştirilir.
     await ctx.deps.db.delete(schema.gtipValue).where(and(eq(schema.gtipValue.documentVersionId, dv), eq(schema.gtipValue.source, 'TARIFF')))
+    await ctx.deps.db
+      .delete(schema.documentRelation)
+      .where(and(eq(schema.documentRelation.fromVersionId, dv), inArray(schema.documentRelation.strategy, ['TARIFF', 'RG_SEARCH'])))
 
     let tariffStatus: 'FOUND' | 'PARTIAL' | 'NOT_FOUND' | 'ERROR' | 'SKIPPED' = 'SKIPPED'
     if (profile.lineage.tariffQueries.length) {
@@ -112,7 +115,7 @@ async function tariffStrategy(dv: string, profile: DocumentProfileV1, asOf: stri
   const current = await ctx.deps.db.select().from(schema.gtipValue).where(and(eq(schema.gtipValue.documentVersionId, dv), eq(schema.gtipValue.source, 'RG')))
   const outcomes: string[] = []
   const notes: string[] = []
-  for (const q of profile.lineage.tariffQueries) {
+  outer: for (const q of profile.lineage.tariffQueries) {
     const digits = gtipKey(q.code)
     // Kısa kod sıfırla doldurulmaz: belgedeki tam (12 haneli) kodlar kullanılır, yoksa NEEDS_CODE_EXPANSION.
     const codes = digits.length === 12 ? [digits] : [...new Set(current.map((r) => gtipKey(r.gtip)).filter((g) => g.length === 12 && g.startsWith(digits)))]
@@ -128,7 +131,10 @@ async function tariffStrategy(dv: string, profile: DocumentProfileV1, asOf: stri
       } catch (err) {
         rethrowIfRetryable(err, ctx)
         outcomes.push('ERROR')
-        notes.push(`${code}: ${errorInfo(err).message}`)
+        const info = errorInfo(err)
+        notes.push(`${code}: ${info.message}`)
+        // Kimlik/erişim hatasında kalan kodlar denenmez (ERROR, NOT_FOUND değil).
+        if (info.code === 'TARIFF_AUTH' || info.code === 'TARIFF_NO_CREDENTIALS') break outer
         continue
       }
       const rows = current.filter((r) => gtipKey(r.gtip) === code)
@@ -182,7 +188,11 @@ async function rgStrategy(dv: string, profile: DocumentProfileV1, asOf: string, 
   const refs = profile.references.filter((r) => r.relation !== 'REFERENCES')
   const used = refs.length ? refs : profile.references
   const targets: PriorTarget[] = used.map((r) => ({ title: r.targetTitle, number: r.targetNumber }))
-  const terms = [...profile.lineage.rgQueries, ...used.map((r) => r.targetTitle), ...used.map((r) => r.targetNumber ?? '').filter((n) => /\d{4}\/\d+/.test(n))]
+  const titleTerms = [...profile.lineage.rgQueries, ...used.map((r) => r.targetTitle)]
+  // Çıplak "2018/1" araması sitede alt dize eşleşmesiyle yüzlerce sonuç döndürür (200 sınırı);
+  // "No: 2018/1" hem "(No: 2018/1)" hem "(Tebliğ No: 2018/1)" başlıklarını daraltarak yakalar.
+  const numberTerms = [...new Set(used.map((r) => r.targetNumber ?? '').filter((n) => /^\d{4}\/\d+$/.test(n)))].map((n) => `No: ${n}`)
+  const terms = [...titleTerms, ...numberTerms]
   if (!terms.length) return { status: 'NOT_FOUND' as const, note: 'Arama terimi yok', relations }
 
   let search
@@ -278,7 +288,9 @@ async function ensurePriorProcessed(item: Awaited<ReturnType<typeof resolveHitTo
   const sub: StepContext<StepDeps> = { ...ctx, force: false }
   if (doc.processingState === 'PROFILED' && doc.latestVersionId) {
     const p = await documents.latestProfile(ctx.deps.db, doc.latestVersionId)
-    if (p) {
+    // Profil güncel prompt/model sürümüyle üretilmişse yeniden okunmaz.
+    const current = classifyProfile.versions(sub)
+    if (p && p.promptVersion === current.prompt && p.model === current.model) {
       const hasRows = await ctx.deps.db.select({ id: schema.gtipValue.id }).from(schema.gtipValue).where(eq(schema.gtipValue.documentVersionId, doc.latestVersionId)).limit(1)
       if (!hasRows.length) await runExtractTable(doc.latestVersionId, sub).catch((err) => ctx.log.warn('prior table extraction failed', { error: String(err) }))
       return { documentVersionId: doc.latestVersionId, decision: p.decision }
