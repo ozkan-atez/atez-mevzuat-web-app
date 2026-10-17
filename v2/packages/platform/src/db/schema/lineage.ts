@@ -72,6 +72,8 @@ export const gtipValue = pgTable(
     description: text('description'),
     value: text('value'), // ondalık string ("1234.56"); null = metinsel değer
     rawValue: text('raw_value'),
+    /** Değerle ilgili dikkat notu (ör. TARIFF kaydı silinme tarihi taşıyor ama sonradan güncellenmiş). */
+    note: text('note'),
     unit: text('unit'),
     currency: text('currency'),
     origin: text('origin'),

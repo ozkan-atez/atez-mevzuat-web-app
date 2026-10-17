@@ -96,7 +96,7 @@ export const topicAnalyze: StepHandler<StepInput<'topic.analyze'>, StepOutput<'t
     const snapshots = snapshotIds.length ? await ctx.deps.db.select().from(schema.tariffSnapshot).where(inArray(schema.tariffSnapshot.id, snapshotIds)) : []
     const tRef = (id: string | null) => `t${snapshots.findIndex((s) => s.id === id) + 1}`
     const priorRows: ValueRow[] = [
-      ...tariffRows.filter((r) => r.value !== null).map((r) => ({ gtip: r.gtip, description: r.description, origin: r.origin, unit: r.unit, currency: r.currency, value: r.value, raw: r.rawValue, source: `TARIFF ${tRef(r.tariffSnapshotId)}` })),
+      ...tariffRows.filter((r) => r.value !== null).map((r) => ({ gtip: r.gtip, description: r.description, origin: r.origin, unit: r.unit, currency: r.currency, value: r.value, raw: r.rawValue, source: `TARIFF ${tRef(r.tariffSnapshotId)}`, note: r.note })),
       ...(priorIds.length
         ? (await ctx.deps.db.select().from(schema.gtipValue).where(and(inArray(schema.gtipValue.documentVersionId, priorIds), eq(schema.gtipValue.source, 'RG')))).map((r) => ({
             gtip: r.gtip,

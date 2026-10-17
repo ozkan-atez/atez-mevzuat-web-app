@@ -163,6 +163,7 @@ async function tariffStrategy(dv: string, profile: DocumentProfileV1, asOf: stri
             unit: sel.unit,
             currency: sel.currency,
             origin: row.origin,
+            note: sel.notes.join(' ') || null,
           })
           found = true
         }

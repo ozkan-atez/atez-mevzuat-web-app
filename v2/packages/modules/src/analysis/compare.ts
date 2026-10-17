@@ -11,6 +11,7 @@ export interface ValueRow {
   value: string | null
   raw: string | null
   source: string // "RG 2025/43 s.5", "TARIFF 2025-12-30" …
+  note?: string | null
 }
 
 /** Önceki değer araması "önlem yoktu" dediyse (TARIFF NOT_FOUND) satır NEW olur; bilinmiyorsa NO_PRIOR. */
@@ -65,7 +66,7 @@ export function buildComparison(current: ValueRow[], prior: PriorLookup): { rows
     const both = p.value !== null && c.value !== null
     out.push({
       ...base,
-      previous: { value: p.value, raw: p.raw, source: p.source },
+      previous: { value: p.value, raw: p.raw, source: p.source, note: p.note ?? null },
       changePct: both ? percentChange(p.value!, c.value!) : null,
       status: both ? (compareDecimal(p.value!, c.value!) === 0 ? 'UNCHANGED' : 'CHANGED') : 'NO_PRIOR',
     })

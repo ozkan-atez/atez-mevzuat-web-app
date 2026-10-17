@@ -86,7 +86,7 @@ describe('TARIFF kesin seçim (Ek B.2)', () => {
       base_duty_formatted: '200.00 USD / p/st - 300.00 USD / p/st',
       dutyExpr: [{ type: 'perquantity', amount: 200, currencyCode: 'USD', quantity: 1, uom: 'NAR' }],
     })
-    expect(selectTariffMeasure(payload([live]), { ...req, field: 'GOZETIM_DEGERI', expected: { unit: 'Adet', currency: 'ABD Doları' } })).toMatchObject({ status: 'FOUND', value: '200', currency: 'USD', unit: 'PCE' })
+    expect(selectTariffMeasure(payload([live]), { ...req, field: 'GOZETIM_DEGERI', expected: { unit: 'Adet', currency: 'ABD Doları' } })).toMatchObject({ status: 'FOUND', value: '200', currency: 'USD', unit: 'PCE', notes: [expect.stringMatching(/silinme tarihi \(2020-10-23\).*sonradan güncellenmiş \(2026-01-03\)/)] })
     expect(selectTariffMeasure(payload([{ ...live, updated_at: null }]), { ...req, field: 'GOZETIM_DEGERI' }).status).toBe('NOT_FOUND')
   })
   it('askıda/silinmiş ya da ithalat dışı önlem seçilmez', () => {

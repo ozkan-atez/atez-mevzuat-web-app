@@ -37,6 +37,7 @@ export function renderReport(spec: ReportSpecV1, template: Template): { html: st
   let table = ''
   if (spec.comparison && spec.comparison.rows.length) {
     const rows = spec.comparison.rows
+    const notes: string[] = []
     table = `
     <section class="table">
       <h2>Karşılaştırma</h2>
@@ -47,12 +48,14 @@ export function renderReport(spec: ReportSpecV1, template: Template): { html: st
           .map((r) => {
             const unit = [r.currency, r.unit].filter(Boolean).join(' / ')
             const pct = r.changePct === null ? '—' : `${r.changePct.startsWith('-') ? '' : '+'}%${formatTr(r.changePct)}`
+            if (r.previous?.note) notes.push(`${r.gtip}: ${r.previous.note}`)
             return `<tr class="s-${r.status.toLowerCase()}"><td class="mono">${esc(r.gtip)}</td><td>${esc(r.description)}</td><td>${esc(r.origin ?? 'Tüm ülkeler')}</td><td>${esc(unit)}</td><td class="n" title="${esc(r.previous?.source)}">${esc(formatTr(r.previous?.value ?? null))}</td><td class="n" title="${esc(r.current?.source)}">${esc(formatTr(r.current?.value ?? null))}</td><td class="n">${esc(pct)}</td><td>${esc(STATUS_TR[r.status])}</td></tr>`
           })
           .join('')}
         </tbody>
       </table></div>
       ${f.tableNote ? `<p class="note">${esc(f.tableNote)}</p>` : ''}
+      ${notes.length ? `<ul class="note muted">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
       ${spec.comparison.note ? `<p class="note muted">${esc(spec.comparison.note)}</p>` : ''}
     </section>`
     // Geri doğrulama: render edilen her sayı analizdeki değerin Türkçe gösterimi olmalı.

@@ -9,7 +9,7 @@ export const ComparisonRow = z.object({
   origin: z.string().nullable(),
   unit: z.string().nullable(),
   currency: z.string().nullable(),
-  previous: z.object({ value: z.string().nullable(), raw: z.string().nullable(), source: z.string() }).nullable(),
+  previous: z.object({ value: z.string().nullable(), raw: z.string().nullable(), source: z.string(), note: z.string().nullable().optional() }).nullable(),
   current: z.object({ value: z.string().nullable(), raw: z.string().nullable(), source: z.string() }).nullable(),
   /** (yeni − eski) / eski × 100, iki ondalık; hesaplanamıyorsa null. */
   changePct: z.string().nullable(),

@@ -439,6 +439,9 @@ flowchart TD
     - yasal referans (`\d{4}/\d+`) `regulation_code` ile eşleşmeli;
     - birim ve para birimi aynı olmalı.
 
+    - **Silinmiş kayıt (2026-10-17 kararı):** Kayıt yalnızca `was_deleted = true` ise ya da `deleted_at` dolu olup kayıt o tarihten sonra güncellenmemişse (`updated_at` yok veya daha eski) silinmiş sayılır. Canlı veride yürürlükteki bir gözetim kaydı `deleted_at: 2020-10-23` ama `updated_at: 2026-01-03` taşıyordu ve değerleri RG'deki tebliğle örtüşüyordu. Böyle bir kayıttan alınan değer raporda satır notuyla gösterilir. Alanın anlamı sağlayıcıya ayrıca sorulacak.
+    - **Değer okuma:** önce tek bileşenli `dutyExpr`, sonra `base_duty`. `base_duty_formatted` önlemin geçmiş değerlerinin aralığını gösterebilir ("200.00 USD / p/st - 300.00 USD / p/st"); aralık tek değer sayılmaz.
+
     Kurallara uymayan cevap tahminle doldurulmaz; sonuç `AMBIGUOUS` ya da `REVIEW` olur. Sonuç türleri: `FOUND`, `PARTIAL`, `NOT_FOUND`, `AMBIGUOUS`, `ERROR`.
   - Ham TARIFF yanıtı değişmez ve hash'li olarak saklanır (`RawProviderResponse`). Analize, ihtiyaca göre seçilmiş alanlarla bir `ResearchEvidenceView` gider; elenen alanların nedeni kaydedilir.
   - Kimlik bilgisi yoksa ya da erişim hatası olursa sonuç `ERROR` olur, **`NOT_FOUND` olmaz**. Adım çökmez ve RG stratejisine düşer.

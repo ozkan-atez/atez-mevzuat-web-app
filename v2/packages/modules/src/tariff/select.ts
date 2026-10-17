@@ -31,6 +31,8 @@ export interface TariffSelection {
   effectiveTo: string | null
   legalSources: string[]
   issues: string[]
+  /** Değer kullanıldı ama dikkat gerektiriyor (raporda satır notu olarak görünür). */
+  notes: string[]
 }
 
 const rows = (v: unknown): Row[] => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : [])
@@ -57,7 +59,7 @@ export function selectTariffMeasure(
   raw: unknown,
   req: { gtip: string; date: string; field: Field; origin: string | null; legalReferences?: string[]; expected?: { unit: string | null; currency: string | null } },
 ): TariffSelection {
-  const base: TariffSelection = { status: 'NOT_FOUND', measureId: null, typeCode: null, rawValue: null, value: null, currency: null, unit: null, origin: req.origin, effectiveFrom: null, effectiveTo: null, legalSources: [], issues: [] }
+  const base: TariffSelection = { status: 'NOT_FOUND', measureId: null, typeCode: null, rawValue: null, value: null, currency: null, unit: null, origin: req.origin, effectiveFrom: null, effectiveTo: null, legalSources: [], issues: [], notes: [] }
   if (!/^\d{12}$/.test(req.gtip)) return { ...base, status: 'NEEDS_CODE_EXPANSION', issues: ['Kısa GTİP sıfırla doldurulmaz'] }
   const payload = raw as Row
   if (!payload || !Array.isArray(payload.measures)) return { ...base, status: 'ERROR', issues: ['Geçersiz TARIFF yanıtı (measures yok)'] }
@@ -101,6 +103,7 @@ export function selectTariffMeasure(
     effectiveFrom: day(m.effective_start_date),
     effectiveTo: day(m.effective_end_date),
     legalSources,
+    notes: m.deleted_at ? [`TARIFF kaydında silinme tarihi (${String(m.deleted_at).slice(0, 10)}) var, ancak kayıt sonradan güncellenmiş (${String(m.updated_at).slice(0, 10)}); geçerli kabul edildi.`] : [],
   }
   if (!parsed.value) return { ...out, status: 'PARTIAL', issues: [...out.issues, 'Değer tek bir sayı olarak okunamadı (aralık veya firma bazlı oran olabilir)'] }
   if (req.expected) {
