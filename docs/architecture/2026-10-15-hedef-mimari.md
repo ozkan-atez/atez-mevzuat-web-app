@@ -670,6 +670,86 @@ discovered-item → (ön kontrol) → capture-manifest → classify.profile (Bel
   - Yeniden analiz gerekirse kullanıcıya tahmini süre ve maliyetle onay sorulur. Yeniden analiz kümülatif girdinin yalnızca ilgili katmanlarıyla yapılır.
   - Sürüm karşılaştırma, taslak çakışma uyarısı ve "yeni sürüme taşı" seçeneği bulunur.
 
+
+### 10.1 Şablon stüdyosu ve bileşen havuzu (2026-10-17 kararı)
+
+Kaynaklar ve web arayüzü aşamasından önce yapılır. Dalın (`codex/source-engine-redesign`) şu parçaları port edilir: `TemplateDefinitionSchema` v2 (requirements / components / layout / theme / shell, tipli node'lar), `template-renderer.ts`, `template-ai.ts`, `TemplateComponentLibrary.tsx`, `VisualTemplateEditor.tsx`. Bugünkü `bulten-v2` kartları (yeni düzenleme, oran tablosu, süre uzatımı, yürürlükten kaldırma, duyuru, değişiklik yok) **yerleşik bileşenlere** dönüşür.
+
+**1) Bileşen: havuzun birimi**
+
+- Alanlar: `key`, `name`, `description`, `category`, `origin`, `status` ve sürümlü, değişmez bir `definition`.
+  - `category`: başlık, özet, değişiklik kartı, karşılaştırma tablosu, GTİP tablosu, zaman çizelgesi/yürürlük, etkilenenler, kaynaklar, not/uyarı.
+  - `origin`: `BUILTIN | USER | AI`.
+  - `status`: `ACTIVE | INACTIVE | ARCHIVED`.
+- `definition` ham HTML değildir; dalın v2 şemasındaki tipli bir node ağacıdır. Yanında şunlar bulunur:
+  - **Veri bağları** (`bindings`): bileşenin analizden kullandığı alanlar (ör. `analysis.comparison.rows`).
+  - **Görünme kuralı** (`appliesWhen`, CEL): ör. `size(analysis.comparison.rows) > 0`. "Kart türü" kavramı bileşenlerin görünme kuralları ve şablondaki eksik veri kuralıyla ifade edilir.
+  - Yalnızca tema token'ları ve izinli CSS sınıfları kullanılır. Script, inline stil ve olay işleyicisi yoktur.
+  - Önizleme için örnek veri (`sampleData`).
+- Render escape eden renderer ile yapılır. Önizleme sandbox'lı iframe'de gösterilir.
+- **Aktif/pasif:** Pasif bileşen yeni şablonlarda listelenmez; mevcut şablon sürümlerini bozmaz.
+- **Silme:** Hiçbir şablon sürümünde kullanılmıyorsa gerçekten silinir. Kullanılıyorsa yalnızca arşivlenir; eski raporlar kendi bileşen sürümüyle render edilmeye devam eder.
+
+**2) Şablon**
+
+- Alanlar: `title`, `description` ve **brief** (raporun amacı, hedef kitle, ton, genel vurgu). Brief prompt'a girer. Şablonun ayrıca teması ve sürümü vardır.
+- `sections[]`, her bölüm için:
+  - bileşen + sürüm referansı;
+  - `enabled` ve `order`;
+  - `heading`;
+  - **`sectionDescription`**: bölümde nelere önem verileceği ve içerikte neler istendiği. **En önemli alandır; `report.compose` prompt'unun girdisidir.**
+  - `required`;
+  - `missingDataRule`: `NOTE | OMIT | BLOCK`.
+- **Yeni şablonda havuzdaki bütün ACTIVE bileşenler varsayılan olarak açık gelir.** Kullanıcı istediğini kapatır, sırasını değiştirir, havuzdan yenisini ekler.
+- Rapor üretilirken şablon sürümü dondurulur.
+- **Şablon oluşturma ile bileşen oluşturma ayrı süreçlerdir.** Şablon editörü bileşen üretmez; yalnızca "Havuzdan ekle" ve bileşen stüdyosuna giden "Yeni bileşen oluştur" bağlantısı vardır.
+
+**3) Rapor üretimine etkisi**
+
+- `report.compose` prompt'u her açık bölüm için bileşen türünü, veri bağlarını, `heading`, `sectionDescription` ve şablon brief'ini alır. Metin alanlarını bunlara göre doldurur; yeni bilgi eklemez.
+- Sayısal alanlar ve tablolar kodla doldurulur.
+- `sectionDescription` analize yeni iddia ekletmez; yalnızca vurguyu ve içerik seçimini yönlendirir.
+
+**4) AI ile bileşen oluşturma** (şablon sayfasında ve chat'te aynı servis)
+
+- Prompt `config/prompts/component-create.v1.md` dosyasında tutulur ve sürümlüdür. Girdileri:
+  - kullanıcı isteği;
+  - node şeması (JSON Schema);
+  - izinli tema token'ları ve sınıfları;
+  - kullanılabilir veri bağları (analysis alan listesi);
+  - 2–3 yerleşik bileşen örneği (few-shot).
+- Çıktı yalnızca `ComponentDefinition` JSON'udur, HTML değildir.
+- Doğrulama: şemaya uygunluk; izinli node, sınıf ve token kullanımı; bağlanan alanların gerçekten var olması; boyut limitleri; örnek veriyle hatasız render. Hata çıkarsa tek bir onarım turu yapılır.
+- Sonuç önce önizlemede **taslak** olarak gösterilir; kullanıcı kaydedip aktifleştirir. Düzeltme döngüsü vardır ("tabloyu zebra yap") ve her kayıt yeni sürüm üretir.
+- **AI ile şablon önerisi:** brief'ten bölüm açıklamaları önerilir; yapı bozulmaz.
+- Model `gemini-3.8-flash`; bütün çağrılar `ai_call` kaydına düşer.
+
+**5) Chat araç paketi `templates`**
+
+- Araçlar: `list_components`, `preview_component`, `propose_component` (AI ile oluşturur, taslak döner), `propose_component_change`, `list_templates`, `propose_template_change` (bölüm aç/kapat, sıra, açıklama).
+- Yan etkili araçlar aksiyon kartı olarak gelir. Kart canlı önizleme ve "Kaydet / Aktifleştir" butonları içerir. Kaydetme işlemini API yapar, model yapmaz.
+- Chat arayüzü kendi aşamasında bağlanır; bu aşamada servis katmanı ve araç tanımları yazılır.
+
+**6) Arayüz** (v2 web: React + Vite + TanStack Query; görsel kalite önemli, özellikle bileşen önizlemeleri)
+
+- **Bileşen Havuzu:**
+  - Örnek veriyle canlı render edilmiş kart önizlemelerinden oluşan galeri.
+  - Filtreler: kategori, durum, kaynak.
+  - Aktif/pasif anahtarı, arşivle/sil, sürüm geçmişi.
+  - "AI ile yeni bileşen" yan paneli: sohbet, canlı önizleme, kaydet.
+- **Şablonlar:** şablon listesi ve üç sütunlu editör:
+  - **Sol:** bölüm listesi; açma/kapama, sürükle-bırak sıralama, "Havuzdan ekle".
+  - **Orta:** örnek analizle tam rapor önizlemesi.
+  - **Sağ:** seçili bölümün ayarları (`heading`, `sectionDescription` için geniş ve yönlendirici metin alanı, `required`, eksik veri kuralı) ile şablonun başlık, açıklama ve brief alanları.
+- Şablon oluşturma ve bileşen oluşturma ekranları ayrıdır.
+
+**Bitiş kriteri**
+
+- Yerleşik bileşenler havuzda görünür.
+- Yeni bir şablon, bütün bileşenler açık olarak oluşturulup düzenlenebilir.
+- AI ile en az bir yeni bileşen oluşturulur, doğrulamadan geçer ve bir şablona eklenebilir.
+- `sectionDescription` değişikliği gerçek bir `report.compose` çıktısını etkiler; canlı Vertex ile 31.12.2025 gözetim örneğinde gösterilir.
+
 ---
 
 ## 11. Asistan (K6, K10)
