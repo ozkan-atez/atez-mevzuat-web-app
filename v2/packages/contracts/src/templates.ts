@@ -124,6 +124,11 @@ export const TemplateDefinition = z
     description: z.string().max(1000),
     /** Raporun amacı, hedef kitle, ton, genel vurgu. Prompt'a girer. */
     brief: z.string().max(4000),
+    /**
+     * Kullanıcının serbest metin rapor tarifi (başlıklar, istenen içerik, biçim). Analize doğrudan
+     * girmez: `template.compile` bunu brief + bölüm açıklamalarına çevirir, analiz çevrilmiş hali görür.
+     */
+    request: z.string().max(12000).optional(),
     theme: z.object({ tokens: z.partialRecord(ThemeToken, Hex) }).strict(),
     shell: z.object({ heading: z.string().max(160), showFooter: z.boolean() }).strict(),
     sections: z.array(TemplateSection).min(1).max(40),

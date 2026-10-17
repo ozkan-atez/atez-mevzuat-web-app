@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Drawer, Empty, Input, List, Popconfirm, Select, Segmented, Skeleton, Space, Switch, Tag, Tooltip, Typography, message } from 'antd'
-import { DeleteOutlined, HistoryOutlined, InboxOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons'
+import { DeleteOutlined, HistoryOutlined, InboxOutlined, PlusOutlined } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
 import { Can } from '../auth/Can'
 import { studioApi } from './studioApi'
@@ -189,13 +189,8 @@ export function ComponentPoolPage() {
       <div className="atez-demo-heading">
         <div>
           <Typography.Title level={1}>Bileşen havuzu</Typography.Title>
-          <Typography.Paragraph type="secondary">Raporların yapı taşları. Kartlar örnek analizle canlı render edilir; pasif bileşenler yeni şablonlarda listelenmez.</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">Raporların yapı taşları. Kartlar örnek analizle canlı render edilir; pasif bileşenler şablonlarda seçilemez. Yeni bileşen sohbetten oluşturulur.</Typography.Paragraph>
         </div>
-        <Can permission="config.manage">
-          <Button type="primary" icon={<RobotOutlined />} onClick={() => setParams({ ai: '1' })}>
-            AI ile yeni bileşen
-          </Button>
-        </Can>
       </div>
       <div className="studio-toolbar">
         <StudioNav />

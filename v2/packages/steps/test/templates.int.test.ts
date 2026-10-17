@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { AiStudio, BUILTIN_COMPONENTS, ComponentService, TemplateService, ValidationFailed, applyDescriptions, loadShell, runTemplateTool } from '@atez/modules'
+import { AiStudio, BUILTIN_COMPONENTS, ComponentService, TemplateService, ValidationFailed, applyDescriptions, applyCompiled, loadShell, runTemplateTool } from '@atez/modules'
 import { AiGateway, DEFAULT_AI_CONFIG, FakeProvider, type DbHandle, type ProviderRequest } from '@atez/platform'
 import { openTestDb, truncateAll } from '@atez/platform/testing'
 
@@ -35,6 +35,8 @@ describe('Şablon stüdyosu ve bileşen havuzu (§10.1)', () => {
     let n = 0
     const provider = new FakeProvider((req) => {
       calls.push(req)
+      if (req.system?.includes('şablonlarını yapılandıran'))
+        return { brief: 'İthalatçılar için kısa ve resmi rapor.', sections: [{ sectionId: 'ozet', heading: 'Bugün ne değişti', sectionDescription: 'Karar gerektiren noktaları öne çıkar.', missingDataRule: 'OMIT' }, { sectionId: 'uydurma', heading: 'x', sectionDescription: 'x', missingDataRule: 'NOTE' }] }
       if (req.system?.includes('bölüm açıklamaları öneren')) return { sections: [{ sectionId: 'ozet', sectionDescription: 'Gümrük müşavirine pratik etkiyi öne çıkar.' }, { sectionId: 'uydurma', sectionDescription: 'x' }] }
       return zebraDraft(n++ === 0) // ilk taslak geçersiz → onarım turu
     })
@@ -118,6 +120,22 @@ describe('Şablon stüdyosu ve bileşen havuzu (§10.1)', () => {
     const next = applyDescriptions(full.definition, suggestions)
     expect(next.sections.map((s) => s.id)).toEqual(full.definition.sections.map((s) => s.id))
     expect(next.sections.find((s) => s.id === 'ozet')!.sectionDescription).toMatch(/pratik etkiyi/)
+  })
+
+  it('rapor tarifi brief + bölüm başlık/açıklamasına çevrilir; seçim ve sıra değişmez, zorunlu bölüm OMIT olmaz', async () => {
+    const t = (await templates.list()).find((x) => x.title === 'Müşteri bülteni')!
+    const full = (await templates.get(t.id))!
+    const def = { ...full.definition, request: 'İthalatçılar için kısa rapor. Bugün ne değişti başlığıyla başlasın.' }
+    const res = await studio.compileRequest({ template: def, components: {} })
+    expect(res.sections.map((s) => s.sectionId)).toEqual(['ozet'])
+    const next = applyCompiled(def, res)
+    expect(next.brief).toBe('İthalatçılar için kısa ve resmi rapor.')
+    expect(next.request).toBe(def.request)
+    expect(next.sections.map((s) => [s.id, s.enabled, s.order])).toEqual(def.sections.map((s) => [s.id, s.enabled, s.order]))
+    const ozet = next.sections.find((s) => s.id === 'ozet')!
+    expect(ozet.heading).toBe('Bugün ne değişti')
+    expect(ozet.missingDataRule).toBe(ozet.required ? 'NOTE' : 'OMIT')
+    await expect(studio.compileRequest({ template: { ...def, request: '  ' }, components: {} })).rejects.toThrow(/tarifi boş/)
   })
 
   it('chat aracı propose_template_change kaydetmez, aksiyon kartı döner', async () => {

@@ -9,6 +9,7 @@ import { validateComponent } from './validate'
 
 const COMPONENT_PROMPT = 'component-create.v1'
 const DESCRIBE_PROMPT = 'template-describe.v1'
+const COMPILE_PROMPT = 'template-compile.v1'
 
 /**
  * Gemini yanıt şeması iç içe karmaşık nesnelerde reddediliyor (canlı deneme 2026-10-17:
@@ -164,6 +165,59 @@ export class AiStudio {
     const ids = new Set(sections.map((s) => s.sectionId))
     return { suggestions: res.data.sections.filter((s) => ids.has(s.sectionId)), aiCallId: res.aiCallId }
   }
+
+  /**
+   * Kullanıcının serbest rapor tarifini sistem biçimine çevirir: brief + seçili her bölüm için
+   * başlık, açıklama ve eksik veri kuralı. Bileşen seçimi ve sıra kullanıcıdadır; çeviri değiştirmez.
+   */
+  async compileRequest(input: {
+    template: TemplateDefinition
+    components: Record<string, { name: string; description: string; slots: { key: string; instruction: string }[] }>
+    context?: AiCallContext
+  }): Promise<CompiledTemplate & { aiCallId: string }> {
+    const request = input.template.request?.trim()
+    if (!request) throw new PermanentError('Rapor tarifi boş', 'NO_REQUEST')
+    const prompt = loadPrompt(this.configDir, COMPILE_PROMPT)
+    const sections = [...input.template.sections]
+      .filter((s) => s.enabled)
+      .sort((a, b) => a.order - b.order)
+      .map((s) => ({ sectionId: s.id, mevcutBaşlık: s.heading, zorunlu: s.required, bileşen: input.components[s.componentKey] ?? null }))
+    if (!sections.length) throw new PermanentError('Açık bölüm yok', 'NO_SECTIONS')
+    const res = await this.ai.generate({
+      tier: 'main',
+      purpose: 'template.compile',
+      promptVersion: prompt.ref,
+      system: prompt.text,
+      parts: [{ text: JSON.stringify({ şablonAdı: input.template.title, raporTarifi: request, bölümler: sections }) }],
+      schema: z.object({
+        brief: z.string().max(4000),
+        sections: z.array(z.object({ sectionId: z.string(), heading: z.string().max(160), sectionDescription: z.string().max(4000), missingDataRule: z.enum(['NOTE', 'OMIT']) })),
+      }),
+      context: input.context,
+    })
+    const ids = new Set(sections.map((s) => s.sectionId))
+    return { brief: res.data.brief, sections: res.data.sections.filter((s) => ids.has(s.sectionId)), aiCallId: res.aiCallId }
+  }
+}
+
+/** Rapor tarifinin çevrilmiş hali: brief + açık bölümlerin başlık/açıklama/eksik veri kuralı. */
+export interface CompiledTemplate {
+  brief: string
+  sections: { sectionId: string; heading: string; sectionDescription: string; missingDataRule: 'NOTE' | 'OMIT' }[]
+}
+
+/** Çeviriyi şablona uygular: bileşen seçimi, sıra ve zorunluluk değişmez; zorunlu bölüm OMIT olamaz. */
+export function applyCompiled(t: TemplateDefinition, c: CompiledTemplate): TemplateDefinition {
+  const map = new Map(c.sections.map((s) => [s.sectionId, s]))
+  return TemplateDefinition.parse({
+    ...t,
+    brief: c.brief,
+    sections: t.sections.map((s) => {
+      const x = map.get(s.id)
+      if (!x || !s.enabled) return s
+      return { ...s, heading: x.heading.trim() || s.heading, sectionDescription: x.sectionDescription, missingDataRule: s.required ? 'NOTE' : x.missingDataRule }
+    }),
+  })
 }
 
 /** Öneriyi şablona uygular: yalnızca açıklamalar değişir. */

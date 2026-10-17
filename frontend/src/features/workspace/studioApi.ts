@@ -1,5 +1,5 @@
 import { apiFetch } from '../../lib/apiFetch'
-import type { ComponentDefinition, ComponentDraft, StudioComponent, StudioComponentDetail, TemplateDefinitionV2, TemplateFullV2, TemplateRowV2 } from './studio-types'
+import type { CompiledTemplateV2, ComponentDefinition, ComponentDraft, StudioComponent, StudioComponentDetail, TemplateDefinitionV2, TemplateFullV2, TemplateRowV2 } from './studio-types'
 
 /** v2 API istemcisi (Vite proxy: /api/v2 → v2 apps/api). Eski uçlar (/api/v1) workspaceRequest'te kalır. */
 export class StudioRequestError extends Error {
@@ -40,5 +40,6 @@ export const studioApi = {
   saveTemplate: (id: string, definition: TemplateDefinitionV2) => studioRequest<{ version: number }>(`templates/${id}`, json('PUT', { definition })),
   setDefault: (id: string) => studioRequest<{ ok: true }>(`templates/${id}/default`, json('POST', {})),
   previewTemplate: (definition: TemplateDefinitionV2) => studioRequest<{ html: string; sections: { id: string; state: string }[] }>('templates/preview', json('POST', { definition })),
+  compile: (definition: TemplateDefinitionV2) => studioRequest<{ compiled: CompiledTemplateV2; definition: TemplateDefinitionV2 }>('templates/ai/compile', json('POST', { definition })),
   describe: (definition: TemplateDefinitionV2) => studioRequest<{ suggestions: { sectionId: string; sectionDescription: string }[] }>('templates/ai/describe', json('POST', { definition })),
 }

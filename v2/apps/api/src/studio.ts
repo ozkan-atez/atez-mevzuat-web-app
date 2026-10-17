@@ -9,7 +9,7 @@ import {
   TEMPLATE_TOOLS,
   TemplateService,
   ValidationFailed,
-  applyDescriptions,
+  applyDescriptions, applyCompiled,
   loadShell,
   renderComponentPreview,
   runTemplateTool,
@@ -113,6 +113,18 @@ export async function registerStudio(app: FastifyInstance, deps: { db: Db; ai: A
     }
     const res = await needAi().suggestSectionDescriptions({ template: t, components: comps })
     return { suggestions: res.suggestions, definition: applyDescriptions(t, res.suggestions) }
+  })
+
+  app.post('/templates/ai/compile', async (req) => {
+    const body = z.object({ definition: z.unknown() }).parse(req.body)
+    const t = TemplateDefinition.parse(body.definition)
+    const comps: Record<string, { name: string; description: string; slots: { key: string; instruction: string }[] }> = {}
+    for (const s of t.sections.filter((x) => x.enabled)) {
+      const c = await components.definitionOf(s.componentKey, s.componentVersion)
+      if (c) comps[s.componentKey] = { name: c.name, description: c.description, slots: c.definition.slots }
+    }
+    const res = await needAi().compileRequest({ template: t, components: comps })
+    return { compiled: { brief: res.brief, sections: res.sections }, definition: applyCompiled(t, res) }
   })
 
   // ---- Asistan araç paketi `templates` (chat arayüzü kendi aşamasında bağlanır) ----

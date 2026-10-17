@@ -224,8 +224,18 @@ export class TemplateService {
     })
   }
 
+  /** Liste satırı: şablon + güncel sürümün açıklaması ve seçili bileşen sayısı. */
   async list() {
-    return this.db.select().from(template).where(eq(template.status, 'ACTIVE')).orderBy(desc(template.isDefault), asc(template.title))
+    const rows = await this.db
+      .select({ t: template, definition: templateVersion.definition })
+      .from(template)
+      .innerJoin(templateVersion, and(eq(templateVersion.templateId, template.id), eq(templateVersion.version, template.currentVersion)))
+      .where(eq(template.status, 'ACTIVE'))
+      .orderBy(desc(template.isDefault), asc(template.title))
+    return rows.map(({ t, definition }) => {
+      const d = definition as { description?: string; sections?: { enabled: boolean }[] }
+      return { ...t, description: d.description ?? '', sectionCount: (d.sections ?? []).filter((s) => s.enabled).length }
+    })
   }
 
   async get(id: string) {

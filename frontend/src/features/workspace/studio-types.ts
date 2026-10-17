@@ -45,11 +45,13 @@ export interface TemplateDefinitionV2 {
   title: string
   description: string
   brief: string
+  /** Kullanıcının serbest rapor tarifi; kaydederken brief + bölüm açıklamalarına çevrilir. */
+  request?: string
   theme: { tokens: Record<string, string> }
   shell: { heading: string; showFooter: boolean }
   sections: TemplateSectionV2[]
 }
-export interface TemplateRowV2 { id: string; title: string; isDefault: boolean; currentVersion: number; updatedAt: string }
+export interface TemplateRowV2 { id: string; title: string; description?: string; sectionCount?: number; isDefault: boolean; currentVersion: number; updatedAt: string }
 export interface TemplateFullV2 { id: string; isDefault: boolean; version: number; versionId: string; definition: TemplateDefinitionV2; versions: { id: string; version: number; createdAt: string }[] }
 export interface ComponentDraft {
   ok: boolean
@@ -77,3 +79,7 @@ export const CATEGORY_LABELS: Record<ComponentCategory, string> = {
 export const ORIGIN_LABELS: Record<ComponentOrigin, string> = { BUILTIN: 'Yerleşik', USER: 'Kullanıcı', AI: 'AI' }
 export const STATUS_LABELS: Record<ComponentStatus, string> = { ACTIVE: 'Aktif', INACTIVE: 'Pasif', ARCHIVED: 'Arşiv' }
 export const MISSING_RULE_LABELS: Record<MissingDataRule, string> = { NOTE: '“Kaynakta yok” notu', OMIT: 'Bölümü gizle' }
+export interface CompiledTemplateV2 {
+  brief: string
+  sections: { sectionId: string; heading: string; sectionDescription: string; missingDataRule: MissingDataRule }[]
+}

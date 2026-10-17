@@ -1,25 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Collapse, Empty, Form, Input, Modal, Segmented, Skeleton, Space, Tag, Tooltip, Typography, message } from 'antd'
-import { ArrowDownOutlined, ArrowLeftOutlined, ArrowUpOutlined, CheckOutlined, EyeOutlined, PlusOutlined, RobotOutlined, StarFilled } from '@ant-design/icons'
-import { Link } from 'react-router-dom'
+import { Alert, Button, Empty, Form, Input, Modal, Popover, Skeleton, Spin, Tag, Typography, message } from 'antd'
+import { ArrowLeftOutlined, ArrowRightOutlined, CheckOutlined, EyeOutlined, LayoutOutlined, PlusOutlined, SearchOutlined, StarFilled, ThunderboltOutlined } from '@ant-design/icons'
 import { Can } from '../auth/Can'
 import { studioApi, StudioRequestError } from './studioApi'
-import { CATEGORY_LABELS, MISSING_RULE_LABELS, type StudioComponent, type TemplateDefinitionV2, type TemplateFullV2, type TemplateRowV2, type TemplateSectionV2 } from './studio-types'
+import { CATEGORY_LABELS, MISSING_RULE_LABELS, type ComponentCategory, type StudioComponent, type TemplateDefinitionV2, type TemplateFullV2, type TemplateRowV2, type TemplateSectionV2 } from './studio-types'
 import { StudioNav } from './StudioNav'
+import './connectors.css'
 import './template-studio.css'
 
 /** Sunucu jsonb anahtarlarını yeniden sıralar; kirli/temiz karşılaştırması sıradan bağımsız. */
 const stable = (v: unknown) => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x))
 const sorted = (d: TemplateDefinitionV2) => [...d.sections].sort((a, b) => a.order - b.order)
-const renumber = (list: TemplateSectionV2[]) => list.map((s, i) => ({ ...s, order: i }))
+/** Çevirinin girdisi: tarif + seçili bileşenler. Değişirse kaydederken yeniden çevrilir. */
+const compileKey = (d: TemplateDefinitionV2) => stable({ r: (d.request ?? '').trim(), on: sorted(d).filter((s) => s.enabled).map((s) => s.id) })
+const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as ComponentCategory[]
+const REQUEST_PLACEHOLDER = `Raporun nasıl olmasını istediğinizi kendi cümlelerinizle yazın. Örneğin:
+
+Hedef kitle: Otomotiv ithalatçıları ve gümrük müşavirleri. Dil resmi ve kısa olsun.
+
+1. Bugün ne değişti — en başta 3-4 maddelik özet, karar gerektirenler önce.
+2. GTİP etkisi — değişen vergi oranları eski/yeni karşılaştırmalı tablo halinde.
+3. Yürürlük — hangi tarihte başlıyor, geçiş süresi var mı.
+4. Kimler etkilenir — sektör ve firma tipi bazında.
+5. Ne yapmalı — firmaların atması gereken adımlar, son tarihleriyle.`
+
+const newSection = (c: StudioComponent, order: number): TemplateSectionV2 => ({ id: c.key, componentKey: c.key, componentVersion: c.currentVersion, enabled: true, order, heading: c.name, sectionDescription: '', required: false, missingDataRule: 'OMIT' })
 
 export function TemplatesPage() {
   const [rows, setRows] = useState<TemplateRowV2[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [form] = Form.useForm<{ title: string; description?: string; brief?: string }>()
+  const [form] = Form.useForm<{ title: string; description?: string }>()
   const [feedback, holder] = message.useMessage()
   const load = useCallback(async () => {
     setError('')
@@ -47,55 +61,111 @@ export function TemplatesPage() {
     }
   }
   if (open) return <TemplateDetail id={open} onBack={() => { setOpen(null); void load() }} />
+  const q = query.trim().toLocaleLowerCase('tr-TR')
+  const visible = rows.filter((t) => !q || `${t.title} ${t.description ?? ''}`.toLocaleLowerCase('tr-TR').includes(q))
+  const def = rows.find((t) => t.isDefault)
   return (
-    <div className="atez-demo-page studio-page">
+    <div className="atez-demo-page connectors-page">
       {holder}
-      <div className="atez-demo-heading">
+      <header className="connector-heading">
         <div>
-          <Typography.Title level={1}>Rapor şablonları</Typography.Title>
-          <Typography.Paragraph type="secondary">Her şablon, rapora girecek bileşenlerin seçimidir. Bileşenler “Bileşen havuzu”nda oluşturulur ve yönetilir.</Typography.Paragraph>
+          <Typography.Title level={1}>Şablonlar</Typography.Title>
+          <p>Raporun neyi, hangi bileşenlerle ve nasıl anlatacağını tarif edin.</p>
         </div>
-        <Can permission="config.manage">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
-            Şablon oluştur
-          </Button>
-        </Can>
-      </div>
-      <div className="studio-toolbar">
+        <div className="connector-header-actions">
+          <Input className="connector-search" aria-label="Şablonlarda ara" prefix={<SearchOutlined />} placeholder="Şablon ara" value={query} onChange={(e) => setQuery(e.target.value)} allowClear />
+          <Can permission="config.manage">
+            <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
+              Şablon oluştur
+            </Button>
+          </Can>
+        </div>
+      </header>
+      {error && <Alert type="error" title="Şablonlar yüklenemedi" description={error} action={<Button onClick={() => void load()}>Yeniden dene</Button>} />}
+      <div className="connector-toolbar">
+        <div className="connector-counts">
+          <span>{rows.length} şablon</span>
+          {def && (
+            <span>
+              <i className="status-dot good" />
+              Varsayılan · {def.title}
+            </span>
+          )}
+        </div>
         <StudioNav />
       </div>
-      {error && <Alert type="error" showIcon title="Şablonlar yüklenemedi" description={error} action={<Button onClick={() => void load()}>Yeniden dene</Button>} />}
-      {loading ? (
-        <div className="tpl-list">{[0, 1].map((i) => <Card key={i}><Skeleton active /></Card>)}</div>
-      ) : rows.length ? (
-        <div className="tpl-list">
-          {rows.map((t) => (
-            <button key={t.id} className="tpl-row" onClick={() => setOpen(t.id)}>
-              <div>
-                <strong>{t.title}</strong>
-                <span>Güncellendi {new Date(t.updatedAt).toLocaleString('tr-TR')} · sürüm {t.currentVersion}</span>
+      <Spin spinning={loading}>
+        {visible.length > 0 && (
+          <section className="connector-section" aria-label="Rapor şablonları">
+            <div className="connector-section-heading">
+              <h2>
+                Rapor şablonları <span>{visible.length}</span>
+              </h2>
+              <p>Otomasyonlar ve raporlar seçtikleri şablonun kayıtlı sürümünü kullanır.</p>
+            </div>
+            <div className="connector-list">
+              <div className="connector-column-head tpl-columns" aria-hidden="true">
+                <span>Şablon</span>
+                <span>Bileşen</span>
+                <span>Durum</span>
+                <span />
               </div>
-              <Space size={6}>
-                {t.isDefault && <Tag color="success" icon={<StarFilled />}>Varsayılan</Tag>}
-                <span className="tpl-row-open">Aç →</span>
-              </Space>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <Empty description="İlk rapor şablonunuzu oluşturun." />
-      )}
-      <Modal title="Yeni şablon" open={creating} onCancel={() => setCreating(false)} onOk={() => void create()} okText="Oluştur" cancelText="Vazgeç">
-        <Typography.Paragraph type="secondary">Havuzdaki bütün aktif bileşenler seçili gelir; istemediklerinizi kapatırsınız.</Typography.Paragraph>
+              {visible.map((t) => (
+                <article key={t.id} className="connector-row tpl-columns">
+                  <div className="connector-mark">
+                    <LayoutOutlined />
+                  </div>
+                  <div className="connector-identity">
+                    <h3>{t.title}</h3>
+                    <p>{t.description || 'Açıklama yok'}</p>
+                  </div>
+                  <span className="connector-kind">{t.sectionCount ?? '—'} bileşen</span>
+                  <div className="connector-health">
+                    <span className={`connector-status ${t.isDefault ? 'good' : ''}`}>
+                      <i className="status-dot" />
+                      {t.isDefault ? 'Varsayılan' : 'Kullanıma hazır'}
+                    </span>
+                    <small>
+                      Sürüm {t.currentVersion} · {new Date(t.updatedAt).toLocaleDateString('tr-TR')}
+                    </small>
+                  </div>
+                  <Button className="connector-test" aria-label={`${t.title} aç`} onClick={() => setOpen(t.id)}>
+                    Aç <ArrowRightOutlined />
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+        {!loading && !visible.length && (
+          <div className="connector-empty">
+            <Empty description={query ? 'Aramanızla eşleşen şablon yok.' : 'Henüz şablon oluşturulmadı.'} />
+          </div>
+        )}
+      </Spin>
+      <Modal
+        className="connector-add-modal"
+        width={560}
+        title={
+          <div className="connector-modal-title">
+            <span className="connector-eyebrow">RAPOR ŞABLONU</span>
+            <h2>Yeni şablon</h2>
+            <p>Havuzdaki bütün aktif bileşenler seçili gelir. Raporu sonraki adımda tarif edersiniz.</p>
+          </div>
+        }
+        open={creating}
+        onCancel={() => setCreating(false)}
+        onOk={() => void create()}
+        okText="Oluştur"
+        cancelText="Vazgeç"
+        destroyOnHidden
+      >
         <Form form={form} layout="vertical" requiredMark={false}>
           <Form.Item name="title" label="Şablon adı" rules={[{ required: true, message: 'Şablon adı gerekli' }]}>
-            <Input maxLength={160} placeholder="ör. Müşteri bülteni — otomotiv" />
+            <Input size="large" maxLength={160} placeholder="ör. Müşteri bülteni — otomotiv" />
           </Form.Item>
-          <Form.Item name="description" label="Açıklama">
-            <Input maxLength={1000} />
-          </Form.Item>
-          <Form.Item name="brief" label="Brief" tooltip="Raporun amacı, hedef kitle, ton ve genel vurgu. Analiz ve rapor yazımı bu metni görür.">
-            <Input.TextArea autoSize={{ minRows: 3, maxRows: 6 }} maxLength={4000} />
+          <Form.Item name="description" label="Kısa açıklama">
+            <Input size="large" maxLength={1000} placeholder="Listede görünür" />
           </Form.Item>
         </Form>
       </Modal>
@@ -103,7 +173,7 @@ export function TemplatesPage() {
   )
 }
 
-/** Bileşen kutucuğu: küçük canlı önizleme + isim uzunluğunda aç/kapa. */
+/** Bileşen kutucuğu: küçük canlı önizleme (üzerine gelince büyür) + isim uzunluğunda aç/kapa. */
 function ComponentTile({ c, selected, onToggle }: { c: StudioComponent; selected: boolean; onToggle: () => void }) {
   const [html, setHtml] = useState<string | null>(null)
   useEffect(() => {
@@ -115,16 +185,26 @@ function ComponentTile({ c, selected, onToggle }: { c: StudioComponent; selected
   }, [c.id, c.currentVersion])
   return (
     <div className={`tpl-tile ${selected ? 'is-on' : ''}`}>
-      <button type="button" className="tpl-thumb" onClick={onToggle} tabIndex={-1} aria-hidden="true">
-        {html ? <iframe title={`${c.name} küçük önizleme`} sandbox="" srcDoc={html} loading="lazy" tabIndex={-1} /> : <Skeleton.Node active className="tpl-thumb-skeleton" />}
-      </button>
-      <Tooltip title={c.description} mouseEnterDelay={0.6}>
-        <button type="button" role="switch" aria-checked={selected} aria-label={c.name} className={`tpl-pill ${selected ? 'is-on' : ''}`} onClick={onToggle}>
-          <span className="tpl-pill-dot">{selected && <CheckOutlined />}</span>
-          <span className="tpl-pill-name">{c.name}</span>
+      <Popover
+        placement="right"
+        mouseEnterDelay={0.35}
+        title={c.name}
+        content={
+          <div className="tpl-peek">
+            <p>{c.description}</p>
+            {html && <iframe title={`${c.name} önizleme`} sandbox="" srcDoc={html} />}
+          </div>
+        }
+      >
+        <button type="button" className="tpl-thumb" onClick={onToggle} tabIndex={-1} aria-hidden="true">
+          {html ? <iframe title={`${c.name} küçük önizleme`} sandbox="" srcDoc={html} loading="lazy" tabIndex={-1} /> : <Skeleton.Node active className="tpl-thumb-skeleton" />}
+          {selected && <span className="tpl-thumb-check"><CheckOutlined /></span>}
         </button>
-      </Tooltip>
-      <span className="tpl-tile-cat">{CATEGORY_LABELS[c.category]}{c.status !== 'ACTIVE' ? ' · pasif' : ''}</span>
+      </Popover>
+      <button type="button" role="switch" aria-checked={selected} aria-label={c.name} className={`tpl-pill ${selected ? 'is-on' : ''}`} onClick={onToggle}>
+        <span className="tpl-pill-track"><span /></span>
+        <span className="tpl-pill-name">{c.name}</span>
+      </button>
     </div>
   )
 }
@@ -132,9 +212,9 @@ function ComponentTile({ c, selected, onToggle }: { c: StudioComponent; selected
 function TemplateDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [base, setBase] = useState<TemplateFullV2 | null>(null)
   const [draft, setDraft] = useState<TemplateDefinitionV2 | null>(null)
+  const [compiledKey, setCompiledKey] = useState('')
   const [components, setComponents] = useState<StudioComponent[]>([])
-  const [category, setCategory] = useState<string>('ALL')
-  const [saving, setSaving] = useState(false)
+  const [busy, setBusy] = useState<'save' | 'compile' | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [feedback, holder] = message.useMessage()
@@ -143,71 +223,79 @@ function TemplateDetail({ id, onBack }: { id: string; onBack: () => void }) {
     const [t, c] = await Promise.all([studioApi.template(id), studioApi.components()])
     setBase(t)
     setDraft(t.definition)
+    setCompiledKey(compileKey(t.definition))
     setComponents(c)
   }, [id])
   useEffect(() => {
     void reload().catch((e) => void feedback.error((e as Error).message))
   }, [reload, feedback])
 
-  const dirty = !!draft && !!base && stable(draft) !== stable(base.definition)
-  const sections = draft ? sorted(draft) : []
-  const selected = sections.filter((s) => s.enabled)
-  const isOn = (key: string) => sections.some((s) => s.componentKey === key && s.enabled)
-  // Havuzdaki aktif bileşenler + şablonda olup artık pasif/arşiv olanlar.
-  const tiles = useMemo(() => {
+  const sections = useMemo(() => (draft ? sorted(draft) : []), [draft])
+  const enabledKeys = new Set(sections.filter((s) => s.enabled).map((s) => s.componentKey))
+  // Havuzdaki aktif bileşenler + şablonda olup artık pasif/arşiv olanlar; kategoriye göre gruplu.
+  const groups = useMemo(() => {
     const inTemplate = new Set(sections.map((s) => s.componentKey))
-    return components.filter((c) => c.status === 'ACTIVE' || inTemplate.has(c.key))
+    const list = components.filter((c) => c.status === 'ACTIVE' || inTemplate.has(c.key))
+    return CATEGORY_ORDER.map((cat) => ({ cat, items: list.filter((c) => c.category === cat) })).filter((g) => g.items.length)
   }, [components, sections])
-  const categories = useMemo(() => [...new Set(tiles.map((c) => c.category))], [tiles])
-  const shown = tiles.filter((c) => category === 'ALL' || c.category === category)
-  const byKey = useMemo(() => new Map(components.map((c) => [c.key, c])), [components])
+  const all = groups.flatMap((g) => g.items)
+  const selectedCount = all.filter((c) => enabledKeys.has(c.key)).length
 
+  if (!draft || !base)
+    return (
+      <div className="atez-demo-page studio-page">
+        <Skeleton active paragraph={{ rows: 10 }} />
+      </div>
+    )
+
+  const dirty = stable(draft) !== stable(base.definition)
+  const hasRequest = !!draft.request?.trim()
+  const stale = hasRequest && compileKey(draft) !== compiledKey
   const update = (fn: (d: TemplateDefinitionV2) => TemplateDefinitionV2) => setDraft((d) => (d ? fn(d) : d))
-  const toggle = (c: StudioComponent) =>
+  const setOn = (keys: StudioComponent[], on: boolean) =>
     update((d) => {
       const list = sorted(d)
-      const existing = list.find((s) => s.componentKey === c.key)
-      if (existing) return { ...d, sections: list.map((s) => (s.componentKey === c.key ? { ...s, enabled: !s.enabled } : s)) }
-      return { ...d, sections: renumber([...list, { id: c.key, componentKey: c.key, componentVersion: c.currentVersion, enabled: true, order: list.length, heading: c.name, sectionDescription: '', required: false, missingDataRule: 'OMIT' }]) }
-    })
-  const setAll = (on: boolean) =>
-    update((d) => {
-      const list = sorted(d).map((s) => ({ ...s, enabled: on }))
-      if (on) for (const c of tiles) if (!list.some((s) => s.componentKey === c.key)) list.push({ id: c.key, componentKey: c.key, componentVersion: c.currentVersion, enabled: true, order: list.length, heading: c.name, sectionDescription: '', required: false, missingDataRule: 'OMIT' })
-      return { ...d, sections: renumber(list) }
-    })
-  const patch = (sid: string, p: Partial<TemplateSectionV2>) => update((d) => ({ ...d, sections: d.sections.map((s) => (s.id === sid ? { ...s, ...p } : s)) }))
-  const move = (sid: string, delta: number) =>
-    update((d) => {
-      const list = sorted(d)
-      const on = list.filter((s) => s.enabled)
-      const i = on.findIndex((s) => s.id === sid)
-      const target = on[i + delta]
-      if (!target) return d
-      const a = list.findIndex((s) => s.id === sid)
-      const b = list.findIndex((s) => s.id === target.id)
-      ;[list[a], list[b]] = [list[b]!, list[a]!]
-      return { ...d, sections: renumber(list) }
+      for (const c of keys) {
+        const s = list.find((x) => x.componentKey === c.key)
+        if (s) s.enabled = on
+        else if (on) list.push(newSection(c, list.length))
+      }
+      return { ...d, sections: list.map((s, i) => ({ ...s, order: i })) }
     })
 
-  const save = async () => {
-    if (!draft) return
-    if (!draft.title.trim()) return void feedback.error('Şablon adı gerekli.')
-    if (!selected.length) return void feedback.error('En az bir bileşen seçin.')
-    setSaving(true)
+  /** Tarifi sistem biçimine çevirir; başarısızsa null döner (hata gösterildi). */
+  const compile = async (d: TemplateDefinitionV2) => {
+    setBusy('compile')
     try {
-      const r = await studioApi.saveTemplate(id, draft)
+      const r = await studioApi.compile(d)
+      setDraft(r.definition)
+      setCompiledKey(compileKey(r.definition))
+      return r.definition
+    } catch (e) {
+      void feedback.error(`Tarif çevrilemedi: ${(e as Error).message}`)
+      return null
+    } finally {
+      setBusy(null)
+    }
+  }
+  const save = async () => {
+    if (!draft.title.trim()) return void feedback.error('Şablon adı gerekli.')
+    if (!selectedCount) return void feedback.error('En az bir bileşen seçin.')
+    const next = stale ? await compile(draft) : draft
+    if (!next) return
+    setBusy('save')
+    try {
+      const r = await studioApi.saveTemplate(id, next)
       await reload()
       void feedback.success(`Şablon kaydedildi (sürüm ${r.version}).`)
     } catch (e) {
       const err = e as StudioRequestError
       Modal.error({ title: err.message, content: err.issues?.length ? <ul className="studio-issues">{err.issues.map((i) => <li key={i}>{i}</li>)}</ul> : null })
     } finally {
-      setSaving(false)
+      setBusy(null)
     }
   }
   const openPreview = async () => {
-    if (!draft) return
     setPreviewOpen(true)
     setPreview(null)
     try {
@@ -220,149 +308,133 @@ function TemplateDetail({ id, onBack }: { id: string; onBack: () => void }) {
     if (dirty) Modal.confirm({ title: 'Kaydedilmemiş değişiklikler var', content: 'Çıkarsanız bu değişiklikler kaybolur.', okText: 'Kaydetmeden çık', cancelText: 'Devam et', onOk: onBack })
     else onBack()
   }
+  const enabledSections = sections.filter((s) => s.enabled)
+  const nameOf = (key: string) => components.find((c) => c.key === key)?.name ?? key
 
-  if (!draft || !base) return <div className="atez-demo-page studio-page"><Skeleton active paragraph={{ rows: 10 }} /></div>
   return (
     <div className="atez-demo-page studio-page tpl-detail">
       {holder}
       <div className="tpl-bar">
-        <Space size={12} wrap>
-          <Button icon={<ArrowLeftOutlined />} onClick={back}>
-            Şablonlar
-          </Button>
+        <div className="tpl-bar-left">
+          <Button type="text" icon={<ArrowLeftOutlined />} onClick={back} aria-label="Şablonlara dön" />
           <div className="tpl-bar-title">
-            <strong>{draft.title || 'Adsız şablon'}</strong>
+            <strong>
+              {draft.title || 'Adsız şablon'} {base.isDefault && <Tag color="success" icon={<StarFilled />}>Varsayılan</Tag>}
+            </strong>
             <span>
-              Sürüm {base.version} · {selected.length} bileşen seçili {dirty && <em>· kaydedilmemiş değişiklik</em>}
+              Sürüm {base.version} · {selectedCount} bileşen {dirty && <em>· kaydedilmemiş değişiklik</em>}
             </span>
           </div>
-          {base.isDefault && <Tag color="success" icon={<StarFilled />}>Varsayılan</Tag>}
-        </Space>
-        <Space size={8} wrap>
+        </div>
+        <div className="tpl-bar-actions">
           <Button icon={<EyeOutlined />} onClick={() => void openPreview()}>
             Önizle
           </Button>
           {!base.isDefault && <Button onClick={() => void studioApi.setDefault(id).then(reload)}>Varsayılan yap</Button>}
-          {dirty && <Button onClick={() => setDraft(base.definition)}>Vazgeç</Button>}
+          {dirty && <Button onClick={() => { setDraft(base.definition); setCompiledKey(compileKey(base.definition)) }}>Vazgeç</Button>}
           <Can permission="config.manage">
-            <Button type="primary" loading={saving} disabled={!dirty} onClick={() => void save()}>
-              Kaydet
+            <Button type="primary" loading={!!busy} disabled={!dirty || !!busy} onClick={() => void save()}>
+              {busy === 'compile' ? 'Tarif çevriliyor…' : 'Kaydet'}
             </Button>
           </Can>
-        </Space>
+        </div>
+      </div>
+
+      <div className="tpl-name-row">
+        <Input variant="borderless" className="tpl-name" aria-label="Şablon adı" value={draft.title} maxLength={160} placeholder="Şablon adı" onChange={(e) => update((d) => ({ ...d, title: e.target.value }))} />
+        <Input variant="borderless" className="tpl-desc" aria-label="Kısa açıklama" value={draft.description} maxLength={1000} placeholder="Kısa açıklama (listede görünür)" onChange={(e) => update((d) => ({ ...d, description: e.target.value }))} />
       </div>
 
       <section className="tpl-block">
-        <div className="tpl-fields">
-          <label>
-            <span>Şablon adı</span>
-            <Input value={draft.title} maxLength={160} onChange={(e) => update((d) => ({ ...d, title: e.target.value }))} />
-          </label>
-          <label>
-            <span>Açıklama</span>
-            <Input value={draft.description} maxLength={1000} onChange={(e) => update((d) => ({ ...d, description: e.target.value }))} />
-          </label>
-          <label className="wide">
-            <span>Brief — raporun amacı, hedef kitle, ton, genel vurgu</span>
-            <Input.TextArea aria-label="Şablon brief" autoSize={{ minRows: 2, maxRows: 5 }} maxLength={4000} value={draft.brief} onChange={(e) => update((d) => ({ ...d, brief: e.target.value }))} />
-          </label>
-        </div>
-      </section>
-
-      <section className="tpl-block">
         <div className="tpl-block-head">
           <div>
-            <h2>Bileşenler</h2>
-            <p>Raporda yer alacak bileşenleri seçin. Küçük önizleme, bileşenin raporda nasıl görüneceğini gösterir.</p>
-          </div>
-          <Space size={8} wrap>
-            <Button size="small" type="text" onClick={() => setAll(true)}>
-              Tümünü seç
-            </Button>
-            <Button size="small" type="text" onClick={() => setAll(false)}>
-              Hiçbiri
-            </Button>
-            <Link to="/templates/components?ai=1" className="tpl-link">
-              <RobotOutlined /> Yeni bileşen oluştur
-            </Link>
-          </Space>
-        </div>
-        {categories.length > 1 && (
-          <Segmented className="tpl-cats" size="small" value={category} onChange={(v) => setCategory(String(v))} options={[{ value: 'ALL', label: 'Tümü' }, ...categories.map((c) => ({ value: c, label: CATEGORY_LABELS[c] }))]} />
-        )}
-        <div className="tpl-tiles" role="group" aria-label="Bileşen seçimi">
-          {shown.map((c) => (
-            <ComponentTile key={c.id} c={c} selected={isOn(c.key)} onToggle={() => toggle(c)} />
-          ))}
-        </div>
-      </section>
-
-      <section className="tpl-block">
-        <div className="tpl-block-head">
-          <div>
-            <h2>Seçili bölümler</h2>
-            <p>Sıra rapordaki sıradır. Her bölümün açıklaması, analizin neyi arayacağını ve raporda neyin öne çıkacağını yönlendirir.</p>
+            <span className="tpl-step">1</span>
+            <h2>Rapor tarifi</h2>
+            <p>Raporun kime, hangi tonda, hangi başlıklarla ve her başlıkta ne anlatacağını yazın. Kaydettiğinizde tarif, analiz ve rapor yazımının kullandığı biçime çevrilir.</p>
           </div>
         </div>
-        {selected.length ? (
-          <Collapse
-            className="tpl-sections"
-            accordion
-            defaultActiveKey={selected[0]?.id}
-            items={selected.map((s, i) => ({
-              key: s.id,
-              label: (
-                <div className="tpl-sec-label">
-                  <span className="tpl-sec-no">{i + 1}</span>
-                  <strong>{s.heading || byKey.get(s.componentKey)?.name}</strong>
-                  <span className="tpl-sec-meta">
-                    {byKey.get(s.componentKey)?.name}
-                    {s.sectionDescription.trim() ? '' : ' · açıklama yok'}
-                  </span>
-                </div>
-              ),
-              extra: (
-                <span className="tpl-sec-move" onClick={(e) => e.stopPropagation()}>
-                  <Button size="small" type="text" aria-label={`${s.heading} yukarı`} icon={<ArrowUpOutlined />} disabled={i === 0} onClick={() => move(s.id, -1)} />
-                  <Button size="small" type="text" aria-label={`${s.heading} aşağı`} icon={<ArrowDownOutlined />} disabled={i === selected.length - 1} onClick={() => move(s.id, 1)} />
-                </span>
-              ),
-              children: (
-                <div className="tpl-sec-form">
-                  <label>
-                    <span>Başlık</span>
-                    <Input aria-label="Bölüm başlığı" value={s.heading} maxLength={160} onChange={(e) => patch(s.id, { heading: e.target.value })} />
-                  </label>
-                  <label className="wide">
-                    <span>Bölüm açıklaması</span>
-                    <Input.TextArea
-                      aria-label="Bölüm açıklaması"
-                      autoSize={{ minRows: 3, maxRows: 8 }}
-                      maxLength={4000}
-                      value={s.sectionDescription}
-                      placeholder="ör. Gümrük müşavirinin beyannamede neyi değiştirmesi gerektiğini öne çıkar."
-                      onChange={(e) => patch(s.id, { sectionDescription: e.target.value })}
-                    />
-                  </label>
-                  <div className="tpl-sec-rules">
-                    <span>Kaynakta veri yoksa</span>
-                    <Segmented
-                      size="small"
-                      value={s.missingDataRule}
-                      onChange={(v) => patch(s.id, { missingDataRule: v as 'NOTE' | 'OMIT' })}
-                      options={(['NOTE', 'OMIT'] as const).map((k) => ({ value: k, label: MISSING_RULE_LABELS[k], disabled: s.required && k === 'OMIT' }))}
-                    />
-                    <Checkbox checked={s.required} onChange={(e) => patch(s.id, { required: e.target.checked, ...(e.target.checked && s.missingDataRule === 'OMIT' ? { missingDataRule: 'NOTE' as const } : {}) })}>
-                      Zorunlu
-                    </Checkbox>
+        <Input.TextArea
+          className="tpl-request"
+          aria-label="Rapor tarifi"
+          autoSize={{ minRows: 9, maxRows: 22 }}
+          maxLength={12000}
+          showCount
+          placeholder={REQUEST_PLACEHOLDER}
+          value={draft.request ?? ''}
+          onChange={(e) => update((d) => ({ ...d, request: e.target.value }))}
+        />
+        <details className="tpl-compiled">
+          <summary>
+            <span>
+              <ThunderboltOutlined /> Sistemin kullandığı biçim
+            </span>
+            <span className={`tpl-compiled-state ${stale ? 'is-stale' : ''}`}>
+              {stale ? 'Tarif veya seçim değişti · kaydederken yeniden çevrilecek' : hasRequest ? 'Tarifle güncel' : 'Tarif yazılmadı · mevcut açıklamalar kullanılıyor'}
+            </span>
+            {stale && (
+              <Button size="small" loading={busy === 'compile'} onClick={(e) => { e.preventDefault(); void compile(draft) }}>
+                Şimdi çevir
+              </Button>
+            )}
+          </summary>
+          <div className="tpl-compiled-body">
+            <div className="tpl-compiled-brief">
+              <label>Genel yönlendirme</label>
+              <p>{draft.brief || '—'}</p>
+            </div>
+            <ol>
+              {enabledSections.map((s) => (
+                <li key={s.id}>
+                  <div>
+                    <strong>{s.heading || nameOf(s.componentKey)}</strong>
+                    <small>
+                      {nameOf(s.componentKey)} · veri yoksa: {MISSING_RULE_LABELS[s.missingDataRule].toLocaleLowerCase('tr-TR')}
+                    </small>
                   </div>
+                  <p>{s.sectionDescription || 'Açıklama yok'}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </details>
+      </section>
+
+      <section className="tpl-block">
+        <div className="tpl-block-head">
+          <div>
+            <span className="tpl-step">2</span>
+            <h2>Bileşenler</h2>
+            <p>Raporda yer alacak yapı taşlarını seçin. Önizlemenin üzerine gelince büyür.</p>
+          </div>
+          <div className="tpl-select-all">
+            <span>
+              <strong>{selectedCount}</strong> / {all.length} seçili
+            </span>
+            <Button size="small" onClick={() => setOn(all, selectedCount !== all.length)}>
+              {selectedCount === all.length ? 'Hiçbiri' : 'Tümünü seç'}
+            </Button>
+          </div>
+        </div>
+        <div className="tpl-groups" role="group" aria-label="Bileşen seçimi">
+          {groups.map((g) => {
+            const on = g.items.filter((c) => enabledKeys.has(c.key)).length
+            return (
+              <div key={g.cat} className="tpl-group">
+                <div className="tpl-group-head">
+                  <span>{CATEGORY_LABELS[g.cat]}</span>
+                  <small>
+                    {on}/{g.items.length}
+                  </small>
                 </div>
-              ),
-            }))}
-          />
-        ) : (
-          <Empty description="Henüz bileşen seçilmedi." />
-        )}
+                <div className="tpl-tiles">
+                  {g.items.map((c) => (
+                    <ComponentTile key={c.id} c={c} selected={enabledKeys.has(c.key)} onToggle={() => setOn([c], !enabledKeys.has(c.key))} />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </section>
 
       <Modal title="Rapor önizlemesi · örnek analiz" open={previewOpen} onCancel={() => setPreviewOpen(false)} footer={null} width={960}>
