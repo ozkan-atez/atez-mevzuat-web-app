@@ -28,6 +28,7 @@ export async function registerStudio(app: FastifyInstance, deps: { db: Db; ai: A
   const shell = loadShell(deps.configDir)
   const studio = deps.ai ? new AiStudio(deps.ai, deps.configDir, shell) : null
   await components.ensureBuiltins()
+  await templates.ensureSeed()
   await templates.ensureDefault()
 
   app.setErrorHandler((err, _req, reply) => {

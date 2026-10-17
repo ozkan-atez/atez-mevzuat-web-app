@@ -62,6 +62,19 @@ describe('Şablon stüdyosu ve bileşen havuzu (§10.1)', () => {
     await components.setStatus(istisna.id, 'ACTIVE')
   })
 
+  it('seed şablonu idempotent: bütün aktif bileşenler açık, başlık ve açıklamalar dolu, varsayılan', async () => {
+    const a = await templates.ensureSeed()
+    const b = await templates.ensureSeed()
+    expect(b.id).toBe(a.id)
+    const active = await components.list({ status: 'ACTIVE' })
+    expect(a.definition.title).toBe('ATEZ Günlük Mevzuat — Tüm bileşenler')
+    expect(a.definition.sections).toHaveLength(active.length)
+    expect(a.definition.sections.every((s) => s.enabled && s.heading.trim() && s.sectionDescription.trim())).toBe(true)
+    expect(a.definition.sections.find((s) => s.componentKey === 'karsilastirma-tablosu')!.heading).toBe('GTİP karşılaştırması')
+    expect(a.definition.sections.find((s) => s.componentKey === 'onerilen-aksiyonlar')!.heading).toBe('Önerilen aksiyonlar')
+    expect((await templates.ensureDefault()).id).toBe(a.id)
+  })
+
   it('zorunlu bölümde OMIT kuralı reddedilir', async () => {
     const t = (await templates.list())[0]!
     const full = (await templates.get(t.id))!

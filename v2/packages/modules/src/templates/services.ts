@@ -11,6 +11,7 @@ import { BUILTIN_COMPONENTS } from './builtins'
 import { SAMPLE_CONTEXT, type RenderContext } from './context'
 import { appliesTo, renderPage, renderSection, type Shell } from './render'
 import { validateComponent } from './validate'
+import { SEED_SECTIONS, SEED_TEMPLATE } from './seed'
 
 const { component, componentVersion, template, templateVersion } = schema
 
@@ -191,7 +192,7 @@ export class TemplateService {
     private readonly components: ComponentService,
   ) {}
 
-  async create(input: { title: string; description?: string; brief?: string; makeDefault?: boolean }) {
+  async create(input: { title: string; description?: string; brief?: string; makeDefault?: boolean; seedKey?: string }) {
     const active = (await this.components.list({ status: 'ACTIVE' })).sort(
       (a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) || builtinIndex(a.key) - builtinIndex(b.key) || a.name.localeCompare(b.name, 'tr'),
     )
@@ -217,7 +218,7 @@ export class TemplateService {
     })
     return this.db.transaction(async (tx) => {
       if (input.makeDefault) await tx.update(template).set({ isDefault: false })
-      const [t] = await tx.insert(template).values({ title: definition.title, status: 'ACTIVE', isDefault: input.makeDefault ?? false, currentVersion: 1 }).returning()
+      const [t] = await tx.insert(template).values({ title: definition.title, status: 'ACTIVE', isDefault: input.makeDefault ?? false, currentVersion: 1, seedKey: input.seedKey ?? null }).returning()
       const [v] = await tx.insert(templateVersion).values({ templateId: t!.id, version: 1, definition }).returning()
       return { id: t!.id, versionId: v!.id, version: 1, isDefault: t!.isDefault, definition }
     })
@@ -267,20 +268,39 @@ export class TemplateService {
     })
   }
 
-  /** Varsayılan şablon; yoksa "Standart bülten" oluşturulur. */
+  /**
+   * Seed şablonu "ATEZ Günlük Mevzuat — Tüm bileşenler": yoksa oluşturulur (idempotent, seedKey).
+   * Bütün aktif bileşenler açık; başlık ve bölüm açıklamaları SEED_SECTIONS'tan. Varsayılan şablon
+   * yoksa bu şablon varsayılan yapılır.
+   */
+  async ensureSeed() {
+    const [existing] = await this.db.select().from(template).where(eq(template.seedKey, SEED_TEMPLATE.seedKey))
+    if (existing) return (await this.get(existing.id))!
+    const [anyDefault] = await this.db.select({ id: template.id }).from(template).where(and(eq(template.isDefault, true), eq(template.status, 'ACTIVE')))
+    const created = await this.create({ title: SEED_TEMPLATE.title, description: SEED_TEMPLATE.description, brief: SEED_TEMPLATE.brief, makeDefault: !anyDefault, seedKey: SEED_TEMPLATE.seedKey })
+    const comps = new Map((await this.components.list({ status: 'ACTIVE' })).map((c) => [c.key, c]))
+    const sections = created.definition.sections.map((s) => {
+      const seed = SEED_SECTIONS[s.componentKey]
+      const c = comps.get(s.componentKey)
+      return {
+        ...s,
+        heading: seed?.heading ?? c?.name ?? s.heading,
+        sectionDescription: seed?.sectionDescription ?? c?.description ?? '',
+        required: seed?.required ?? false,
+        missingDataRule: seed?.missingDataRule ?? 'OMIT',
+      }
+    })
+    await this.save(created.id, { ...created.definition, sections })
+    return (await this.get(created.id))!
+  }
+
+  /** Varsayılan şablon; yoksa seed şablonu oluşturulup varsayılan yapılır. */
   async ensureDefault() {
     const [d] = await this.db.select().from(template).where(and(eq(template.isDefault, true), eq(template.status, 'ACTIVE')))
     if (d) return (await this.get(d.id))!
-    const created = await this.create({
-      title: 'Standart bülten',
-      description: 'Yerleşik bileşenlerle varsayılan rapor',
-      brief: 'Gümrük müşavirleri ve dış ticaret firmaları için kısa, resmî ve tarafsız bir mevzuat bülteni. Önce ne değiştiğini, sonra sayısal etkiyi ve firmaların yapması gerekenleri öne çıkar.',
-      makeDefault: true,
-    })
-    // Özet bölümü her raporda olsun.
-    const def = { ...created.definition, sections: created.definition.sections.map((s) => (s.componentKey === 'ozet' ? { ...s, required: true, missingDataRule: 'NOTE' as const } : s)) }
-    await this.save(created.id, def)
-    return (await this.get(created.id))!
+    const seed = await this.ensureSeed()
+    if (!seed.isDefault) await this.setDefault(seed.id)
+    return (await this.get(seed.id))!
   }
 
   /** Şablonun örnek analizle tam önizlemesi (bölüm görünme kuralları dahil). */

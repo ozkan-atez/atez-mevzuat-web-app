@@ -205,6 +205,18 @@ export const BUILTIN_COMPONENTS: BuiltinComponent[] = [
     }),
   },
   {
+    key: 'onerilen-aksiyonlar',
+    name: 'Önerilen aksiyonlar',
+    description: 'Bulgulara dayalı, firmaların uygulayabileceği adımlar.',
+    category: 'ETKILENENLER',
+    definition: def({
+      nodes: [{ type: 'container', classes: ['info-box'], children: [{ type: 'heading', level: 3, text: 'Yapılması gerekenler' }, { type: 'list', slot: 'actions' }] }],
+      slots: [{ key: 'actions', kind: 'list', instruction: '2–5 uygulanabilir adım; her biri tek cümle ve analizdeki bulguya dayalı.' }],
+      appliesWhen: '',
+      sampleData: { slots: { actions: ['Eşiğin altındaki beyanlar için Gözetim Belgesi başvurusunu planlayın.', 'Fiyat listelerini yeni kıymet eşiğine göre gözden geçirin.'] } },
+    }),
+  },
+  {
     key: 'onceki-hal-uyarisi',
     name: 'Önceki hal uyarısı',
     description: 'Önceki hal bulunamadığında ya da belirsiz olduğunda uyarı.',

@@ -34,6 +34,8 @@ export const componentVersion = pgTable(
 export const template = pgTable('template', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),
+  /** Seed ile gelen şablonların kalıcı anahtarı (idempotent seed; başlık değişse de tekrar oluşmaz). */
+  seedKey: text('seed_key').unique(),
   status: text('status').notNull(), // ACTIVE | ARCHIVED
   isDefault: boolean('is_default').notNull().default(false),
   currentVersion: integer('current_version').notNull(),

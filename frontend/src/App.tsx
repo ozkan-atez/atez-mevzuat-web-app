@@ -19,7 +19,6 @@ const AutomationDetailPage = lazy(() => import('./features/workspace').then((mod
 const SourcesPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.SourcesPage })));
 const TemplatesPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.TemplatesPage })));
 const ComponentPoolPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.ComponentPoolPage })));
-const LegacyTemplatesPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.LegacyTemplatesPage })));
 const UsagePage = lazy(() => import('./features/workspace').then((module) => ({ default: module.UsagePage })));
 const AcademyPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.AcademyPage })));
 const AdminPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.AdminPage })));
@@ -48,7 +47,7 @@ export default function App() {
           <Route path="/operations/:id" element={<OperationDetail />} />
           <Route path="/sources" element={<SourcesPage />} />
           <Route path="/source-runs/:id" element={<SourceRunDetail />} />
-          <Route element={<RequirePermission permission="config.manage" />}><Route path="/templates" element={<TemplatesPage />} /><Route path="/templates/components" element={<ComponentPoolPage />} /><Route path="/templates/legacy" element={<LegacyTemplatesPage />} /></Route>
+          <Route element={<RequirePermission permission="config.manage" />}><Route path="/templates" element={<TemplatesPage />} /><Route path="/templates/components" element={<ComponentPoolPage />} /></Route>
           <Route path="/usage" element={<UsagePage />} />
           <Route path="/academy" element={<AcademyPage />} />
           <Route element={<RequirePermission permission="admin.manage" />}><Route path="/admin" element={<AdminPage />} /></Route>
