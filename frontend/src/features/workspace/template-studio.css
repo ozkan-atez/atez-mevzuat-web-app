@@ -77,7 +77,8 @@
 @media(max-width:900px){.template-editor-grid,.component-detail,.component-composer,.template-info.v2{grid-template-columns:minmax(0,1fr)}}
 
 /* ---- Şablon sayfası (2026-10-17 geri bildirimi): Kaynaklar düzeninde liste, tarif + bileşen seçimi ---- */
-.connector-row.tpl-columns,.connector-column-head.tpl-columns{grid-template-columns:minmax(0,1fr) 110px 200px 84px}
+.connector-row.tpl-columns,.connector-column-head.tpl-columns{grid-template-columns:minmax(0,1fr) 110px 200px 150px}
+.tpl-row-actions{display:flex;justify-content:flex-end;gap:4px}
 .tpl-detail{max-width:1240px}
 .tpl-bar{position:sticky;top:76px;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;margin-bottom:8px;border:1px solid var(--atez-border);border-radius:14px;background:color-mix(in srgb,var(--atez-surface) 88%,transparent);backdrop-filter:blur(14px)}
 .tpl-bar-left,.tpl-bar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -128,4 +129,4 @@
 .tpl-peek{width:420px}.tpl-peek p{margin:0 0 8px;font-size:12px;color:var(--atez-muted)}
 .tpl-peek iframe{width:100%;height:260px;border:1px solid var(--atez-border);border-radius:8px;background:#fff;color-scheme:light}
 .tpl-preview-frame{width:100%;height:72vh;border:0;border-radius:10px;background:#fff}
-@media(max-width:760px){.tpl-tiles{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}.tpl-bar{top:0}.tpl-compiled li{grid-template-columns:1fr}.tpl-name.ant-input{font-size:22px}.connector-row.tpl-columns{grid-template-columns:minmax(0,1fr) 84px}.connector-row.tpl-columns>.connector-kind,.connector-row.tpl-columns>.connector-health{display:none}}
+@media(max-width:760px){.tpl-tiles{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}.tpl-bar{top:0}.tpl-compiled li{grid-template-columns:1fr}.tpl-name.ant-input{font-size:22px}.connector-row.tpl-columns{grid-template-columns:minmax(0,1fr) auto}.connector-row.tpl-columns>.connector-kind,.connector-row.tpl-columns>.connector-health{display:none}}

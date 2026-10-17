@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Empty, Form, Input, Modal, Popover, Skeleton, Spin, Tag, Typography, message } from 'antd'
-import { ArrowLeftOutlined, ArrowRightOutlined, CheckOutlined, EyeOutlined, PlusOutlined, SearchOutlined, StarFilled, ThunderboltOutlined } from '@ant-design/icons'
+import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Popover, Skeleton, Spin, Tag, Tooltip, Typography, message } from 'antd'
+import { ArrowLeftOutlined, CheckOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, SearchOutlined, StarFilled, ThunderboltOutlined } from '@ant-design/icons'
 import { Can } from '../auth/Can'
 import { studioApi, StudioRequestError } from './studioApi'
 import { CATEGORY_LABELS, MISSING_RULE_LABELS, type ComponentCategory, type StudioComponent, type TemplateDefinitionV2, type TemplateFullV2, type TemplateRowV2, type TemplateSectionV2 } from './studio-types'
@@ -56,6 +56,15 @@ export function TemplatesPage() {
       form.resetFields()
       await load()
       setOpen(t.id)
+    } catch (e) {
+      void feedback.error((e as Error).message)
+    }
+  }
+  const remove = async (t: TemplateRowV2) => {
+    try {
+      await studioApi.removeTemplate(t.id)
+      void feedback.success(`“${t.title}” silindi.`)
+      await load()
     } catch (e) {
       void feedback.error((e as Error).message)
     }
@@ -126,9 +135,22 @@ export function TemplatesPage() {
                       Sürüm {t.currentVersion} · {new Date(t.updatedAt).toLocaleDateString('tr-TR')}
                     </small>
                   </div>
-                  <Button className="connector-test" aria-label={`${t.title} aç`} onClick={() => setOpen(t.id)}>
-                    Aç <ArrowRightOutlined />
-                  </Button>
+                  <div className="tpl-row-actions">
+                    <Button className="connector-test" icon={<EditOutlined />} aria-label={`${t.title} düzenle`} onClick={() => setOpen(t.id)}>
+                      Düzenle
+                    </Button>
+                    <Can permission="config.manage">
+                      {t.isDefault ? (
+                        <Tooltip title="Varsayılan şablon silinemez. Önce başka bir şablonu varsayılan yapın.">
+                          <Button className="connector-test" type="text" icon={<DeleteOutlined />} aria-label={`${t.title} sil`} disabled />
+                        </Tooltip>
+                      ) : (
+                        <Popconfirm title="Şablon silinsin mi?" description="Bu şablonla üretilmiş raporlar etkilenmez." okText="Sil" okButtonProps={{ danger: true }} cancelText="Vazgeç" onConfirm={() => remove(t)}>
+                          <Button className="connector-test" type="text" danger icon={<DeleteOutlined />} aria-label={`${t.title} sil`} />
+                        </Popconfirm>
+                      )}
+                    </Can>
+                  </div>
                 </article>
               ))}
             </div>
@@ -328,6 +350,13 @@ function TemplateDetail({ id, onBack }: { id: string; onBack: () => void }) {
             Önizle
           </Button>
           {!base.isDefault && <Button onClick={() => void studioApi.setDefault(id).then(reload)}>Varsayılan yap</Button>}
+          {!base.isDefault && (
+            <Can permission="config.manage">
+              <Popconfirm title="Şablon silinsin mi?" description="Bu şablonla üretilmiş raporlar etkilenmez." okText="Sil" okButtonProps={{ danger: true }} cancelText="Vazgeç" onConfirm={() => studioApi.removeTemplate(id).then(onBack, (e: Error) => void feedback.error(e.message))}>
+                <Button danger type="text" icon={<DeleteOutlined />} aria-label="Şablonu sil" />
+              </Popconfirm>
+            </Can>
+          )}
           {dirty && <Button onClick={() => { setDraft(base.definition); setCompiledKey(compileKey(base.definition)) }}>Vazgeç</Button>}
           <Can permission="config.manage">
             <Button type="primary" loading={!!busy} disabled={!dirty || !!busy} onClick={() => void save()}>

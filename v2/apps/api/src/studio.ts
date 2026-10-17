@@ -98,6 +98,7 @@ export async function registerStudio(app: FastifyInstance, deps: { db: Db; ai: A
   })
   app.get<{ Params: { id: string } }>('/templates/:id', async (req, reply) => (await templates.get(req.params.id)) ?? reply.code(404).send({ error: 'NOT_FOUND' }))
   app.put<{ Params: { id: string } }>('/templates/:id', async (req) => templates.save(req.params.id, (req.body as { definition: unknown }).definition))
+  app.delete<{ Params: { id: string } }>('/templates/:id', async (req) => templates.remove(req.params.id))
   app.post<{ Params: { id: string } }>('/templates/:id/default', async (req) => {
     await templates.setDefault(req.params.id)
     return { ok: true }

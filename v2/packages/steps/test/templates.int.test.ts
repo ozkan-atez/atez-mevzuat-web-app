@@ -138,6 +138,17 @@ describe('Şablon stüdyosu ve bileşen havuzu (§10.1)', () => {
     await expect(studio.compileRequest({ template: { ...def, request: '  ' }, components: {} })).rejects.toThrow(/tarifi boş/)
   })
 
+  it('şablon silme arşivler; varsayılan silinemez, sürümler okunmaya devam eder', async () => {
+    const t = await templates.create({ title: 'Silinecek şablon' })
+    const full = (await templates.get(t.id))!
+    expect((await templates.remove(t.id)).result).toBe('ARCHIVED')
+    expect((await templates.list()).some((x) => x.id === t.id)).toBe(false)
+    expect((await templates.getVersion(full.versionId))).toBeTruthy()
+    await expect(templates.remove(t.id)).rejects.toThrow(/Şablon yok/)
+    const def = (await templates.list()).find((x) => x.isDefault)!
+    await expect(templates.remove(def.id)).rejects.toThrow(/Varsayılan şablon silinemez/)
+  })
+
   it('chat aracı propose_template_change kaydetmez, aksiyon kartı döner', async () => {
     const t = (await templates.list()).find((x) => x.title === 'Müşteri bülteni')!
     const before = (await templates.get(t.id))!.version

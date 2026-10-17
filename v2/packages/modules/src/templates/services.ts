@@ -271,6 +271,18 @@ export class TemplateService {
     })
   }
 
+  /**
+   * Şablonu listeden kaldırır (arşiv). Sürümler silinmez: rapor spec'leri dondurdukları sürümü
+   * okumaya devam eder. Varsayılan şablon kaldırılamaz; önce başka bir şablon varsayılan yapılır.
+   */
+  async remove(id: string) {
+    const [t] = await this.db.select().from(template).where(eq(template.id, id))
+    if (!t || t.status !== 'ACTIVE') throw new PermanentError('Şablon yok', 'NOT_FOUND')
+    if (t.isDefault) throw new PermanentError('Varsayılan şablon silinemez; önce başka bir şablonu varsayılan yapın.', 'DEFAULT_TEMPLATE')
+    await this.db.update(template).set({ status: 'ARCHIVED', updatedAt: sql`now()` }).where(eq(template.id, id))
+    return { result: 'ARCHIVED' as const }
+  }
+
   async setDefault(id: string) {
     await this.db.transaction(async (tx) => {
       await tx.update(template).set({ isDefault: false })

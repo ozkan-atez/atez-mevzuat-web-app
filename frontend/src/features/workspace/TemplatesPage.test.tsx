@@ -24,17 +24,27 @@ const comps = [
 ]
 let saved: unknown[] = []
 let compiled: TemplateDefinitionV2[] = []
+let deleted: string[] = []
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
 
 beforeEach(() => {
   saved = []
   compiled = []
+  deleted = []
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/v2/templates' && method === 'GET') return json([{ id: 't1', title: 'Standart bülten', description: 'Günlük', sectionCount: 2, isDefault: true, currentVersion: 3, updatedAt: '2026-10-17T10:00:00Z' }])
+      if (url === '/api/v2/templates' && method === 'GET')
+        return json([
+          { id: 't1', title: 'Standart bülten', description: 'Günlük', sectionCount: 2, isDefault: true, currentVersion: 3, updatedAt: '2026-10-17T10:00:00Z' },
+          ...(deleted.includes('t2') ? [] : [{ id: 't2', title: 'Eski bülten', description: '', sectionCount: 1, isDefault: false, currentVersion: 1, updatedAt: '2026-10-16T10:00:00Z' }]),
+        ])
+      if (url === '/api/v2/templates/t2' && method === 'DELETE') {
+        deleted.push('t2')
+        return json({ result: 'ARCHIVED' })
+      }
       if (url === '/api/v2/templates/ai/compile') {
         const d = (JSON.parse(String(init!.body)) as { definition: TemplateDefinitionV2 }).definition
         compiled.push(d)
@@ -58,7 +68,7 @@ afterEach(() => {
 
 const openTemplate = async () => {
   render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
-  await userEvent.click(await screen.findByRole('button', { name: 'Standart bülten aç' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Standart bülten düzenle' }))
   await screen.findByRole('group', { name: 'Bileşen seçimi' })
 }
 const savedDefinition = async () => {
@@ -74,6 +84,15 @@ describe('v2 şablon sayfası (§10.1)', () => {
     expect(within(list).getByText('Günlük')).toBeInTheDocument()
     expect(within(list).getByText('2 bileşen')).toBeInTheDocument()
     expect(within(list).getByText('Varsayılan')).toBeInTheDocument()
+  })
+
+  it('şablon onayla silinir; varsayılan şablonun sil düğmesi kapalı', async () => {
+    render(<MemoryRouter><TemplatesPage /></MemoryRouter>)
+    expect(await screen.findByRole('button', { name: 'Standart bülten sil' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Eski bülten sil' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Sil' }))
+    await waitFor(() => expect(deleted).toEqual(['t2']))
+    await waitFor(() => expect(screen.queryByText('Eski bülten')).toBeNull())
   })
 
   it('her bileşen küçük önizleme ve isim düğmesiyle görünür; şablondakiler seçili, sıralama yok', async () => {

@@ -38,6 +38,7 @@ export const studioApi = {
   template: (id: string) => studioRequest<TemplateFullV2>(`templates/${id}`),
   createTemplate: (b: { title: string; description?: string; brief?: string }) => studioRequest<{ id: string }>('templates', json('POST', b)),
   saveTemplate: (id: string, definition: TemplateDefinitionV2) => studioRequest<{ version: number }>(`templates/${id}`, json('PUT', { definition })),
+  removeTemplate: (id: string) => studioRequest<{ result: 'ARCHIVED' }>(`templates/${id}`, json('DELETE')),
   setDefault: (id: string) => studioRequest<{ ok: true }>(`templates/${id}/default`, json('POST', {})),
   previewTemplate: (definition: TemplateDefinitionV2) => studioRequest<{ html: string; sections: { id: string; state: string }[] }>('templates/preview', json('POST', { definition })),
   compile: (definition: TemplateDefinitionV2) => studioRequest<{ compiled: CompiledTemplateV2; definition: TemplateDefinitionV2 }>('templates/ai/compile', json('POST', { definition })),
