@@ -33,6 +33,8 @@ export const AnalysisModelOutput = z.object({
   claims: z.array(z.object({ text: z.string().min(1), evidence: z.array(Evidence).min(1) })),
   comparisonCommentary: z.string().nullable(),
   exceptions: z.array(z.string()),
+  /** Şablonun istediği bilgiler kaynakta bulundu mu? Bulunamayan "kaynakta yok" olarak işaretlenir (§10.1). */
+  requestedInfo: z.array(z.object({ sectionId: z.string(), status: z.enum(['FOUND', 'NOT_IN_SOURCE']), note: z.string() })),
 })
 export type AnalysisModelOutput = z.infer<typeof AnalysisModelOutput>
 
@@ -65,6 +67,8 @@ export const AnalysisV1 = AnalysisModelOutput.extend({
   comparison: z.object({ rows: z.array(ComparisonRow), note: z.string().nullable() }),
   quoteCheck: z.object({ status: z.enum(['VERIFIED', 'FAILED', 'NOT_CHECKED']), checked: z.number().int(), missing: z.array(z.string()) }),
   issues: z.array(z.string()),
+  /** Analizin bildiği şablon (Belge Profili şablondan bağımsızdır). */
+  template: z.object({ versionId: z.string().uuid(), analysisHash: z.string() }).nullable(),
   generatedBy: z.object({ model: z.string(), promptVersion: z.string(), aiCallIds: z.array(z.string()) }),
 })
 export type AnalysisV1 = z.infer<typeof AnalysisV1>
@@ -87,14 +91,14 @@ export const ReportSpecV2 = z.object({
   /** Liste ekranları için kural tabanlı kart etiketi (§10). */
   card: ReportCard,
   headline: z.string(),
-  status: z.enum(['READY', 'NEEDS_INPUT']),
+  status: z.literal('READY'),
   sections: z.array(
     z.object({
       sectionId: z.string(),
       componentKey: z.string(),
       componentVersion: z.number().int(),
       heading: z.string(),
-      state: z.enum(['RENDERED', 'OMITTED', 'NOTE', 'BLOCKED']),
+      state: z.enum(['RENDERED', 'OMITTED', 'NOTE']),
       fields: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
     }),
   ),

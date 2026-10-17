@@ -9,8 +9,8 @@ import { Preview, useDebounced } from '../ui/Preview'
 const stable = (v: unknown): string =>
   JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x))
 
-const RULE_LABELS = { NOTE: 'Not göster', OMIT: 'Bölümü atla', BLOCK: 'Raporu durdur' } as const
-const STATE_LABELS: Record<string, string> = { RENDERED: 'görünür', OMITTED: 'veri yok · atlanır', NOTE: 'veri yok · not', BLOCKED: 'veri yok · durdurur' }
+const RULE_LABELS = { NOTE: '“Kaynakta yok” notu', OMIT: 'Bölümü gizle' } as const
+const STATE_LABELS: Record<string, string> = { RENDERED: 'görünür', OMITTED: 'kaynakta yok · gizlenir', NOTE: 'kaynakta yok · not' }
 
 export function TemplateList({ go }: { go: (hash: string) => void }) {
   const qc = useQueryClient()
@@ -256,7 +256,7 @@ export function TemplateEditor({ id, go }: { id: string; go: (hash: string) => v
                 Zorunlu bölüm
               </label>
               <fieldset className="field">
-                <span>Analizde veri yoksa</span>
+                <span>Kaynakta veri yoksa</span>
                 <div className="segmented">
                   {(Object.keys(RULE_LABELS) as (keyof typeof RULE_LABELS)[]).map((k) => (
                     <button key={k} disabled={sel.required && k === 'OMIT'} className={sel.missingDataRule === k ? 'on' : ''} onClick={() => patchSection(sel.id, { missingDataRule: k })}>

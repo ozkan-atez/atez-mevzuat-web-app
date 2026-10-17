@@ -94,7 +94,8 @@ export const ComponentRecord = z.object({
 })
 export type ComponentRecord = z.infer<typeof ComponentRecord>
 
-export const MissingDataRule = z.enum(['NOTE', 'OMIT', 'BLOCK'])
+/** Kaynakta veri yoksa: NOTE "bu bilgi kaynakta yer almıyor" notu, OMIT bölümü gizler. BLOCK yok (2026-10-17 kararı). */
+export const MissingDataRule = z.enum(['NOTE', 'OMIT'])
 
 export const TemplateSection = z
   .object({
@@ -153,8 +154,8 @@ export const ReportSectionContent = z.object({
   componentKey: z.string(),
   componentVersion: z.number().int(),
   heading: z.string(),
-  /** RENDERED: gösterilir; OMITTED: veri yok, kural OMIT; NOTE: eksik veri notu; BLOCKED: kural BLOCK. */
-  state: z.enum(['RENDERED', 'OMITTED', 'NOTE', 'BLOCKED']),
+  /** RENDERED: gösterilir; OMITTED: veri yok, kural OMIT; NOTE: "kaynakta yer almıyor" notu. */
+  state: z.enum(['RENDERED', 'OMITTED', 'NOTE']),
   fields: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
 })
 export type ReportSectionContent = z.infer<typeof ReportSectionContent>

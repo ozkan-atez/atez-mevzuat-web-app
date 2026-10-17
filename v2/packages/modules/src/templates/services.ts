@@ -293,7 +293,7 @@ export class TemplateService {
       const c = await this.components.definitionOf(s.componentKey, s.componentVersion)
       if (!c) continue
       const visible = appliesTo(c.definition, ctx).visible
-      const state = visible ? 'RENDERED' : s.missingDataRule === 'OMIT' ? 'OMITTED' : s.missingDataRule === 'BLOCK' ? 'BLOCKED' : 'NOTE'
+      const state = visible ? 'RENDERED' : s.missingDataRule === 'OMIT' ? 'OMITTED' : 'NOTE'
       states.push({ id: s.id, state })
       body += renderSection({ heading: s.heading, state: state as never, fields: c.definition.sampleData.slots }, c.definition, ctx)
     }

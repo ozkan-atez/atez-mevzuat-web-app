@@ -19,6 +19,7 @@ import {
 } from '@atez/modules'
 import type { StepDeps } from './deps'
 import { loadProfile } from './extract-table'
+import { resolveTemplate } from './template-resolve'
 
 const PROMPT = 'report-compose.v2'
 
@@ -42,11 +43,7 @@ export class ReportService {
 
   /** Run girdisindeki `templateId` ya da varsayılan şablonun güncel sürümü. */
   async templateVersionId(): Promise<string> {
-    await this.components.ensureBuiltins()
-    const requested = this.ctx.runInput.templateId
-    const t = typeof requested === 'string' ? await this.templates.get(requested) : await this.templates.ensureDefault()
-    if (!t) throw new PermanentError(`Şablon yok: ${String(requested)}`, 'TEMPLATE_NOT_FOUND')
-    return t.versionId
+    return (await resolveTemplate(this.ctx)).versionId
   }
 
   async compose(analysisId: string, templateVersionId: string): Promise<{ reportId: string; revision: number; card: ReportCard; specKey: string }> {
@@ -64,13 +61,13 @@ export class ReportService {
     const rctx = buildRenderContext(analysis, profile)
 
     // Bölüm durumları: görünme kuralı + eksik veri kuralı.
-    const plan: { section: (typeof template.sections)[number]; def: ComponentDefinition; meta: { name: string; category: string; description: string }; state: 'RENDERED' | 'OMITTED' | 'NOTE' | 'BLOCKED' }[] = []
+    const plan: { section: (typeof template.sections)[number]; def: ComponentDefinition; meta: { name: string; category: string; description: string }; state: 'RENDERED' | 'OMITTED' | 'NOTE' }[] = []
     for (const section of [...template.sections].sort((x, y) => x.order - y.order)) {
       if (!section.enabled) continue
       const c = await this.components.definitionOf(section.componentKey, section.componentVersion)
       if (!c) throw new PermanentError(`Şablondaki bileşen yok: ${section.componentKey} v${section.componentVersion}`, 'COMPONENT_MISSING')
       const visible = appliesTo(c.definition, rctx).visible
-      const state = visible ? 'RENDERED' : section.missingDataRule === 'OMIT' ? 'OMITTED' : section.missingDataRule === 'BLOCK' ? 'BLOCKED' : 'NOTE'
+      const state = visible ? 'RENDERED' : section.missingDataRule === 'OMIT' ? 'OMITTED' : 'NOTE'
       plan.push({ section, def: c.definition, meta: { name: c.name, category: c.category, description: c.description }, state })
     }
     const writable = plan.filter((p) => p.state === 'RENDERED' && p.def.slots.length)
@@ -91,6 +88,7 @@ export class ReportService {
         claims: analysis.claims.map((c) => c.text),
         comparisonCommentary: analysis.comparisonCommentary,
         exceptions: analysis.exceptions,
+        şablonİstekleri: analysis.requestedInfo,
         dates: analysis.dates,
         priorState: analysis.priorState,
         comparison: analysis.comparison.rows.map((r) => ({ gtip: r.gtip, açıklama: r.description, menşe: r.origin, birim: [r.currency, r.unit].filter(Boolean).join('/'), önceki: r.previous?.value ?? null, yeni: r.current?.value ?? null, değişimYüzde: r.changePct, durum: r.status })),
@@ -152,7 +150,8 @@ export class ReportService {
       state: p.state,
       fields: r.fields.get(p.section.id) ?? {},
     }))
-    const status: 'READY' | 'NEEDS_INPUT' = sections.some((s) => s.state === 'BLOCKED') ? 'NEEDS_INPUT' : 'READY'
+    // K1: rapor her durumda kaynakta bulunanla üretilir.
+    const status = 'READY' as const
     const card = selectCard(profile, analysis)
 
     return db.transaction(async (tx) => {
@@ -189,7 +188,7 @@ export class ReportService {
     })
   }
 
-  async render(reportId: string, revision: number): Promise<{ htmlKey: string; status: 'READY' | 'NEEDS_INPUT'; issues: string[] }> {
+  async render(reportId: string, revision: number): Promise<{ htmlKey: string; status: 'READY'; issues: string[] }> {
     const { db, store, configDir } = this.ctx.deps
     const [rev] = await db.select().from(schema.reportRevision).where(sql`${schema.reportRevision.reportId} = ${reportId} AND ${schema.reportRevision.revision} = ${revision}`)
     if (!rev) throw new PermanentError('Rapor revizyonu yok', 'REPORT_REVISION_MISSING')
@@ -217,7 +216,6 @@ export class ReportService {
     const issues = [
       ...spec.validation.unmatchedNumbers.map((n) => `Metindeki sayı analizde yok: ${n}`),
       ...spec.validation.missingSlots.map((m) => `Doldurulmayan alan: ${m}`),
-      ...spec.sections.filter((s) => s.state === 'BLOCKED').map((s) => `Zorunlu bölüm için veri yok: ${s.heading}`),
     ]
     const htmlKey = StorageKeys.reportFile(reportId, revision, 'report.html')
     await store.put(htmlKey, html, 'text/html; charset=utf-8')

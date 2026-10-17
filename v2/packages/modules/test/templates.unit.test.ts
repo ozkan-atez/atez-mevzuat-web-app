@@ -51,3 +51,13 @@ describe('doğrulama ve güvenli render', () => {
     expect(validateComponent({ ...base, appliesWhen: 'size(', nodes: [{ type: 'text', text: 'x' }] }).issues.join()).toMatch(/appliesWhen/)
   })
 })
+
+import { TemplateDefinition } from '@atez/contracts'
+describe('şablon eksik veri kuralı', () => {
+  it('yalnızca NOTE | OMIT; BLOCK yok', () => {
+    const base = { schemaVersion: 1, title: 't', description: '', brief: '', theme: { tokens: {} }, shell: { heading: 'h', showFooter: true } }
+    const sec = { id: 'ozet', componentKey: 'ozet', componentVersion: 1, enabled: true, order: 0, heading: 'Özet', sectionDescription: '', required: false }
+    expect(TemplateDefinition.safeParse({ ...base, sections: [{ ...sec, missingDataRule: 'NOTE' }] }).success).toBe(true)
+    expect(TemplateDefinition.safeParse({ ...base, sections: [{ ...sec, missingDataRule: 'BLOCK' }] }).success).toBe(false)
+  })
+})

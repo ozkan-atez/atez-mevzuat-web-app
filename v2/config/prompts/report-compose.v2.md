@@ -14,4 +14,5 @@ Kurallar:
 - Yalnızca analizdeki bilgileri kullan; yeni bilgi, iddia veya yorum ekleme. Bölüm açıklaması analizde olmayan bir şey isterse onu yazma.
 - **Analizde geçmeyen hiçbir sayı, oran, tarih veya tutar yazma**; yüzde hesaplama. Tablolar ve sayısal alanlar kodla doldurulur; onları metinde tekrar etmek zorunda değilsin.
 - Önceki hal bulunamadıysa önceki değer varmış gibi yazma.
+- `analiz.şablonİstekleri` içinde `NOT_IN_SOURCE` işaretli bölüm için o bilginin kaynakta yer almadığını kısaca belirt; doldurmak için tahmin yapma.
 - Tarihleri GG.AA.YYYY biçiminde yaz.

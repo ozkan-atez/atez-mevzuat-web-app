@@ -5,8 +5,9 @@ import { PermanentError, StorageKeys, hashJson, schema, type AiPart } from '@ate
 import { buildComparison, checkQuotes, comparisonDate, documents, gtipKey, loadPrompt, visibleText, type QuoteSource, type ValueRow } from '@atez/modules'
 import type { StepDeps } from './deps'
 import { loadProfile, pdfPages } from './extract-table'
+import { analysisView, resolveTemplate } from './template-resolve'
 
-const PROMPT = 'topic-analyze.v1'
+const PROMPT = 'topic-analyze.v2'
 const KEY_PAGES_MAX = 20
 const PRIOR_PAGES_MAX = 10
 const WHOLE_DOC_PAGES = 30
@@ -48,7 +49,8 @@ export const topicAnalyze: StepHandler<StepInput<'topic.analyze'>, StepOutput<'t
     const ids = [...members.map((m) => m.documentVersionId), ...relations.map((r) => r.toVersionId).filter((x): x is string => !!x)]
     const profiles = await Promise.all(ids.map(async (id) => (await documents.latestProfile(ctx.deps.db, id))?.version ?? 0))
     const rows = ids.length ? await ctx.deps.db.select({ id: schema.gtipValue.id, v: schema.gtipValue.value }).from(schema.gtipValue).where(inArray(schema.gtipValue.documentVersionId, ids)) : []
-    return hashJson({ topic: input.topicId, ids, profiles, relations: relations.map((r) => [r.id, r.toVersionId, r.toTariffSnapshotId]), rows: rows.map((r) => `${r.id}:${r.v}`).sort() })
+    const template = await resolveTemplate(ctx)
+    return hashJson({ topic: input.topicId, template: template.analysisHash, ids, profiles, relations: relations.map((r) => [r.id, r.toVersionId, r.toTariffSnapshotId]), rows: rows.map((r) => `${r.id}:${r.v}`).sort() })
   },
   async run(input, ctx) {
     const ai = ctx.deps.ai
@@ -146,7 +148,11 @@ export const topicAnalyze: StepHandler<StepInput<'topic.analyze'>, StepOutput<'t
         : lineage.some((a) => a.status === 'AMBIGUOUS')
           ? 'AMBIGUOUS'
           : 'SINGLE_SOURCE'
+    // Şablon istekleri: analiz, raporun isteyeceği bilgileri bilerek arar (Belge Profili şablondan bağımsızdır).
+    const template = await resolveTemplate(ctx)
+    const tv = analysisView(template.definition)
     const context = {
+      şablonİstekleri: { brief: tv.brief, bölümler: tv.sections.map((s) => ({ sectionId: s.id, başlık: s.heading, açıklama: s.description || null, bileşen: s.component })) },
       katman1_mevcutBelge: { ref: primary.ref, profil: primary.profile },
       katman2_öncekiBelgeler: layers.filter((l) => l.role === 'PRIOR').map((l) => ({ ref: l.ref, profil: l.profile })),
       katman2_öncekiAnalizler: priorAnalyses,
@@ -209,6 +215,7 @@ export const topicAnalyze: StepHandler<StepInput<'topic.analyze'>, StepOutput<'t
       comparison: { rows: comparison.rows, note: comparison.issues.length ? comparison.issues.join(' · ') : null },
       quoteCheck: { status: check.missing.length ? 'FAILED' : check.checked ? 'VERIFIED' : 'NOT_CHECKED', checked: check.checked, missing: check.missing },
       issues,
+      template: { versionId: template.versionId, analysisHash: template.analysisHash },
       generatedBy: { model: ai.modelFor('main'), promptVersion: prompt.ref, aiCallIds },
     })
     const key = StorageKeys.topicAnalysis(topic.id, revision)

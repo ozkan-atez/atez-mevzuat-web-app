@@ -213,8 +213,7 @@ ${footer}
 export function renderSection(section: Pick<ReportSectionContent, 'heading' | 'state' | 'fields'>, def: ComponentDefinition | null, ctx: RenderContext): string {
   const heading = section.heading ? `<h2>${esc(section.heading)}</h2>` : ''
   if (section.state === 'OMITTED') return ''
-  if (section.state === 'NOTE') return `<div class="rule"></div><section class="block">${heading}<p class="section-note">Bu bölüm için analizde veri bulunmuyor.</p></section>`
-  if (section.state === 'BLOCKED') return `<div class="rule"></div><section class="block">${heading}<div class="note note--alert"><h2>Eksik bilgi</h2><p>Bu bölüm zorunlu ve analizde gerekli veri yok; rapor tamamlanmadan gönderilmemeli.</p></div></section>`
+  if (section.state === 'NOTE') return `<div class="rule"></div><section class="block">${heading}<p class="section-note">Bu bilgi kaynakta yer almıyor.</p></section>`
   return `<div class="rule"></div><section class="block">${heading}${def ? renderComponent(def, ctx, section.fields) : ''}</section>`
 }
 

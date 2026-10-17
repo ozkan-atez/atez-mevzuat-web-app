@@ -46,6 +46,7 @@ const marker = (req: ProviderRequest) => req.system ?? ''
 const instruction = (req: ProviderRequest) => (req.parts.at(-1) as { text: string }).text
 
 const composePrompts: string[] = []
+const analyzePrompts: string[] = []
 function fakeGemini(req: ProviderRequest): unknown {
   const sys = marker(req)
   if (sys.includes('başlıklarını ön eleyen')) {
@@ -88,6 +89,7 @@ function fakeGemini(req: ProviderRequest): unknown {
   if (sys.includes('önceki halini')) return { choice: 0, reason: 'test' }
   if (sys.includes('aynı mevzuat olayını')) return { topicIndex: null, reason: 'test' }
   if (sys.includes('dış ticaret mevzuatını analiz eden')) {
+    analyzePrompts.push(instruction(req))
     return {
       summary: 'Damping önleminde değişiklik (test).',
       operationalImpact: 'Beyannamelerde yeni tutar uygulanır.',
@@ -95,6 +97,7 @@ function fakeGemini(req: ProviderRequest): unknown {
       claims: [{ text: 'Tebliğ ithalatta haksız rekabetle ilgilidir.', evidence: [{ kind: 'DOCUMENT', ref: 'd1:f1', page: null, quote: 'İthalatta Haksız Rekabetin Önlenmesine' }] }],
       comparisonCommentary: 'Çin menşeli sacda tutar arttı.',
       exceptions: [],
+      requestedInfo: [{ sectionId: 'ozet', status: 'FOUND', note: 'Madde 1' }],
     }
   }
   if (sys.includes('metin alanlarını yazan')) {
@@ -161,6 +164,7 @@ describe('Aşama 3: önceki hal, kümülatif analiz ve READY rapor (sahte RG/TAR
     expect(spec.card).toBe('ORAN_TABLOSU')
     // Varsayılan şablon: bütün yerleşik bileşenler açık; görünme kurallarına göre bölümler.
     const state = Object.fromEntries(spec.sections.map((x) => [x.componentKey, x.state]))
+    expect(spec.status).toBe('READY')
     expect(state).toMatchObject({ ozet: 'RENDERED', 'karsilastirma-tablosu': 'RENDERED', 'gtip-tablosu': 'OMITTED', 'sure-uzatimi': 'OMITTED' })
     const byGtip = Object.fromEntries(analysis.comparison.rows.map((x) => [x.gtip, x]))
     expect(byGtip['7208.51.20.00.11']).toMatchObject({ status: 'CHANGED', changePct: '25.05', previous: { value: '1000' }, current: { value: '1250.5' }, currency: 'USD', unit: 'TNE' })
@@ -228,10 +232,15 @@ describe('Aşama 3: önceki hal, kümülatif analiz ve READY rapor (sahte RG/TAR
     const dv = (await h.db.db.select({ v: schema.topic.primaryVersionId }).from(schema.topic))[0]!.v!
     const runId = await h.start('document-report', { documentVersionIds: [dv] })
     expect(await h.waitForRun(runId)).toBe('COMPLETED')
+    // Analiz şablonu bilir: açıklama analiz prompt'una da girer ve önbellek anahtarı değişir.
+    const [analyze] = await node(runId, 'analyze')
+    expect(analyze!.outcome).toBe('EXECUTED')
+    expect(analyzePrompts.at(-1)).toContain('Yalnızca ithalatçıya düşen yükümlülüğü vurgula.')
     const [compose] = await node(runId, 'compose')
     expect(compose!.outcome).toBe('EXECUTED')
     expect(composePrompts.length).toBe(before + 1)
     expect(composePrompts.at(-1)).toContain('Yalnızca ithalatçıya düşen yükümlülüğü vurgula.')
+    expect(composePrompts.at(-1)).toContain('şablonİstekleri')
     const [render] = await node(runId, 'render')
     expect(render!.outcome).toBe('EXECUTED')
   })

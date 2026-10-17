@@ -152,8 +152,8 @@ export const ReportRenderInput = ReportComposeOutput
 export const ReportRenderOutput = z.object({
   reportId: z.string().uuid(),
   revision: z.number().int(),
-  /** K1: READY; zorunlu bölümde BLOCK kuralı tetiklendiyse NEEDS_INPUT (kullanıcı kararı bekleniyor). */
-  status: z.enum(['READY', 'NEEDS_INPUT']),
+  /** K1: rapor her durumda kaynakta bulunanla üretilir ve READY olur. */
+  status: z.literal('READY'),
   htmlKey: z.string(),
   issues: z.array(z.string()),
 })
