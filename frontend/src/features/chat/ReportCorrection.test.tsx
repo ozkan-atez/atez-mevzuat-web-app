@@ -39,7 +39,8 @@ describe('report corrections stay beside the conversation', () => {
     expect(await screen.findByTestId('correction-workspace')).toHaveTextContent('published · popup')
     expect(screen.getByText('Mevcut sohbet')).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/chat/session-1?topic=published')
-    expect(fetchMock.mock.calls.filter(call => String(call[0]) === '/api/v1/chat/sessions')).toHaveLength(1)
+    // No conversation is created (history may refresh, but nothing is POSTed).
+    expect(fetchMock.mock.calls.filter(call => String(call[0]) === '/api/v1/chat/sessions' && ((call as unknown[])[1] as RequestInit | undefined)?.method === 'POST')).toHaveLength(0)
   })
   it('opens a report link from a message while keeping the current conversation', async () => {
     setup('/chat/session-1', true)

@@ -114,8 +114,10 @@ export function useConversation(sessionId: string | undefined): Conversation {
     const controller = new AbortController()
     sendController.current = controller
 
+    let started = false
     try {
       const response = await streamChatMessage(sessionId, content, controller.signal, documentVersionIds, options)
+      started = true
       for await (const event of parseChatEventStream(response)) {
         setMessages((current) => reduceChatEvent(current, event, optimisticId))
         if (event.type === 'tool') setActivity(event.label)
@@ -125,8 +127,13 @@ export function useConversation(sessionId: string | undefined): Conversation {
       }
     } catch (caught: unknown) {
       if (!controller.signal.aborted) {
-        setError(caught instanceof Error ? caught.message : 'Yanıt alınamadı.')
-        setMessages((current) => current.map(message=>message.id===STREAMING_MESSAGE_ID?{...message,status:'FAILED',errorDetail:caught instanceof Error?caught.message:'Yanıt tamamlanamadı.'}:message))
+        // The error is shown once: an answer cut off mid-stream stays in the transcript as a
+        // failed bubble; a request that never reached the server is a banner above the composer.
+        if (started) setMessages((current) => current.map(message=>message.id===STREAMING_MESSAGE_ID?{...message,status:'FAILED',errorDetail:caught instanceof Error?caught.message:'Yanıt tamamlanamadı.'}:message))
+        else {
+          setError(caught instanceof Error ? caught.message : 'Yanıt alınamadı.')
+          setMessages((current) => current.filter(message=>message.id!==STREAMING_MESSAGE_ID))
+        }
       }
     } finally {
       if (sendController.current === controller) {
