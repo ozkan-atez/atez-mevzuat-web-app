@@ -1,0 +1,198 @@
+[
+  {
+    "role": "USER",
+    "content": "QA-8890: Kayıtlı işlem kaynaklarını, otomasyonları, son 3 taramayı ve dağıtım gruplarını ayrı başlıklarla listele. Yalnız mevcut kayıtları oku; yeni işlem başlatma.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:29:44.744Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "**Son taramalar**\n\nBu yanıt sistemdeki kayıtlı rapor ve tarama verilerinden hazırlanmıştır.\n\n**Tarama durumu**\n\n- Başarısız · 1 belge · 0 ilgili belge · 0 rapor. [Taramayı incele](/runs/81a02589-2f87-4174-b959-8eec67ecc024)\n\n- Başarısız · 0 belge · 1 ilgili belge · 0 rapor. [Taramayı incele](/runs/50cea80a-f729-43ab-a9c1-a50de9af5275)\n\n- Tamamlandı · 0 belge · 0 ilgili belge · 0 rapor. [Taramayı incele](/runs/65919884-1d00-408c-93ce-da85fd5d9d53)\n\n- Kısmen tamamlandı · 59 belge · 5 ilgili belge · 1 rapor. [Taramayı incele](/runs/8b5586b9-1658-45ce-8e01-a846d024cc42)\n\n- Başarısız · 1 belge · 0 ilgili belge · 0 rapor. [Taramayı incele](/runs/7579b16d-2ded-4a8c-b72f-78fa4ff3f8aa)\n\n- Tamamlandı · 2 belge · 0 ilgili belge · 0 rapor. [Taramayı incele](/runs/20989778-c58a-47bb-8d7f-ba46531bdf12)\n\n- Kısmen tamamlandı · 0 belge · 3 ilgili belge · 2 rapor. [Taramayı incele](/runs/d957d00f-c49f-4587-a913-d0df8d2d26b2)\n\n- Başarısız · 1 belge · 0 ilgili belge · 0 rapor. [Taramayı incele](/runs/c16b11cc-1f9e-4f7b-9bf9-527b64ee02d9)\n\n- Başarısız · 0 belge · 0 ilgili belge · 0 rapor. [Taramayı incele](/runs/375e55b5-2218-40c6-a53a-1b37f97264ab)\n\n- Tamamlandı · 13 belge · 0 ilgili belge · 1 rapor. [Taramayı incele](/runs/2d8bca96-f1be-4bb6-b7ac-c08cbe34c198)",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:29:44.765Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: Kullanılabilir işlem kaynaklarını ve rapor bileşenlerini listele.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:30:16.781Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "### Kullanılabilir İşlem Kaynakları\n\nSistemde bağımsız işlem (keşif/indirme) için yapılandırılmış kaynaklar:\n\n- **T.C. Resmî Gazete** (`resmi-gazete`) — Yetki türü: `OFFICIAL` (Kimlik: `fb15dca0-9221-4ab1-a38f-11980346d001`)\n- **Ticaret Bakanlığı** (`ticaret-bakanligi`) — Yetki türü: `OFFICIAL` (Kimlik: `fb15dca0-9221-4ab1-a38f-11980346d002`)\n- **İGMD** (`igmd`) — Yetki türü: `PROFESSIONAL` (Kimlik: `fb15dca0-9221-4ab1-a38f-11980346d003`)\n- **Mevzuat.Net** (`mevzuat-net`) — Yetki türü: `COMMERCIAL` (Kimlik: `fb15dca0-9221-4ab1-a38f-11980346d004`)\n- **TARIFF** (`tariff`) — Yetki türü: `COMMERCIAL` (Kimlik: `fb15dca0-9221-4ab1-a38f-11980346d005`)\n- **files.igmd.org.tr** (`files.igmd.org.tr`) — Yetki türü: `REFERENCE` (Kimlik: `50b99f3b-7640-458e-9007-f8c7a5efe7ff`)\n\n---\n\n### Rapor Bileşen Havuzu\n\nRapor havuzunda yer alan aktif bileşenler:\n\n1. **Özet** (`ozet`) · *Kategori: Özet*  \n   Raporun girişi: ne yayımlandı, ne değişti, ne zaman yürürlüğe giriyor.\n2. **Öne çıkanlar** (`onemli-noktalar`) · *Kategori: Özet*  \n   Değişikliğin 3–6 maddelik özeti.\n3. **Değişiklik kartı (yeni düzenleme / değişiklik)** (`yeni-duzenleme`) · *Kategori: Değişiklik Kartı*  \n   Düzenlemenin kimliği ve neyi değiştirdiği bilgisi.\n4. **Süre uzatımı** (`sure-uzatimi`) · *Kategori: Değişiklik Kartı*  \n   Eski ve yeni süre yan yana karşılaştırması.\n5. **Karşılaştırma tablosu (oran/değer)** (`karsilastirma-tablosu`) · *Kategori: Karşılaştırma Tablosu*  \n   Önceki ve yeni değerler ile değişim yüzdeleri.\n6. **GTİP tablosu (önceki hal yok)** (`gtip-tablosu`) · *Kategori: GTİP Tablosu*  \n   Önceki hal bulunamadığında yalnızca yeni değerlerin listesi.\n7. **Yürürlük ve tarihler** (`yururluk`) · *Kategori: Zaman Çizelgesi*  \n   Yayım, önceki hal ve yürürlük tarihleri ayrı ayrı.\n8. **Yürürlük ve Geçiş Hükümleri Kartı** (`ai-bc28b12cd3`) · *Kategori: Zaman Çizelgesi*  \n   Yürürlük tarihlerini, geçiş süresi açıklamasını ve intibak/geçiş hükümlerini tek bilgi kartında toplar.\n9. **Etkilenenler ve pratik etki** (`etkilenenler`) · *Kategori: Etkilenenler*  \n   Etkilenen taraflar, sektörler ve firmalara pratik etki.\n10. **Önerilen aksiyonlar** (`onerilen-aksiyonlar`) · *Kategori: Etkilenenler*  \n    Bulgulara dayalı, firmaların uygulayabileceği adımlar.\n11. **Kaynaklar** (`kaynaklar`) · *Kategori: Kaynaklar*  \n    Ana kaynak, önceki hal ve destekleyici belgeler.\n12. **Duyuru** (`duyuru`) · *Kategori: Not / Uyarı*  \n    Kurum duyurusu ya da bilgilendirme.\n13. **Değişiklik yok** (`degisiklik-yok`) · *Kategori: Not / Uyarı*  \n    Gündemde ilgili bir değişiklik olmadığında gösterilir.\n14. **Yürürlükten kaldırma** (`yururlukten-kaldirma`) · *Kategori: Not / Uyarı*  \n    Kaldırılan düzenleme ve etkisi.\n15. **Önceki hal uyarısı** (`onceki-hal-uyarisi`) · *Kategori: Not / Uyarı*  \n    Önceki hal bulunamadığında veya belirsiz olduğunda uyarı.\n16. **İstisnalar ve belirsizlikler** (`istisnalar`) · *Kategori: Not / Uyarı*  \n    Geçiş hükümleri, istisnalar ve belirsiz noktalar.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:30:30.722Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: Dağıtım gruplarını ve son gönderimlerin durumlarını oku. E-posta gönderme. Ayrıca sohbet için eklenen kaynaklarda gümrük ara; bulunan ilk kaynağın metnini getir.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:30:41.493Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "Sistem kayıtları incelendiğinde elde edilen sonuçlar aşağıda belirtilmiştir:\n\n### 1. Dağıtım Grupları\nSistemde kayıtlı herhangi bir dağıtım grubu bulunmamaktadır (liste boş).\n\n### 2. Son Gönderim Durumları\nSistemde kayıtlı herhangi bir bülten e-posta gönderim kaydı bulunmamaktadır.\n\n### 3. Eklenen Kaynaklar (Gümrük Araması)\nSohbet için etkinleştirilmiş kaynaklar arasında \"gümrük\" araması yapılmış olup, ayrıca genel kaynak listesi de kontrol edilmiştir. Sistemde sohbete açık/eklenmiş herhangi bir kaynak kaydı bulunmamaktadır; bu nedenle metin getirilememiştir.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:30:56.827Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: Arşiv belgelerinde kablosuz şarj ara, ilk sonucun sürüm metnini oku. Toplanan belgelerde de aynı konuyu ara ve ilk belgenin metnini getir. Kısa sonuç ver, yeni işlem başlatma.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:31:18.029Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "### 1. Arşiv Belgeleri Sonucu\n- **Bulunan Belge:** [Harici Güç Kaynakları, Kablosuz Şarj Cihazları, Kablosuz Şarj Pedleri, Genel Kullanım Amaçlı Taşınabilir Bataryalar İçin Batarya Şarj Cihazları ve USB Tip-C Kabloları ile İlgili Çevreye Duyarlı Tasarım Gerekliliklerine Dair Tebliğ (2025/2052/AB) (SGM-2026/7)](https://www.resmigazete.gov.tr/eskiler/2026/10/20261016-14.htm)\n- **Tarih:** 16 Ekim 2026 (Sürüm ID: `7540ff89-5480-4541-9025-972eff9cf912`)\n- **Durum:** Metin çıkarma durumu bekliyor (`PENDING`) olduğundan arşiv sürüm metni henüz hazır değildir (boş dönmüştür).\n\n---\n\n### 2. Toplanan Belgeler Sonucu\n- **Bulunan Belge:** [Harici Güç Kaynakları, Kablosuz Şarj Cihazları, Kablosuz Şarj Pedleri, Genel Kullanım Amaçlı Taşınabilir Bataryalar İçin Batarya Şarj Cihazları ve USB Tip-C Kabloları ile İlgili Çevreye Duyarlı Tasarım Gerekliliklerine Dair Tebliğ (2025/2052/AB) (SGM-2026/7)](https://www.resmigazete.gov.tr/eskiler/2026/10/20261016-14.htm)\n- **Yayım Tarihi / Sayı:** 16 Ekim 2026 / Sayı: 33402 (Belge ID: `f91b344e-35da-4653-89b6-687d6cccfac3`)\n- **Özet Metin:**\n  - **Kapsam:** Piyasaya arz edilen veya hizmete sunulan harici güç kaynakları, kablosuz şarj cihazları, kablosuz şarj pedleri, genel kullanım amaçlı taşınabilir batarya şarj cihazları ve USB Tip-C kablolarının çevreye duyarlı tasarım gerekliliklerini belirler. Kesintisiz güç kaynakları, belirli tıbbi cihazlar ve taşıt araçları için tasarlananlar kapsam dışıdır.\n  - **Mevzuat Uyumu ve Yürürlükten Kaldırma:** (AB) 2025/2052 sayılı Komisyon Tüzüğü dikkate alınarak hazırlanmış olup, mülga SGM-2020/5 sayılı Tebliği yürürlükten kaldırır.\n  - **Yürürlük:** 1. madde, geçici 1. maddenin 3. fıkrası, 9. ve 10. maddeler yayımı tarihinde (16.10.2026); diğer tüm teknik ve temel hükümler ise **14/12/2028** tarihinde yürürlüğe girer.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:31:37.345Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: topicId 95b64d13-1ed1-4100-b4c3-78aeb08475ac için rapor_getir, analiz_getir ve onceki_kaynaklari_listele araçlarını kullan. Her birinin sonucunu bir cümleyle belirt.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:31:57.447Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "- **rapor_getir:** Harici güç kaynakları, kablosuz şarj aygıtları ve USB Tip-C kablolarına yönelik eko-tasarım, etiketleme ve enerji verimliliği şartlarını düzenleyen SGM-2026/7 sayılı Tebliğ bülteninin 2. sürüm içeriği getirilmiştir.\n- **analiz_getir:** İlgili Tebliğin AB 2025/2052 tüzüğüne uyum kapsamını, yürürlük tarihlerini ve doğrulama kanıtlarını içeren mevzuat analiz çıktısı başarıyla alınmıştır.\n- **onceki_kaynaklari_listele:** Bu konuya ilişkin sistemde kayıtlı herhangi bir önceki kaynak veya mevzuat atfı kaydı bulunmamaktadır.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:32:13.933Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: 3926.90.97.90.23 GTİP için 2026-10-19 tarihindeki birim gümrük kıymetini Tariff üzerinden sorgula. Kısa yanıt ver; bulunamazsa açıkça belirt.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:32:27.053Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "**3926.90.97.90.23** GTİP kodu için Tariff üzerinde 2026-10-19 sorgu tarihinde kayıtlı birim gümrük (gözetim) kıymeti: **5.50 USD / kg** (Geçerlilik aralığı: 2026-07-11 – 4000-01-01 [açık uçlu], Kaynak: Tariff).",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:32:43.949Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: Otomasyonları listele. Ardından 00000000-0000-4000-8000-000000000000 kimlikli işlemin durumunu getir. Kısa cevap ver.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:32:57.097Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "**Otomasyon kayıtları**\n\n**Resmî Gazete günlük taraması** · Etkin · 05:00, 10:00, 15:00, 23:00 (Europe/Istanbul)\nBu kapsamda kayıtlı çalışma yok. Bu kayıt tek başına neden çalışmadığını kanıtlamaz.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:32:57.114Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: 00000000-0000-4000-8000-000000000000 kimlikli işlemin durumunu getir.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:33:01.210Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "`00000000-0000-4000-8000-000000000000` kimlikli işlem sistemde bulunamamıştır.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:33:06.633Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: Seçili belgeyi oku.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:33:43.292Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "Metin çıkarma işlemi kaydedildi. Durum: QUEUED. [İşlemi izle](/operations/86d46fc9-64ee-4196-9553-32aac887146f)",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:33:43.319Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: QA Test Kartı adlı, yalnız başlık ve açıklama alanı olan yeni rapor bileşeni taslağı oluştur. Havuza kaydetme.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:33:52.841Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "QA ve test senaryoları için yalnızca başlık ve açıklama alanlarından oluşan sade bir bilgi kutusu (info-box) bileşeni tasarladım. Taslak başarıyla doğrulandı ve önizleme kartıyla sunuldu; bileşeni havuzda kullanmak isterseniz kart üzerindeki butonu kullanarak kaydedebilirsiniz.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:34:26.215Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: Havuzdaki ozet anahtarlı bileşeni başlığı daha belirgin olacak şekilde değiştir; yalnız değişiklik taslağı oluştur, kaydetme.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T09:34:42.628Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "",
+    "status": "FAILED",
+    "errorDetail": "Yapay zekâ yanıtı tamamlanamadı. Lütfen yeniden deneyin.",
+    "createdAt": "2026-10-19T09:35:22.221Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: Havuzdaki ozet bileşeninin başlığını daha belirgin yapacak değişiklik taslağını tekrar oluştur. Kaydetme.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T10:16:07.575Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "Mevcut `ozet` bileşeni için başlığı daha belirgin hale getiren yeni değişiklik taslağı hazırlandı ve önizleme kartıyla sunuldu.\n\n**Tasarım Notu:** Düzenleme başlığı h2 seviyesinde vurgulu bir başlık olarak yapılandırıldı, değişiklik türü rozeti bilgi varyantıyla öne çıkarıldı ve giriş metni lead stiliyle başlığın altında korundu.\n\n*Not: Taslakta doğrulama uyarısı (`nodes[1]: metin için tam olarak bir kaynak gerekli`) bulunmaktadır. Taslağı inceleyip havuza yeni sürüm olarak kaydetmek isterseniz kart üzerindeki butonu kullanabilirsiniz.*",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T10:17:29.264Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890: raporlari_ara aracıyla kablosuz şarj raporlarını ara; en fazla 2 sonuç ver.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T10:17:56.916Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "\"kablosuz şarj\" sorgusuna ait bülten kaydı:\n\n- [Harici Güç Kaynakları, Kablosuz Şarj Cihazları, Kablosuz Şarj Pedleri, Genel Kullanım Amaçlı Taşınabilir Bataryalar İçin Batarya Şarj Cihazları ve USB Tip-C Kabloları ile İlgili Çevreye Duyarlı Tasarım Gerekliliklerine Dair Tebliğ (2025/2052/AB) (SGM-2026/7)](https://www.resmigazete.gov.tr/eskiler/2026/10/20261016-14.htm)\n  - **Tarih / Sayı:** 16 Ekim 2026 Cuma / Sayı: 33402\n  - **Özet:** Harici güç kaynakları, kablosuz şarj aygıtları ve USB Tip-C kablolar için eko-tasarım, birlikte çalışabilirlik, etiketleme ve enerji verimliliği şartlarını düzenleyen SGM-2026/7 sayılı Tebliğ yayımlanmıştır.\n  - [Raporu İncele](/reports/95b64d13-1ed1-4100-b4c3-78aeb08475ac?revision=2) (Sürüm 2)",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T10:18:06.413Z"
+  },
+  {
+    "role": "USER",
+    "content": "QA-8890 durdurma testi: Dış ticaret raporu hazırlama sürecini uzun ve ayrıntılı olarak açıkla. Araçla işlem başlatma.",
+    "status": "COMPLETED",
+    "errorDetail": null,
+    "createdAt": "2026-10-19T10:18:28.461Z"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "",
+    "status": "FAILED",
+    "errorDetail": "İşlem isteğiniz üzerine durduruldu. (Takip: 797445ce-afb0-4955-98a3-43f467fdc85a)",
+    "createdAt": "2026-10-19T10:18:31.684Z"
+  }
+]

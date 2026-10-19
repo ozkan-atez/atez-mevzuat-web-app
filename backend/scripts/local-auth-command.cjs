@@ -16,7 +16,7 @@ const bin = name => path.join(root, 'backend/node_modules/.bin', name)
 if (command === 'stats') {
   const db = new (require('@prisma/client').PrismaClient)({ datasources: { db: { url: target } } })
   ;(async () => {
-    const names = ['user','scanRun','chatSession','generalChatMessage','document','documentVersion','topicReport','reportRevision','reportDraft','academyAttempt']
+    const names = ['user','scanRun','chatSession','generalChatMessage','document','documentVersion','topicReport','reportRevision','reportDraft']
     const counts = Object.fromEntries(await Promise.all(names.map(async name => [name, await db[name].count()])))
     if (process.argv[3]) {
       if (!['before','after'].includes(process.argv[3])) throw new Error('Unknown snapshot.')

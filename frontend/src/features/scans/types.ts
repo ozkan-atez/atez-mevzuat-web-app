@@ -12,9 +12,10 @@ export type ScanStage =
   | 'VALIDATING'
   | 'WRITING_MANIFEST'
 
-export type StageExecutionStatus = 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'FAILED'
+export type StageExecutionStatus = 'SKIPPED' | 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'FAILED'
 
 export interface ScanRunDetail {
+  gazetteDiscovery?: { discovered: number; skipped: number }
   sourceKeys?: string[]
   sourceRuns?: Array<{ notes?:string[]; stages?: Array<{stage:string;status:string;totalItems:number;completedItems:number;error:string|null}>; id: string; status: string; source: { name: string; key: string }; documentCount: number; errorSummary: string | null }>
   id: string

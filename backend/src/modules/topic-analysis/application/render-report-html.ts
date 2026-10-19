@@ -8,6 +8,7 @@ import { renderPageSkeleton } from '../templates/bulten-v2'
 let logoDataUri: string | undefined
 
 export async function renderReportHtml(spec: ReportSpec): Promise<string> {
+  if(spec.customization?.studioReport && !spec.customization.customHtml)return spec.customization.studioReport.html
   if(spec.customization?.templateReport && !spec.customization.customHtml) return renderTemplateReport(spec.customization.templateReport,{title:spec.documentTitle,reportId:spec.reportId,date:spec.displayDate,issueNumber:spec.issueNumber,topicId:spec.topicId ?? 'degisiklik-yok'})
   const cardHtml = customizeCard(renderCard(spec), spec)
   return renderPageSkeleton({

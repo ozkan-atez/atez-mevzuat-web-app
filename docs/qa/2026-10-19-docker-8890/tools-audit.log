@@ -1,0 +1,39 @@
+PASS dispatch bilesenleri_listele
+PASS dispatch bilesen_olustur
+PASS dispatch bilesen_degistir
+PASS dispatch bagimsiz_islem_baslat
+PASS dispatch islem_kaynaklari_listele
+PASS dispatch islem_durumu_getir
+PASS dispatch belge_islemi_baslat
+PASS dispatch otomasyonlari_listele
+PASS dispatch arsiv_belgelerini_ara
+PASS dispatch arsiv_belge_surumu_getir
+PASS dispatch eklenen_kaynaklari_ara
+PASS dispatch eklenen_kaynagi_getir
+PASS dispatch gtip_tariff_sorgula
+PASS dispatch tarama_baslat
+PASS dispatch raporlari_ara
+PASS dispatch rapor_getir
+PASS dispatch analiz_getir
+PASS dispatch belgeleri_ara
+PASS dispatch belge_metni_getir
+PASS dispatch taramalari_listele
+PASS dispatch onceki_kaynaklari_listele
+PASS dispatch gonderimleri_listele
+PASS dispatch dagitim_gruplarini_listele
+PASS validation tarama_baslat Geçerli bir tarama tarihi gerekli (YYYY-AA-GG).
+PASS validation belge_islemi_baslat Belge sürümü seçilmelidir.
+PASS validation gtip_tariff_sorgula GTİP 6, 8, 10 veya 12 rakam olmalıdır.
+PASS validation bilinmeyen Tanımsız araç: bilinmeyen
+OBSERVATION negated scan invoked starter: true
+OBSERVATION polite CAPTURE rejected: Kullanıcı bu işlem için açık talimat vermedi.
+OBSERVATION missing automation service: {"otomasyonlar":[]}
+TOTAL declared tools 23
+PASS operation dispatch DISCOVER
+PASS operation dispatch CAPTURE
+PASS operation dispatch FILTER
+PASS operation dispatch PREVIOUS_SOURCES
+PASS operation dispatch TARIFF_LOOKUP
+PASS operation dispatch BUILD_REPORT
+PASS operation dispatch REVISE_ANALYSIS
+PASS operation dispatch REVISE_REPORT

@@ -5,7 +5,7 @@ import { BellOutlined, DownOutlined, MoonOutlined, SunOutlined, BgColorsOutlined
 import { useLocation } from 'react-router-dom'
 import { useTheme, type Palette } from './ThemeProvider'
 
-const titles: Record<string, string> = { '/': 'Dashboard', '/runs': 'Taramalar', '/documents': 'Belgeler', '/operations': 'İşlemler', '/reports': 'Raporlar', '/chat': 'Sohbetler', '/automations': 'Otomasyonlar', '/academy': 'Gelişim Akademisi', '/groups': 'Dağıtım', '/sources': 'Kaynaklar', '/source-runs': 'Kaynak taraması', '/templates': 'Şablonlar', '/usage': 'Kullanım', '/admin': 'Yönetim' }
+const titles: Record<string, string> = { '/': 'Dashboard', '/runs': 'Taramalar', '/documents': 'Belgeler', '/operations': 'İşlemler', '/reports': 'Raporlar', '/chat': 'Sohbetler', '/automations': 'Otomasyonlar', '/groups': 'Dağıtım', '/sources': 'Kaynaklar', '/source-runs': 'Kaynak taraması', '/templates/components': 'Bileşen havuzu', '/templates': 'Şablonlar', '/usage': 'Kullanım', '/admin': 'Yönetim' }
 const palettes: { key: Palette; label: string; color: string }[] = [
   { key: 'violet', label: 'Mor Neon', color: '#c5aff5' },
   { key: 'ocean', label: 'Okyanus Mavi', color: '#73dcff' },

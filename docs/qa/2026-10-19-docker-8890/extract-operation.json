@@ -1,0 +1,20 @@
+{
+  "id": "86d46fc9-64ee-4196-9553-32aac887146f",
+  "status": "FAILED",
+  "operation": "EXTRACT",
+  "parameters": {
+    "mode": "FILL_MISSING",
+    "operation": "EXTRACT",
+    "documentVersionIds": [
+      "7540ff89-5480-4541-9025-972eff9cf912"
+    ]
+  },
+  "tasks": [
+    {
+      "status": "FAILED",
+      "errorCategory": "FAILED",
+      "errorMessage": "Belgeden okunabilir metin çıkarılamadı.",
+      "attemptNumber": 1
+    }
+  ]
+}

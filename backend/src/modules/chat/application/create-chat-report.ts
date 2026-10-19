@@ -6,7 +6,7 @@ import type { ChatMessageView } from './ports'
 export class ChatReportError extends Error {}
 export const ChatEvidenceSchema=z.object({id:z.string(),title:z.string(),url:z.string().nullable(),text:z.string().min(1),publishedOn:z.string().nullable()})
 export type ChatEvidence=z.infer<typeof ChatEvidenceSchema>
-export interface ChatContext {sourceIds?:string[];templateId?:string;evidence?:ChatEvidence[];warnings?:string[]}
+export interface ChatContext {sourceIds?:string[];templateId?:string;evidence?:ChatEvidence[];warnings?:string[];componentDrafts?:import('./component-studio').ComponentDraftCard[]}
 export interface SavedChatReport {reportId:string;title:string;url:string;operationRequestId:string}
 export interface QueuedChatReports {expectedCount:number;operationRequestIds:string[];reports:SavedChatReport[];pending:boolean}
 export interface ChatReportCreator {
@@ -14,6 +14,7 @@ export interface ChatReportCreator {
 }
 export function wantsChatReport(content:string):boolean {
   const t=normalizeTurkish(content).replace(/\brapro\w*/g, 'rapor').replace(/\bolust[su]?[au]m\w*/g, 'olustur')
+  if(/\bbilesen/.test(t))return false // "rapor bileşeni oluştur" bir bileşen isteğidir, rapor değil
   if(/\b(?:istemiyorum|istemem|olusturmay\w*|hazirlamay\w*|kaydetmey\w*|olusturma|hazirlama|kaydetme|ekleme|yapma|nasil|ne gerekli|sadece sohbet|yalnizca sohbet)\b/.test(t))return false
   return /\b(?:rapor\w*|bulten\w*|html)\b/.test(t)&&/\b(?:olustur\w*|hazirla\w*|uret\w*|kaydet\w*|ekle\w*|donustur\w*|raporlastir\w*|haline getir\w*)\b/.test(t)
 }

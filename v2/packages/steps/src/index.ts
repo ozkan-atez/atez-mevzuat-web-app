@@ -1,0 +1,33 @@
+import { StepRegistry } from '@atez/engine'
+import { classifyProfile } from './classify-profile'
+import { classifyTitle } from './classify-title'
+import { demoJoin, demoSplit, demoUpper } from './demo'
+import type { StepDeps } from './deps'
+import { sourceDiscover } from './discover'
+import { docFetch } from './fetch'
+import { docNormalize } from './normalize'
+import { entryDocuments } from './entry'
+import { extractTable } from './extract-table'
+import { lineageResolve } from './lineage'
+import { reportCompose, reportRender } from './report'
+import { topicAnalyze } from './topic-analyze'
+import { topicLink } from './topic-link'
+
+export * from './classify-profile'
+export * from './classify-title'
+export * from './demo'
+export * from './deps'
+export * from './discover'
+export * from './fetch'
+export * from './normalize'
+export * from './entry'
+export * from './extract-table'
+export * from './lineage'
+export * from './report'
+export * from './report-service'
+export * from './topic-analyze'
+export * from './topic-link'
+
+export function buildStepRegistry(): StepRegistry<StepDeps> {
+  return new StepRegistry<StepDeps>().register(demoSplit, demoUpper, demoJoin, sourceDiscover, classifyTitle, docFetch, docNormalize, classifyProfile, entryDocuments, extractTable, lineageResolve, topicLink, topicAnalyze, reportCompose, reportRender)
+}

@@ -25,7 +25,7 @@ Yerel servisler `deploy/run-local.mjs` ile çalışır. Yerel profil `.local/aut
 
 ## Roller ve özel içerik
 
-VIEWER yayımlanmış, erişebildiği raporları ve ortak arşivi okuyabilir. EDITOR kendi sohbet ve belgelerini yönetir; analiz, tarama ve rapor düzenleme/kaydetme yapabilir. ADMIN ayrıca kaynak hesabı, otomasyon, şablon, kullanıcı ve rol yönetir. E-posta gönderimi ayrı delivery.send iznine bağlıdır. Akademi cevap ve puanları kullanıcıya aittir; VIEWER sonuç gönderemez.
+VIEWER yayımlanmış, erişebildiği raporları ve ortak arşivi okuyabilir. EDITOR kendi sohbet ve belgelerini yönetir; analiz, tarama ve rapor düzenleme/kaydetme yapabilir. ADMIN ayrıca kaynak hesabı, otomasyon, şablon, kullanıcı ve rol yönetir. E-posta gönderimi ayrı delivery.send iznine bağlıdır.
 
 Kişisel belge, sohbet, analiz ve bunlardan türeyen rapor kullanıcıya özeldir. Admin rolü başka kullanıcının özel içeriğine otomatik erişim vermez. Mevcut ortak topic raporuna özel arşiv belgesi doğrudan eklenemez; belge arşivindeki özel analiz/rapor akışı kullanılmalıdır. Bir kaydın yayımlanmış olması kendiliğinden bütün çalışma alanıyla paylaşılması anlamına gelmez.
 
@@ -35,7 +35,7 @@ Eski sahipsiz kayıtlar migration sırasında LEGACY durumunda kalır. Açık sa
 node backend/scripts/local-auth-command.cjs assign --workspace-id WORKSPACE_UUID --owner-user-id ADMIN_USER_UUID
 ```
 
-`--apply` atamayı yapar. Bu komut aktif ve kimliği açıkça bağlanmış bir yönetici ister. Resmî Gazete kaynağı doğrulanan belgeler ortak arşive, sohbet ve diğer belgeler seçilen kişiye bağlanır. Eski raporlar varsayılan olarak bu kişiye özel kalır; ortaklaşması incelenen her rapor için ayrıca `--shared-report-id REPORT_UUID` belirtilir. Akademi eski sonuçlarını taşımak için ayrı `--assign-academy` seçeneği vardır. Metadata ataması tarihleri korur ve eşzamanlı kullanıcı değişikliğinin üzerine yazmaz.
+`--apply` atamayı yapar. Bu komut aktif ve kimliği açıkça bağlanmış bir yönetici ister. Resmî Gazete kaynağı doğrulanan belgeler ortak arşive, sohbet ve diğer belgeler seçilen kişiye bağlanır. Eski raporlar varsayılan olarak bu kişiye özel kalır; ortaklaşması incelenen her rapor için ayrıca `--shared-report-id REPORT_UUID` belirtilir. Metadata ataması tarihleri korur ve eşzamanlı kullanıcı değişikliğinin üzerine yazmaz.
 
 12 Ekim 2026 geçişinde 81 tarama, 16 sohbet, 38 sohbet mesajı, 181 belge, 184 belge sürümü, 58 rapor, 60 rapor revizyonu ve 2 taslak korunmuştur. 160 doğrulanmış Resmî Gazete belgesi ortak arşive ayrılmıştır. Yedek özel izinlerle yerel Codex yedek dizininde saklanır. Eski sohbetler açıkça yerel admin hesabına bağlanmış; orijinal etkinlik zamanları korunmuştur.
 

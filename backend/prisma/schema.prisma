@@ -55,6 +55,7 @@ enum AssetRole {
 }
 
 enum StageExecutionStatus {
+  SKIPPED
   PENDING
   RUNNING
   AWAITING_RETRY
@@ -207,6 +208,8 @@ enum TopicAiExecutionKind {
 }
 
 model ScanRun {
+  discoveredDocumentCount Int @default(0)
+  skippedDocumentCount Int @default(0)
   workspaceId String?
   initiatorUserId String?
   workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
@@ -747,7 +750,6 @@ model TopicOutbox {
 }
 
 model User {
-  academyAttempts AcademyAttempt[]
   initiatedSourceScanRuns SourceScanRun[] @relation("SourceScanRunInitiator")
   initiatedTopicOutboxs TopicOutbox[] @relation("TopicOutboxInitiator")
   initiatedScanOutboxs ScanOutbox[] @relation("ScanOutboxInitiator")
@@ -1010,6 +1012,9 @@ model ReportFieldEdit {
 }
 
 model ReportTemplate {
+  studioSnapshot Json?
+  isDefault Boolean @default(false)
+  versions ReportTemplateVersion[]
   definition Json?
   revision Int @default(1)
   id        String   @id @default(uuid())
@@ -1052,22 +1057,6 @@ model WorkspaceAutomation {
   lastError String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-}
-
-model AcademyAttempt {
-  ownerUserId String?
-  workspaceId String?
-  ownerUser User? @relation(fields:[ownerUserId],references:[id],onDelete:Restrict)
-  workspace Workspace? @relation(fields:[workspaceId],references:[id],onDelete:Restrict)
-  id String @id @default(uuid())
-  lessonId String
-  period String
-  answers Json
-  score Int
-  createdAt DateTime @default(now())
-
-  @@unique([workspaceId, ownerUserId, lessonId, period])
-  @@index([workspaceId, ownerUserId, createdAt])
 }
 
 /// A discovered URL is evidence only after it is explicitly activated.
@@ -1418,7 +1407,6 @@ model ExternalIdentity {
  @@index([userId])
 }
 model Workspace {
-  academyAttempts AcademyAttempt[]
   sourceScanRunActors SourceScanRun[]
   topicOutboxActors TopicOutbox[]
   scanOutboxActors ScanOutbox[]
@@ -1581,4 +1569,40 @@ model TemplateAiRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([actorScope, requestKey])
+}
+
+model ReportTemplateVersion {
+  id String @id @default(uuid())
+  templateId String
+  template ReportTemplate @relation(fields:[templateId],references:[id],onDelete:Restrict)
+  revision Int
+  definition Json
+  createdAt DateTime @default(now())
+  @@unique([templateId, revision])
+}
+
+model ReportComponent {
+  id String @id @default(uuid())
+  key String @unique
+  name String
+  description String
+  category String
+  origin String @default("USER")
+  status String @default("ACTIVE")
+  currentVersion Int @default(1)
+  definition Json
+  versions ReportComponentVersion[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ReportComponentVersion {
+  id String @id @default(uuid())
+  componentId String
+  component ReportComponent @relation(fields:[componentId],references:[id],onDelete:Restrict)
+  version Int
+  definition Json
+  note String?
+  createdAt DateTime @default(now())
+  @@unique([componentId, version])
 }

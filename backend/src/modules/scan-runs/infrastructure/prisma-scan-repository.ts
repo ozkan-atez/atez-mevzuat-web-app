@@ -3,7 +3,7 @@ import {getActorContext,privateActorScope,jobInitiatorFields,reportAccessWhere,t
 import {createHash} from 'node:crypto'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import { findScheduleSlot, scheduleRequestKey, type ScanScheduleSlotKey } from '../domain/scan-schedule'
-import type { ScanRunStatus, ScanStage } from '../domain/scan-run'
+import { scanStages, type ScanRunStatus, type ScanStage } from '../domain/scan-run'
 import type {
   AiCallCompletion,
   AiCallFailure,
@@ -222,12 +222,16 @@ export class PrismaScanRepository {
     await this.prisma.scanRun.update({ where: { id: runId }, data: { indexSourceUrl: sourceUrl, indexObjectKey: object.objectKey, indexSha256: object.sha256 } })
   }
 
-  async saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+  async saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<{ discovered: number; skipped: number }> {
+    return this.prisma.$transaction(async (tx) => {
       const current=await tx.scanRun.findUniqueOrThrow({where:{id:runId},select:{automationId:true,workspaceId:true,createdAt:true}})
       // Only completed earlier runs of this automation can establish processed publications.
       const prior=current.automationId ? await tx.collectedDocument.findMany({where:{edition:{publicationDate:new Date(`${targetDate}T00:00:00.000Z`),scanRun:{automationId:current.automationId,workspaceId:current.workspaceId,status:'COMPLETED',id:{not:runId},createdAt:{lt:current.createdAt}}}},select:{sourceUrl:true}}) : []
       const processed=new Set(prior.map(document=>document.sourceUrl))
+      const urls = new Set(editions.flatMap(edition => edition.documents.map(document => document.sourceUrl)))
+      const discovered = urls.size
+      const skipped = [...urls].filter(url => processed.has(url)).length
+      await tx.scanRun.update({where:{id:runId},data:{discoveredDocumentCount:discovered,skippedDocumentCount:skipped}})
       for (const edition of editions) {
         const storedEdition = await tx.gazetteEdition.upsert({
           where: { scanRunId_indexUrl: { scanRunId: runId, indexUrl: edition.indexUrl } },
@@ -253,7 +257,15 @@ export class PrismaScanRepository {
           skipDuplicates: true,
         })
       }
+      return { discovered, skipped }
     })
+  }
+
+  async skipPreviouslyProcessedStages(runId: string): Promise<void> {
+    await this.prisma.$transaction(scanStages.filter(stage => !['DISCOVERING', 'WRITING_MANIFEST'].includes(stage)).map(stage => {
+      const data = {status:'SKIPPED' as const,totalItems:0,completedItems:0,failedItems:0,errorSummary:null,completedAt:new Date()}
+      return this.prisma.stageExecution.upsert({where:{scanRunId_stage:{scanRunId:runId,stage}},create:{scanRunId:runId,stage,...data},update:data})
+    }))
   }
 
   async listDocuments(runId: string): Promise<Array<{ id: string; sourceUrl: string; title: string }>> {
@@ -296,7 +308,9 @@ export class PrismaScanRepository {
       this.prisma.documentAsset.count({ where: { document: { edition: { scanRunId: runId } } } }),
       this.prisma.documentAsset.count({ where: { document: { edition: { scanRunId: runId } }, validationStatus: { not: 'VALID' } } }),
     ])
-    if (documents === 0 || invalidDocuments > 0 || invalidAssets > 0) {
+    const run = documents === 0 ? await this.prisma.scanRun.findUniqueOrThrow({where:{id:runId}}) : null
+    const allPreviouslyProcessed = !!run?.automationId && run.discoveredDocumentCount > 0 && run.discoveredDocumentCount === run.skippedDocumentCount
+    if ((documents === 0 && !allPreviouslyProcessed) || invalidDocuments > 0 || invalidAssets > 0) {
       throw new Error(`Manifest verification failed: documents=${documents}, invalidDocuments=${invalidDocuments}, assets=${assets}, invalidAssets=${invalidAssets}`)
     }
   }
@@ -426,6 +440,7 @@ export class PrismaScanRepository {
         }),
       } : null,
       reports,
+      gazetteDiscovery: { discovered: run.discoveredDocumentCount, skipped: run.skippedDocumentCount },
       sourceRuns: (run.sourceRuns ?? []).map(item => ({ id: item.id, status: item.status, source: { name: item.source.name ?? item.source.key, key: item.source.key }, stages: item.stages, notes: Array.isArray((item.coverage as {notes?:unknown}|null)?.notes) ? (item.coverage as {notes:string[]}).notes.filter(n=>typeof n==='string') : [], documentCount: item._count.documents, errorSummary: item.errorSummary })),
       counts: { editions: run.editions.length + externalEditions.length, documents: [...run.editions, ...externalEditions].reduce((n, e) => n + e.documents.length, 0), assets: assets + externalEditions.flatMap(edition => edition.documents).reduce((sum, document) => sum + document.assetCount, 0), completedItems: run.completedItems, totalItems: run.totalItems, failedItems: run.failedItems },
       stages: run.stages.map((stage) => ({ stage: stage.stage, status: stage.status, completedItems: stage.completedItems, totalItems: stage.totalItems, failedItems: stage.failedItems })),

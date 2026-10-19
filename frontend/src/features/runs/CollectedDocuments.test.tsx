@@ -23,10 +23,26 @@ describe('compact collected documents', () => {
     expect(screen.getByRole('link', { name: 'Belge 9 — 2026/62' })).toBeVisible()
     expect(screen.queryByRole('link', { name: 'Belge 1 — 2026/62' })).not.toBeInTheDocument()
   })
-  it('labels standalone external editions without implying a Gazette supplement', () => {
-    render(<CollectedDocuments editions={[{ ...editions[0]!, type: 'EXTERNAL' }]} />)
-    expect(screen.getByRole('heading', { name: 'Dış kaynak belgeleri' })).toBeVisible()
+  it('labels each external group with its registered source name', () => {
+    const sources = ['TARIFF', 'İGMD', 'Özel Kaynak']
+    render(<CollectedDocuments
+      editions={sources.map((_, index) => ({ ...editions[0]!, id: `e${index}`, type: 'EXTERNAL', documents: [{ ...editions[0]!.documents[0]!, id: `d${index}` }] }))}
+      sourceRuns={sources.map((name, index) => ({ id: `e${index}`, status: 'COMPLETED', source: { name, key: `source-${index}` }, documentCount: 1, errorSummary: null }))}
+    />)
+    for (const name of sources) expect(screen.getByRole('heading', { name })).toBeVisible()
+    expect(screen.queryByText('Dış kaynak belgeleri')).not.toBeInTheDocument()
     expect(screen.queryByText(/Mükerrer Sayı/)).not.toBeInTheDocument()
   })
-
+  it('keeps Gazette edition information alongside its source name', () => {
+    render(<CollectedDocuments editions={[
+      { ...editions[0]!, documents: editions[0]!.documents.slice(0, 1) },
+      { ...editions[0]!, id: 'supplement', type: 'SUPPLEMENT', supplementNo: 2, documents: editions[0]!.documents.slice(1, 2) },
+    ]} />)
+    expect(screen.getByRole('heading', { name: 'Resmî Gazete · Ana Sayı' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Resmî Gazete · 2. Mükerrer Sayı' })).toBeVisible()
+  })
+  it('uses the source hostname when source metadata is unavailable', () => {
+    render(<CollectedDocuments editions={[{ ...editions[0]!, type: 'EXTERNAL' }]} />)
+    expect(screen.getByRole('heading', { name: 'resmigazete.gov.tr' })).toBeVisible()
+  })
 })

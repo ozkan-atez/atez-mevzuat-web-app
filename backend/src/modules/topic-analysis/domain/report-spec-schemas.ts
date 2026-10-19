@@ -13,6 +13,7 @@ export const ReportSourceSchema = z.object({
   kind: z.enum(['URL', 'TEXT', 'FILE']), fileName: z.string().max(300).optional(),
 }).strict()
 export const ReportCustomizationSchema = z.object({
+  studioReport: z.object({html:z.string().max(2000000),templateId:z.string(),revision:z.number().int(),sections:z.array(z.unknown())}).nullable().optional(),
   templateReport: TemplateReportSchema.nullable().optional(),
   headings: z.record(z.string().max(100), text.max(300)).default({}),
   order: z.array(z.string().min(1).max(100)).max(50).default([]),

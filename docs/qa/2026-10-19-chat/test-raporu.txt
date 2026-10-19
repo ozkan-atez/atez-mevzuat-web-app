@@ -1,0 +1,113 @@
+ATEZ SOHBET VE ARAÇ TEST RAPORU
+19 Ekim 2026 — Europe/Istanbul
+
+KAPSAM VE SONUÇ
+Yerel uygulama: http://localhost:5173/chat
+Canlı test sohbeti: /chat/a6bc41f4-2254-44ed-9484-4d5704b046fe
+Sohbet adı: 19 Ekim QA Testi Tarama Raporları
+
+20 tanımlı sohbet aracının tamamı, sahte bağımlılıklar kullanılarak araç yönlendirme seviyesinde çalıştırıldı. Bağımsız işlemin 8 alt türü ve belge işleminin 2 alt türü ayrıca kapsandı. Bu, gerçek servislerle 20 aracın uçtan uca doğrulandığı anlamına GELMEZ.
+
+Arka uç: 15 dosyada 134 test geçti (99 mevcut + 35 yeni QA kontrolü).
+Arayüz: 9 dosyada 50 test geçti, 2 test başarısız oldu.
+Başarısız iki test ayrı tekrar koşusunda da aynı sonucu verdi.
+Yeni QA testlerinin 6 tanesi mevcut kusurlu davranışı belgeliyor; bunların geçmesi davranışın doğru olduğu anlamına gelmez.
+
+BULGULAR — ÖNCELİK SIRASI
+
+QA-01 / P1 / CANLI DOĞRULANDI: Aktif kullanım sırasında oturum kapanıyor.
+Adımlar: Kurumsal giriş > sohbet aç > mesaj gönder veya araç menüsünü aç > birkaç saniye bekle.
+Gerçek: “Oturumunuz sona erdi. Devam etmek için yeniden giriş yapın.” ekranı. Yeniden giriş bağlantısıyla dönüldüğünde de tekrar ediyor. Toplam üç kez gözlendi.
+Beklenen: Aktif ve geçerli oturumda sohbet/araç kullanımı devam etmeli.
+Kanıt: İlk mesajlar 200 dönerken sonraki messages GET isteği req-yf 401 dönüyor. Yeniden giriş callback 302 ve /auth/me 200 sonrasında req-yo yine 401. session-expired.png ve live-evidence.jsonl.
+Etki: Uzun canlı araç testlerini ve normal kullanıcı akışını kesiyor.
+Sınır: Kök neden henüz belirlenmedi; kimlik sağlayıcısı, oturum yenileme veya yapılandırma kaynaklı olabilir. Model cevabının kendisi hata verdi denemez; ikinci cevap yeniden girişte görünüyordu.
+
+QA-02 / P1 / ARAÇ SEVİYESİNDE DOĞRULANDI: tarama_baslat kullanıcı olumsuz talimatını kontrol etmiyor.
+Adımlar: runChatTool(tarama_baslat, geçerli tarih, userContent='Yeni tarama başlatma; sadece açıkla.') çağrısını sahte startScan ile çalıştır.
+Gerçek: startScan bir kez çağrılıyor.
+Beklenen: Model yanlış araç seçse bile açık olumsuz kullanıcı talimatı işlem başlatmayı engellemeli.
+Kod: backend/src/modules/chat/application/chat-tools.ts, tarama_baslat dalı. Diğer işlem araçlarında bulunan userContent kontrolü burada yok. send-chat-message model araç çağrısını bu dala yönlendiriyor.
+Sınır: Gerçek veritabanında istenmeyen tarama başlatılmadı. Canlı ilk sorgudaki olumsuz talimat doğru işlendi; kusur model yanlış aracı çağırırsa devreye giren koruma eksikliği.
+
+QA-03 / P2 / OTOMATİK ARAYÜZ TESTİNDE DOĞRULANDI: Bağlantı hatası iki kez gösteriliyor.
+Adımlar: POST messages ağ hatası ile reddedilsin; mesaj gönder.
+Gerçek: “Bağlantı kesildi.” iki ayrı uyarıda görünür. ChatScreen.test.tsx aynı metni iki kez bulduğu için başarısız.
+Neden: useConversation hem error durumunu hem FAILED mesajını dolduruyor; ekran ikisini de çiziyor.
+Beklenen: Tek, anlaşılır hata; yeniden deneme için mesajın korunması.
+Kanıt: frontend-tests.log ve frontend-recheck.log.
+
+QA-04 / P2 / ARAÇ SEVİYESİNDE DOĞRULANDI: Tarih doğrulaması tutarsız.
+Adımlar: raporlari_ara ve belgeleri_ara için baslangicTarihi='2026-02-31'; taramalari_listele için tarih aynı değer.
+Gerçek: Var olmayan tarih doğrudan veri servislerine aktarılıyor.
+Beklenen: Otomasyon/arşiv araçlarında olduğu gibi araç sınırında anlaşılır tarih hatası.
+Sınır: Alt servisin bu girdiye vereceği gerçek cevap bu testte ölçülmedi; sessiz yanlış sonuç veya sunucu hatası kesinleşmiş değil.
+
+QA-05 / P2 / ARAÇ SEVİYESİNDE DOĞRULANDI: Doğal, kibar işlem isteği reddediliyor.
+Adımlar: bagimsiz_islem_baslat CAPTURE ve userContent='Belgeyi indirebilir misin?'.
+Gerçek: “Kullanıcı bu işlem için açık talimat vermedi.”
+Karşı örnek: 'Belgeyi indir' geçiyor.
+Beklenen: Açık kibar talep desteklenmeli; olumsuz ve yalnız bilgi soran ifadeler korunmalı.
+Neden: Yetkilendirme yalnız dar sözcük kalıplarına dayanıyor.
+
+QA-06 / P2 / ARAÇ SEVİYESİNDE DOĞRULANDI: Servis eksikliği, boş kayıt gibi gösterilebiliyor.
+Adımlar: listAutomations bağımlılığı bulunmadan otomasyonlari_listele çağır.
+Gerçek: {otomasyonlar:[]}.
+Beklenen: “Servis kullanılamıyor” ile “Kayıt yok” ayrılmalı.
+Benzer örüntü: isteğe bağlı kaynak ve arşiv bağımlılıklarında da boş liste/bulunamadı dönüşleri var.
+Sınır: Canlı kurulumda bu bağımlılığın eksik olduğu iddia edilmiyor.
+
+QA-07 / P3 / TEST BEKLENTİSİ SORUNU: Rapor paneli testi eski istek sayısını bekliyor.
+Gerçek: ReportCorrection.test.tsx /chat/sessions çağrısını 1 bekliyor, 2 buluyor.
+İnceleme: ChatScreen ilk geçmiş yüklemesinden sonra ilk kullanıcı mesajı için başlık yenileme amacıyla ek GET yapıyor. Test metoda bakmadan bütün çağrıları sayıyor.
+Sonuç: Bu başarısızlık tek başına çift sohbet oluşturma kanıtı değil. Testin POST ile yeni sohbet oluşturulmadığını kontrol etmesi daha uygun.
+
+DOĞRU İLERLEYENLER
+- Sağlık kontrolü: veritabanı, kuyruk ve nesne deposu ready.
+- Kurumsal giriş yönlendirmesi ve geri dönüş çalıştı.
+- İlk mesaj tek yeni sohbet oluşturdu; otomatik başlık oluştu.
+- Canlı bugünkü tarama sorgusu 4 başarısız çalışmayı, belge/rapor sayılarını ve ayrıntı bağlantılarını gösterdi.
+- “Yayımlanmış bülten olmaması, mevzuat değişikliği olmadığı anlamına gelmez” uyarısı doğru ayrımı yaptı.
+- İkinci canlı sorgunun cevabı kayıtlıydı: 6 işlem kaynağı, 0 ek kaynak ve 3 dağıtım grubu; alıcı adresleri yerine sayılar gösterildi.
+- Yeniden giriş sonrasında iki kullanıcı mesajı ve cevapları korundu.
+- Belge ekle menüsü açıldı; dosya ekleme, kaynak arama, şablon seçimi ve arşiv arama kontrolleri bulundu. Tam yükleme doğrulaması oturum hatası nedeniyle tamamlanamadı.
+- Geçen otomatik testler: Enter/Shift+Enter, ilk mesaj aktarımı, seçili belge/kaynak/şablon aktarımı, kayıtlı mesajları geri yükleme, rapor bağlantısını sohbet yanında açma, eksik rapor bağlantısından toparlanma, Markdown güvenli render, kapalı web/browser seçeneklerini reddetme.
+
+20 ARAÇ KAPSAM MATRİSİ
+Her satırdaki “geçti” gerçek dış servis sonucu değil, kontrollü araç yönlendirme testidir.
+1 bagimsiz_islem_baslat — geçti, 8 alt işlem; kibar CAPTURE talebinde QA-05.
+2 islem_kaynaklari_listele — geçti; canlı sonuçta 6 kaynak.
+3 islem_durumu_getir — geçti; canlı doğrulanmadı.
+4 belge_islemi_baslat — geçti, EXTRACT ve ANALYZE; canlı belge yükleme tamamlanmadı.
+5 otomasyonlari_listele — geçti; eksik servis için QA-06.
+6 arsiv_belgelerini_ara — geçti; canlı doğrulanmadı.
+7 arsiv_belge_surumu_getir — geçti; canlı doğrulanmadı.
+8 eklenen_kaynaklari_ara — geçti; canlı sonuçta 0 ek kaynak.
+9 eklenen_kaynagi_getir — geçti; canlı doğrulanmadı.
+10 gtip_tariff_sorgula — geçti, noktalı GTİP normalizasyonu; gerçek Tariff çağrısı yapılmadı.
+11 tarama_baslat — geçti; olumsuz talimat koruması QA-02; gerçek iş başlatılmadı.
+12 raporlari_ara — geçti; tarih QA-04; canlı ilk sorgu doğrudan kayıtlı veri yolunu kullandı.
+13 rapor_getir — geçti; canlı doğrulanmadı.
+14 analiz_getir — geçti; canlı doğrulanmadı.
+15 belgeleri_ara — geçti; tarih QA-04.
+16 belge_metni_getir — geçti; canlı doğrulanmadı.
+17 taramalari_listele — geçti; tarih QA-04; canlı ilk sorgu doğrudan kayıtlı veri yolunu kullandı.
+18 onceki_kaynaklari_listele — geçti; canlı doğrulanmadı.
+19 gonderimleri_listele — geçti; gerçek e-posta gönderilmedi.
+20 dagitim_gruplarini_listele — geçti; canlı sonuçta 3 grup.
+
+TEST SINIRLARI VE SONRAKİ TUR
+Oturum sorunu çözülmeden “tüm araçlar canlı geçti” sonucu verilemez. Kalan canlı senaryolar: belge yükleme/çıkarma/analiz, kaynak ve şablon seçimi, rapor düzeltme-kaydetme, gerçek Tariff, uzun yanıtı durdurma, sayfa değiştirip aktif işe dönme, indirme/PDF. E-posta dağıtımı gerçek alıcılarla test edilmedi.
+Ürün kodu değiştirilmedi. Yeni bir QA test dosyası ve bu rapor/kanıt dosyaları eklendi. Mevcut kullanıcı değişikliklerine dokunulmadı. Veritabanı silen entegrasyon testleri çalıştırılmadı; test veritabanı bağlantısı devre dışı tutularak yalnız izole testler çalıştırıldı. Gerçek ortamda bir QA sohbeti bırakıldı.
+
+TEKRARLAMA
+Arka uç QA: backend klasöründe env -u TEST_DATABASE_URL npm test -- test/unit/chat-qa-audit.test.ts
+Arayüz: frontend klasöründe npm test -- src/features/chat src/features/dashboard/DashboardChat.test.tsx
+
+DOSYALAR
+backend-tests.log: 134 testin son çalıştırması.
+frontend-tests.log: 52 arayüz testi.
+frontend-recheck.log: başarısız iki test dosyasının tekrarı.
+tool-audit.log: yeni 35 QA kontrolü.
+live-evidence.jsonl: hassas alanları çıkarılmış seçili istek kanıtları.
+session-expired.png: canlı oturum hatası.

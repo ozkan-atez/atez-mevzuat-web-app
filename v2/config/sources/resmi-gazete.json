@@ -1,0 +1,18 @@
+{
+  "id": "resmi-gazete",
+  "version": 1,
+  "title": "T.C. Resmî Gazete",
+  "transport": "GAZETTE",
+  "trustClass": "VERIFIED_OFFICIAL",
+  "fetch": {
+    "allowedHosts": ["www.resmigazete.gov.tr", "resmigazete.gov.tr"],
+    "minIntervalMs": 750,
+    "timeoutMs": 120000,
+    "maxAttachmentsPerDocument": 30
+  },
+  "policy": {
+    "titleKeywordSet": "rg-title.v1",
+    "topicRole": "PRIMARY",
+    "slots": ["05:00", "10:00", "15:00", "23:00"]
+  }
+}

@@ -1,38 +1,29 @@
-# Rapor şablonları — içerik ve tasarım düzenleyicisi
+# Rapor şablonları — dev stüdyosu
 
-Yeni şablonlar `ReportTemplate.definition` içinde sürüm 2 sözleşmesiyle saklanır. `requirements` AI içerik talimatlarını; `components` yeniden kullanılabilir görsel parçaları; `layout` içerik bağlantılarını ve yerleşimi; `theme` ve `shell` görünümü tanımlar. Açıklamalar rapora yazdırılmaz. HTML her önizleme ve raporda aynı renderer üzerinden mevcut ATEZ iskeletinden üretilir.
+19 Ekim 2026 aktarımının kaynağı, localhost:8890 üzerinde çalışan Compose projesidir: `/Users/ozkan/Documents/GitHub/atez-mevzuat-web-app/.claude/worktrees/dev-2` (HEAD `d94ef4d`). Şablon/bileşen ekranları ve v2 stüdyo servisleri bu kaynaktan alınmıştır. Önceki yerel özel düzenleyici bu ekranların yerine kullanılmaz.
 
-## Kullanım
+## Ekranlar ve servis
 
-Şablonlar → Şablon oluştur. Kullanıcı adını ve “Rapordan ne bekleniyor?” açıklamasını yazar. Açıklama `definition.brief` içinde rapor üretiminin asıl talimatı olarak saklanır; görünür rapora kopyalanmaz. Örnek başlangıç açıklaması düzenlenebilir. İçerik/tasarım/deneme sekmeleri ve elle bileşen ekleme kaldırılmıştır.
+- `http://localhost:5173/templates`: şablon listesi, rapor tarifi, sistemin kullandığı biçim, bölüm seçimi, kaydetme ve önizleme.
+- `/templates/components`: 15 başlangıç bileşeni, filtreler ve görsel önizleme.
+- Sohbet: bileşen oluşturma/değiştirme araçları, taslak önizleme ve havuza kaydetme. Kaynak sürümde sohbetin çıktısı bileşen taslağıdır; tam şablon üretimi değildir.
+- Tarayıcı `/api/v2/*` isteklerini mevcut API'ye gönderir. Oturum, CSRF ve `config.manage` denetiminden sonra yalnız stüdyo yolları yerel v2 servisine aktarılır.
+- V2 API `127.0.0.1:3101`, ayrı `atez_studio_v2` veritabanıyla çalışır. 8890 kaynak uygulamasının veritabanı değiştirilmez.
 
-Bileşen havuzu gerçek rapor renderer’ından üretilen izole HTML önizleme kartları gösterir. Kartlar büyük önizlemede incelenebilir. HTML, scriptsiz sandbox iframe ve içerik güvenlik politikasıyla görüntülenir.
+`node deploy/run-studio.mjs migrate` stüdyo veritabanı göçlerini, `node deploy/run-studio.mjs` API'yi çalıştırır. Veritabanı önceden oluşturulmalıdır. `deploy/install-local-services.sh` stüdyo/API/worker servislerini kurar. Stüdyo servisi mevcut Vertex yapılandırmasını kullanır. V2 worker/scheduler bu aktarım için başlatılmaz.
 
-Bileşen havuzuna yalnız “Bileşen asistanı” sohbeti üzerinden öneri oluşturulur. Takip mesajları önceki öneriyi geliştirebilir; son 12 mesaj modele bağlam olarak iletilir. Sohbet düzenleyici oturumu boyunca tutulur. Öneri önizlenip havuza eklenir, ardından şablon kaydedilir. Bileşen açıklaması hangi analizlerde kullanılacağını belirtir. Yeni bileşen eklemek onu rapora zorunlu yerleştirmez. İstek sırasında açıklama veya havuz değişirse eski öneri uygulanamaz. Geri al/ileri al ve sürüm çakışması koruması devam eder.
+## Mevcut rapor motoruyla bağlantı
 
-Rapor AI'ı `brief` varsa aynı model çağrısında açıklamaya uygun bölümleri ve kaynaklı içeriklerini üretir; analizdeki verilere göre havuzdan bileşen seçer. Bölümler için otomatik yerleşim oluşturulur ve raporda dondurulur. Havuz ve kurumsal görünüm değişmez. `brief` bulunmayan mevcut tanımlar eski gereksinim/yerleşim sözleşmesiyle çalışır; düzenleyicide kaydedilince açıklama tabanlı üretime geçer. Eski HTML şablonları korunur, yeni düzende ayrı kopya oluşturulabilir.
+Şablonlar mevcut `ReportTemplate` tablosuna kimlik ve sürümleri korunarak yansıtılır. `studioSnapshot` alanı şablon tanımını ve sürümü sabitlenmiş bileşenleri içerir. Sohbet ve otomasyon işinin başlangıcında bu snapshot dondurulur. Sonraki şablon değişiklikleri önceki raporları değiştirmez.
 
-Yeni bileşenler desteklenen temel parçaların bileşimidir; çalıştırılabilir HTML/JavaScript değildir. Önizleme örnek içerikle yalnız görünümü gösterir; gerçek rapor üretimi yapmaz. Eski CONTENT/DESIGN/TRIAL API kipleri uyumluluk amacıyla korunur ancak sade ekranda sunulmaz.
+`v2/apps/api/src/legacy-reports.ts` ve `legacy-context.ts` mevcut rapor analizini v2 renderer'a bağlayan ek uyarlamalardır. Kaynak stüdyonun sözleşmeleri, servisleri ve renderer'ı değiştirilmez. Özet, operasyonel etki, etkilenen taraflar, doğrulanmış yürürlük tarihleri, kaynaklar ve belirsizlikler aktarılır. Önizleme örnek veri kullanır; gerçek rapor üretimi yalnız işin kanıtlarını kullanır.
 
-## Sözleşmeler
+Sınır: eski analiz sözleşmesindeki serbest metin karşılaştırmaları karşılaştırma notu olarak korunur; bunlardan v2'nin yapılandırılmış GTİP/oran satırları veya sayısal değişim yüzdeleri tahmin edilmez. V2 analiz hattının tamamı bu iş kapsamında mevcut tarama motorunun yerine geçirilmemiştir.
 
-- `POST /api/v1/templates/preview`: definition ve title → örnek içerikle güvenli HTML; isteğe bağlı componentIds → bileşen kimliğine göre izole HTML haritası; model çağrısı yapmaz.
-- `POST /api/v1/templates/ai`: requestKey (UUID), definition, mode (`CONTENT`, `DESIGN`, `COMPONENT`, `TRIAL`), instruction; denemede sourceText veya documentVersionIds. Kalıcı TemplateAiRequest kaydı, aktör kapsamına bağlı tekrar koruması ve sağlayıcı kullanım bilgisi tutulur.
-- Şablon güncellemesi `expectedRevision` gerektirir. Atomik sürüm karşılaştırması başarılı olursa revision artırılır; çakışmada 409 döner.
-- Yeni şablonlar için definition otoritatiftir. Eski html/sections alanları uyumluluk için tutulur; yeni renderer bu eski örnek metinlerden içerik üretmez.
-- Otomasyon ve modüler rapor işlerinin başlangıcında definition ve revision dondurulur. Üretimde yalnız dondurulan tanım kullanılır.
-- Raporun content alanı, şablon sürümü, kaynak referansları ve seçilen bileşenlerle birlikte saklanır. Yeni şablon değişiklikleri eski raporu değiştirmez.
+Mevcut eski HTML/definition şablonlarının rapor yolu korunur. Uygulanmış `20261019140000_template_studio` göçünün ek tabloları geri alınmaz; güncel stüdyo için otoritatif depolama v2 veritabanıdır. `20261019160000_link_v2_studio` snapshot bağlantısını ekler. Akademi kaldırma göçü ayrı tutulur.
 
-## Üretim ve eksik bilgi
+## Doğrulama
 
-Şablon üretimi kaynaklı analiz sonucunu ve kanıtlarını kullanır. Her etkin bölüm tekil olmalıdır; kaynak kimlikleri mevcut kanıtlara çözülmelidir. READY içerik için seçilen bileşen alanları doldurulmalıdır. Eksik bilgi NOTE, OMIT veya BLOCK kuralına göre ele alınır; zorunlu bölüm OMIT olamaz. BLOCK gerçek üretimi durdurur; denemede inceleme uyarısı olarak gösterilir. NOT_APPLICABLE, MISSING'den ayrıdır.
+Frontend şablon/bileşen/sohbet kartı testleri, v2 birim testleri, backend sohbet araçları ve proxy testleri çalıştırılır. Yerel tarayıcıda oluşturma, sürüm artırarak kaydetme, bileşen kapatma ve önizleme kontrol edilmiştir. Kurgu kaynakla canlı model üzerinden rapor tarifi derleme ve üç bölümlü rapor üretimi denenmiştir. Bu kontrol bütün GTİP/karşılaştırma senaryolarını kapsamaz.
 
-Rapor genelinde kapsam, üretilen raporun tüm kanıt setini kapsar. Eski tarama akışında her mevzuat ayrı rapordur; bu akışta run genelinde birleşik yönetici özeti oluşturulmaz. Modüler akışta seçili birden fazla belge aynı raporun bağlamını oluşturabilir.
-
-Yayımlanan şablon raporlarının görünür metinleri `customization.templateReport.content.sections.#.fields.#` yollarıyla düzeltilebilir. Analiz yeniden üretildiğinde dondurulmuş içerik gereksinimleri yeni analize yeniden uygulanır. Şablon sayfasındaki AI tasarım talebi içerik talimatlarını değiştiremez.
-
-## Dağıtım ve doğrulama
-
-Migration: `20261013143000_template_definition`. Prisma istemcisi yeniden üretilmeli; API ve worker yeni kodla başlatılmalıdır. Gemini sağlayıcısı mevcut `revisionModel` ve worker AI istemcisi üzerinden kullanılır. Sağlayıcı yapılandırması/erişimi yoksa elle düzenleme ve örnek önizleme çalışmaya devam eder.
-
-Kapsamlı testler izole `_test` veritabanıyla çalıştırılmalıdır. Gerçek AI bağlantısını, yalnız kurgu metin göndererek kontrol etmek için backend dizininde `npm exec tsx scripts/verify-template-studio.ts` kullanılabilir; bu işlem sağlayıcı kullanımına tabidir ve kaydetme/yayımlama yapmaz.
+Göç öncesi yerel yedek: `.local/backups/template-studio-20261019/before-studio.dump`. Yerel doğrulama çıktıları `.local/verification/studio/` altındadır; sürüm kontrolüne girmez.

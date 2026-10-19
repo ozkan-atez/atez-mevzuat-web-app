@@ -1,3 +1,5 @@
+import type { ComponentStudio } from './modules/chat/application/component-studio'
+import { studioProxyRoutes } from './modules/workspace/studio-proxy.routes'
 import { extractDocumentVersion } from './modules/documents/application/extract-document'
 import { getActorContext as chatActor, hasPermission as chatPermission, privateActorScope as chatScope } from './platform/actor-context'
 import { ReportAnalysisService } from './modules/operations/report-analysis-service'
@@ -48,6 +50,8 @@ import { tariffCredentialsFromEnv } from './modules/managed-sources/tariff-auth'
 import type { TariffLookup } from './modules/tariff/tariff-lookup'
 
 interface BuildAppOptions {
+  componentStudio?: ComponentStudio | undefined
+  studioUrl?: string | undefined
   /** Explicit test-only fixture for feature contract tests; never accepted by the server runtime. */
   authRuntime?: AuthRuntime | false
   documentStore?: DocumentStore
@@ -132,6 +136,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const scanRepository = options.scanRepository ?? new PrismaScanRepository(prisma)
   const chatModel = options.chatModel ?? new UnavailableChatModelClient('Gemini API anahtarı yapılandırılmamış.')
   app.register(chatRoutes, {
+    componentStudio: options.componentStudio,
     prefix: '/api/v1/chat',
     ...(options.documentStore && options.revisionModel ? {prepareDocument:async (versionId:string)=>{
       const actor=chatActor()
@@ -195,6 +200,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.register(sourceProfileRoutes, { prefix: '/api/v1/source-profiles', prisma })
   app.register(workspaceRoutes, { prisma, modularOperationsEnabled })
+  if(options.studioUrl) app.register(studioProxyRoutes, { baseUrl:options.studioUrl, prisma })
   app.register(templateAiRoutes, { prisma, ...(options.revisionModel ? {aiModel:options.revisionModel} : {}), modelName:options.chatModelName ?? 'gemini-3.7-flash' })
   app.register(connectorRoutes, { prefix: '/api/v1/connectors', prisma })
   app.register(managedSourceRoutes, { prefix: '/api/v1/managed-sources', prisma })

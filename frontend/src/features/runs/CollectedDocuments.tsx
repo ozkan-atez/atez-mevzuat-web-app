@@ -8,7 +8,20 @@ function displayTitle(title: string) {
 }
 const pageSize = 8
 
-export function CollectedDocuments({ editions }: { editions: ScanRunDetail['editions'] }) {
+function editionTitle(edition: ScanRunDetail['editions'][number], sourceRuns: ScanRunDetail['sourceRuns']) {
+  if (edition.type !== 'EXTERNAL') {
+    return `Resmî Gazete · ${edition.type === 'MAIN' ? 'Ana Sayı' : `${edition.supplementNo ?? ''}. Mükerrer Sayı`}`
+  }
+  const source = sourceRuns?.find(run => run.id === edition.id)?.source
+  if (source) return source.name.trim() || source.key
+  try {
+    return new URL(edition.documents[0]?.sourceUrl ?? '').hostname.replace(/^www\./, '') || 'Kaynak belirtilmemiş'
+  } catch {
+    return 'Kaynak belirtilmemiş'
+  }
+}
+
+export function CollectedDocuments({ editions, sourceRuns }: Pick<ScanRunDetail, 'editions' | 'sourceRuns'>) {
   const [page, setPage] = useState(1)
   const documents = editions.flatMap(edition => edition.documents.map(document => ({ document, edition })))
   const current = Math.min(page, Math.max(1, Math.ceil(documents.length / pageSize)))
@@ -22,7 +35,7 @@ export function CollectedDocuments({ editions }: { editions: ScanRunDetail['edit
           const decision = document.filter?.finalDecision
           return <li key={document.id} className="atez-document-row">
             {(index === 0 || visible[index - 1]?.edition.id !== edition.id) && <div className="atez-document-edition">
-              <h3>{edition.type === 'EXTERNAL' ? 'Dış kaynak belgeleri' : edition.type === 'MAIN' ? 'Ana Sayı' : `${edition.supplementNo ?? ''}. Mükerrer Sayı`}</h3>
+              <h3>{editionTitle(edition, sourceRuns)}</h3>
               <span>{edition.documents.length} belge</span>
             </div>}
             <div className="atez-document-heading">

@@ -74,9 +74,15 @@ export async function executeScanRun(
 
       const editions = parseEditions(indexBytes.toString('utf8'), indexSourceUrl, run.targetDate)
       if (editions.length === 0) throw new Error('No official publications were discovered for the selected date')
-      await repository.saveEditions(runId, run.targetDate, editions)
+      const discovery = await repository.saveEditions(runId, run.targetDate, editions)
       await repository.advanceStage(runId, currentStage, downloadedIndexBytes)
       await repository.completeStage(runId, currentStage)
+      if (discovery.discovered > 0 && discovery.skipped === discovery.discovered) {
+        await repository.skipPreviouslyProcessedStages(runId)
+        currentStage = 'WRITING_MANIFEST'
+        await finalizeScanRun(runId, { repository, objectStore })
+        return
+      }
     }
 
     if (command !== 'RETRY_PREVIOUS_SOURCES') {

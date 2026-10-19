@@ -1,0 +1,17 @@
+
+> backend@1.0.0 test
+> vitest run test/unit/chat test/unit/send-chat-message.test.ts test/unit/gemini-chat-model-client.test.ts test/unit/report-query.test.ts test/unit/scan-intent.test.ts test/unit/execute-scan-command.test.ts test/unit/report-workspace.test.ts
+
+
+ RUN  v5.0.0 /Users/ozkan/Documents/antigravity/atez-mevzuat-web-app/backend
+
+
+ Test Files  15 passed (15)
+      Tests  134 passed (134)
+   Start at  12:29:17
+   Duration  5.04s (import 81%, transform 13%, tests 5%, setup 1%, worker 1%)
+
+     Import  122 modules were evaluated 196 times · 3.23s total, 81% of tracked time
+             ~1.22s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+

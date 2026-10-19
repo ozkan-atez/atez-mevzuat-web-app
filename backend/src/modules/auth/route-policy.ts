@@ -14,7 +14,7 @@ const read:Record<string,string>={
  '/api/v1/source-scan-runs':'workspace.read','/api/v1/source-scan-runs/sources':'workspace.read','/api/v1/source-scan-runs/:id':'workspace.read','/api/v1/source-scan-runs/:id/report':'report.read','/api/v1/source-scan-runs/:id/documents/:documentId/files/:index':'document.read',
  '/api/v1/sources':'workspace.read','/api/v1/source-sites':'config.manage','/api/v1/source-discovery':'config.manage','/api/v1/source-profiles/:id':'config.manage','/api/v1/managed-sources':'workspace.read',
  '/api/v1/templates':'workspace.read','/api/v1/automations':'workspace.read','/api/v1/automations/:id':'workspace.read','/api/v1/automations/:id/runs':'workspace.read',
- '/api/v1/users':'admin.manage','/api/v1/background-jobs':'admin.manage','/api/v1/usage':'workspace.read','/api/v1/academy/attempts':'workspace.read','/api/v1/customer-groups':'workspace.read',
+ '/api/v1/users':'admin.manage','/api/v1/background-jobs':'admin.manage','/api/v1/usage':'workspace.read','/api/v1/customer-groups':'workspace.read',
 }
 const mutations:Record<string,string>={
  'POST /api/v1/connectors':'config.manage','POST /api/v1/connectors/:id/test':'config.manage',
@@ -30,7 +30,7 @@ const mutations:Record<string,string>={
  'POST /api/v1/scan-runs':'scan.run','POST /api/v1/scan-runs/:id/ai-filter/retry':'operation.manage','POST /api/v1/scan-runs/:id/previous-sources/retry':'operation.manage',
  'POST /api/v1/source-scan-runs':'scan.run','POST /api/v1/source-scan-runs/:id/analyze':'analysis.run','POST /api/v1/source-scan-runs/:id/retry':'operation.manage',
  'POST /api/v1/topics/:id/messages':'report.edit','POST /api/v1/topics/:id/retry':'operation.manage','POST /api/v1/topics/:id/draft/workspace':'report.edit','POST /api/v1/topics/:id/draft/sources':'report.edit','POST /api/v1/topics/:id/draft/edits':'report.edit','POST /api/v1/topics/:id/draft/edits/:editId/revert':'report.edit','POST /api/v1/topics/:id/draft/publish':'report.publish','DELETE /api/v1/topics/:id/draft':'report.edit',
- 'POST /api/v1/topics/:id/dispatches':'delivery.send','POST /api/v1/academy/attempts':'academy.write',
+ 'POST /api/v1/topics/:id/dispatches':'delivery.send',
 }
 for(const method of ['POST','PATCH','DELETE'])for(const path of ['/api/v1/users','/api/v1/users/:id'])mutations[`${method} ${path}`]='admin.manage'
 for(const method of ['POST','PUT','PATCH','DELETE'])for(const path of [
@@ -42,6 +42,7 @@ for(const method of ['POST','PUT','PATCH','DELETE'])for(const path of [
 ])mutations[`${method} ${path}`]='config.manage'
 export const publicAuthRoutes=new Set(['GET /api/health','HEAD /api/health','GET /api/auth/login','GET /api/auth/callback','POST /api/auth/backchannel-logout'])
 export function requiredPermission(method:string,route:string):string|null|undefined {
+ if(route==='/api/v2/*')return 'config.manage'
  let path=route!=='/'?route.replace(/\/$/,''):route
  const normalized=(value:string)=>value.replace(/:[A-Za-z0-9_]+/g,':param')
  if(!read[path]&&!mutations[`${method} ${path}`]){const candidates=method==='GET'||method==='HEAD'?Object.keys(read):Object.keys(mutations).filter(key=>key.startsWith(`${method} `)).map(key=>key.slice(method.length+1));path=candidates.find(value=>normalized(value)===normalized(path)) ?? path}

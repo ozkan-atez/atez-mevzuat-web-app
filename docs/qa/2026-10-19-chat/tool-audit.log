@@ -1,0 +1,13 @@
+
+> backend@1.0.0 test
+> vitest run test/unit/chat-qa-audit.test.ts
+
+
+ RUN  v5.0.0 /Users/ozkan/Documents/antigravity/atez-mevzuat-web-app/backend
+
+
+ Test Files  1 passed (1)
+      Tests  35 passed (35)
+   Start at  12:29:00
+   Duration  466ms (import 75%, transform 19%, tests 5%, setup 1%)
+

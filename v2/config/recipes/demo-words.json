@@ -1,0 +1,11 @@
+{
+  "key": "demo-words",
+  "version": 1,
+  "title": "Örnek: kelimeleri büyült ve birleştir",
+  "description": "Aşama 1 iskelet testi. split → (fan-out) upper → (bariyer) join. 'skip' kelimesi CEL koşuluyla elenir.",
+  "nodes": [
+    { "id": "split", "step": "demo.split" },
+    { "id": "upper", "step": "demo.upper", "after": ["split"], "fanOut": "words", "when": "item != 'skip'" },
+    { "id": "join", "step": "demo.join", "after": ["upper"], "barrier": true }
+  ]
+}

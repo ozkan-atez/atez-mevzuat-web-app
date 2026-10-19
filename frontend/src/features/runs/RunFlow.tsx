@@ -50,6 +50,7 @@ export function RunFlow({run}:{run:ScanRunDetail}) {
         <div className="run-flow-track"><span className="run-flow-indicator" role="img" aria-label={labels[state]}><Icon size={16} aria-hidden="true"/></span></div>
         <div className="run-flow-stage-body">
         {state!=='COMPLETED' && <span className="run-flow-status">{labels[state]}</span>}
+        {state==='SKIPPED' && <p>Yeni belge olmadığı için tekrar işlem gerekmedi.</p>}
         <ul className="run-flow-logs">{keys.map(stage=>{
           const record=records.find(r=>r.stage===stage)
           if(!record) return null
@@ -58,7 +59,7 @@ export function RunFlow({run}:{run:ScanRunDetail}) {
             {'error' in record && record.error && <details className="run-flow-error"><summary>Hata ayrıntısı</summary><p>{record.error}</p></details>}
           </li>
         })}</ul>
-        {!keys.some(k=>records.some(r=>r.stage===k)) && <p className="run-flow-empty">{finished?'Bu aşamaya ait işlem kaydı bulunmuyor.':'Bu aşama için henüz işlem kaydı yok.'}</p>}</div>
+        {state!=='SKIPPED' && !keys.some(k=>records.some(r=>r.stage===k)) && <p className="run-flow-empty">{finished?'Bu aşamaya ait işlem kaydı bulunmuyor.':'Bu aşama için henüz işlem kaydı yok.'}</p>}</div>
       </section>
     })}</div>
     {!!sourceRun?.notes?.length && <details className="run-flow-notes"><summary>Kaynak tarama notları</summary><ul>{sourceRun.notes.map((note,i)=><li key={i}>{note}</li>)}</ul></details>}

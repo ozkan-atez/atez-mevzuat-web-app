@@ -1,7 +1,8 @@
+import { cleanup } from '@testing-library/react'
 import { render, screen } from '../../test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RunDetail } from './RunDetail'
 
 class SilentEventSource {
@@ -14,6 +15,7 @@ function renderDetail() {
 }
 
 describe('RunDetail', () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals() })
   it('renders backend operation stages and collected documents', async () => {
     const run = {
       id: 'run-1', status: 'RUNNING', currentStage: 'DOWNLOADING_ASSETS', targetDate: '2026-07-11',
@@ -62,6 +64,23 @@ describe('RunDetail', () => {
     expect(await screen.findByText('Değişiklik bulunmadı')).toBeVisible()
     expect(screen.getByRole('link', { name: /Değişiklik yok raporunu aç/ })).toBeInTheDocument()
     expect(screen.queryByText('Topic analizi')).not.toBeInTheDocument()
+  })
+
+  it('explains a completed automation skip without presenting a failure or a new report', async () => {
+    const skippedStages = ['AI_FILTERING','DOWNLOADING_DOCUMENTS','DISCOVERING_ASSETS','DOWNLOADING_ASSETS','VALIDATING','DISCOVERING_PREVIOUS_SOURCES','ANALYZING_TOPICS','GENERATING_REPORTS']
+    const run = {
+      id:'run-1',status:'COMPLETED',sourceKeys:['resmi-gazete'],currentStage:'WRITING_MANIFEST',targetDate:'2026-10-19',startedAt:null,completedAt:'2026-10-19T20:01:00Z',errorSummary:null,
+      gazetteDiscovery:{discovered:13,skipped:13},filter:null,previousSources:null,reports:[],editions:[],
+      counts:{editions:1,documents:0,assets:0,completedItems:1,totalItems:1,failedItems:0},
+      stages:[...skippedStages.map(stage=>({stage,status:'SKIPPED',completedItems:0,totalItems:0,failedItems:0})),...['DISCOVERING','WRITING_MANIFEST'].map(stage=>({stage,status:'COMPLETED',completedItems:1,totalItems:1,failedItems:0}))],
+    }
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify(run),{status:200})))
+    renderDetail()
+    expect(await screen.findByText(/13 belge bulundu; 13 belge/)).toBeVisible()
+    expect(screen.getByText('Yeni belge bulunmadığı ve önceki belgeler zaten işlendiği için yeni rapor oluşturulmadı.')).toBeVisible()
+    expect(screen.getAllByText('Gerekmedi').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Hata oluştu')).not.toBeInTheDocument()
+    expect(screen.queryByText('Kayıt yok')).not.toBeInTheDocument()
   })
 
   it('shows a real not-found state instead of dummy data', async () => {

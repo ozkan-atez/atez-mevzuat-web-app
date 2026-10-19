@@ -1,0 +1,8 @@
+ALTER TABLE "ReportTemplate" ADD COLUMN "isDefault" BOOLEAN NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX "ReportTemplate_single_default" ON "ReportTemplate" ("isDefault") WHERE "isDefault" = true;
+CREATE TABLE "ReportTemplateVersion" ("id" TEXT PRIMARY KEY, "templateId" TEXT NOT NULL REFERENCES "ReportTemplate"("id") ON DELETE RESTRICT ON UPDATE CASCADE, "revision" INTEGER NOT NULL, "definition" JSONB NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "ReportTemplateVersion_templateId_revision_key" ON "ReportTemplateVersion"("templateId", "revision");
+INSERT INTO "ReportTemplateVersion" ("id","templateId","revision","definition") SELECT "id" || '-initial',"id","revision","definition" FROM "ReportTemplate" WHERE "definition" IS NOT NULL AND "definition" != 'null'::jsonb;
+CREATE TABLE "ReportComponent" ("id" TEXT PRIMARY KEY,"key" TEXT NOT NULL UNIQUE,"name" TEXT NOT NULL,"description" TEXT NOT NULL,"category" TEXT NOT NULL,"origin" TEXT NOT NULL DEFAULT 'USER',"status" TEXT NOT NULL DEFAULT 'ACTIVE',"currentVersion" INTEGER NOT NULL DEFAULT 1,"definition" JSONB NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE TABLE "ReportComponentVersion" ("id" TEXT PRIMARY KEY,"componentId" TEXT NOT NULL REFERENCES "ReportComponent"("id") ON DELETE RESTRICT ON UPDATE CASCADE,"version" INTEGER NOT NULL,"definition" JSONB NOT NULL,"note" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "ReportComponentVersion_componentId_version_key" ON "ReportComponentVersion"("componentId","version");

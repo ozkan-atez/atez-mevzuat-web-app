@@ -1,6 +1,6 @@
 import { useAuth } from '../../features/auth/AuthProvider'
 import { Menu } from 'antd'
-import { AppstoreOutlined, FileTextOutlined, MessageOutlined, ThunderboltOutlined, ReadOutlined, SendOutlined, GlobalOutlined, BarChartOutlined, SettingOutlined, BookOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, FileTextOutlined, MessageOutlined, ThunderboltOutlined, SendOutlined, GlobalOutlined, BarChartOutlined, SettingOutlined, BookOutlined } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 const items = [
@@ -8,7 +8,6 @@ const items = [
   { key: '/reports', icon: <FileTextOutlined />, label: 'Raporlar', title: 'Raporlar', 'aria-label': 'Raporlar' },
   { key: '/chat', icon: <MessageOutlined />, label: 'Sohbetler', title: 'Sohbetler', 'aria-label': 'Sohbetler' },
   { key: '/automations', icon: <ThunderboltOutlined />, label: 'Otomasyonlar', title: 'Otomasyonlar', 'aria-label': 'Otomasyonlar' },
-  { key: '/academy', icon: <ReadOutlined />, label: 'Gelişim Akademisi', title: 'Gelişim Akademisi', 'aria-label': 'Gelişim Akademisi' },
   { type: 'group' as const, key: 'operations', label: 'Operasyon', children: [
     { key: '/groups', icon: <SendOutlined />, label: 'Dağıtım', title: 'Dağıtım', 'aria-label': 'Dağıtım' },
     { key: '/documents', icon: <FileTextOutlined />, label: 'Belgeler', title: 'Belgeler', 'aria-label': 'Belgeler' },
@@ -28,7 +27,7 @@ export function Sidebar() {
   const initials=name.split(/\s+/).slice(0,2).map(word=>word[0]).join('').toLocaleUpperCase('tr-TR')
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const selected = pathname.startsWith('/source-runs') ? '/sources' : pathname.startsWith('/runs') ? '/' : pathname.startsWith('/reports') ? '/reports' : pathname.startsWith('/chat') ? '/chat' : pathname
+  const selected = pathname.startsWith('/templates') ? '/templates' : pathname.startsWith('/source-runs') ? '/sources' : pathname.startsWith('/runs') ? '/' : pathname.startsWith('/reports') ? '/reports' : pathname.startsWith('/chat') ? '/chat' : pathname
   return <aside className="atez-sidebar" aria-label="Ana menü">
     <div className="atez-brand" onClick={() => navigate('/')} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') navigate('/') }}>
       <span className="atez-brand-name">Mevzuat <em>Radar</em></span>

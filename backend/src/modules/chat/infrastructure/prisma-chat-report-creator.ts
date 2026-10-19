@@ -28,7 +28,7 @@ export class PrismaChatReportCreator implements ChatReportCreator {
     }
     const previous=await lookup()
     if(previous)return result(previous)
-    const template=input.templateId?await this.prisma.reportTemplate.findFirst({where:{id:input.templateId,isActive:true}}):await this.prisma.reportTemplate.findFirst({where:{isActive:true},orderBy:{createdAt:'asc'}})
+    const template=input.templateId?await this.prisma.reportTemplate.findFirst({where:{id:input.templateId,isActive:true}}):await this.prisma.reportTemplate.findFirst({where:{isActive:true},orderBy:[{isDefault:'desc'},{createdAt:'asc'}]})
     if(!template)throw new ChatReportError('Etkin rapor şablonu bulunamadı. Şablon seçimini kontrol edin.')
     const groups=await withUsageContext({conversationId:input.sessionId,conversationType:'GENERAL',messageId:input.messageId,mode:'ANALYSIS',usageLabel:'Rapor kaynak grupları'},()=>planChatReports(input.instruction,input.evidence,this.model,this.modelName))
     input.signal?.throwIfAborted()
@@ -39,7 +39,7 @@ export class PrismaChatReportCreator implements ChatReportCreator {
         for(const [index,group] of groups.entries()){
           const analysisId=randomUUID(),reportId=randomUUID(),publishId=randomUUID()
           const evidence=group.sources.map(source=>({...input.evidence.find(e=>e.id===source.id)!,role:source.role}))
-          const snapshot={template:{id:template.id,revision:template.revision,sections:template.sections,definition:template.definition,html:template.html},sourceEvidence:evidence,coverageWarnings:input.warnings,group:{index:index+1,title:group.title},conversationId:input.sessionId,messageId:input.messageId}
+          const snapshot={template:{id:template.id,revision:template.revision,sections:template.sections,definition:template.definition,html:template.html,studioSnapshot:template.studioSnapshot},sourceEvidence:evidence,coverageWarnings:input.warnings,group:{index:index+1,title:group.title},conversationId:input.sessionId,messageId:input.messageId}
           const common={mode:'FILL_MISSING',documentVersionIds:[],instruction:group.instruction,templateId:template.id,executionSnapshot:snapshot}
           for(const stage of [
             {id:analysisId,operation:'ANALYZE',dependencies:[],parameters:{...common,operation:'ANALYZE'}},

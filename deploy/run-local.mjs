@@ -17,6 +17,7 @@ if (!['api', 'worker', 'web'].includes(mode)) throw new Error('api, worker veya 
 const env = {
   ...process.env, ...saved,
   NODE_ENV: 'production',
+  COMPONENT_STUDIO_URL: saved.COMPONENT_STUDIO_URL ?? 'http://127.0.0.1:3101',
   SOURCE_CREDENTIAL_KEY_FILE: saved.SOURCE_CREDENTIAL_KEY_FILE ?? resolve(homedir(), '.config/atez/source-credentials.key'),
   DATABASE_URL: saved.LOCAL_DATABASE_URL ?? 'postgresql://atez:atezpassword@127.0.0.1:5432/atez_db?schema=public',
   RABBITMQ_URL: saved.LOCAL_RABBITMQ_URL ?? saved.RABBITMQ_URL ?? `amqp://${encodeURIComponent(saved.RABBITMQ_USER ?? 'atez')}:${encodeURIComponent(saved.RABBITMQ_PASSWORD ?? 'atezpassword')}@127.0.0.1:5672`,

@@ -1,3 +1,4 @@
+import { HttpComponentStudio } from './modules/chat/application/component-studio'
 import { backgroundUsageModel } from './modules/usage/background-usage'
 import { PrismaUsageRecorder } from './modules/usage/prisma-usage-recorder'
 import { GeminiAiModelClient } from './modules/ai/infrastructure/gemini-ai-model-client'
@@ -22,6 +23,8 @@ async function start() {
   const objectStore = new S3ObjectStore(env.s3)
   const tariffCredentials = tariffCredentialsFromEnv()
   const app = await buildApp({
+    studioUrl:process.env.COMPONENT_STUDIO_URL,
+    ...(process.env.COMPONENT_STUDIO_URL?{componentStudio:new HttpComponentStudio({baseUrl:process.env.COMPONENT_STUDIO_URL})}:{}),
     objectStore,
     documentStore: objectStore,
     timezone: env.timezone,

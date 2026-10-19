@@ -14,7 +14,7 @@ export interface WorkspaceSource {
 }
 
 export interface TemplateSection { id: string; heading: string; html: string; enabled: boolean }
-export interface WorkspaceTemplate { definition?: TemplateDefinition | null; revision?: number; id: string; name: string; description: string | null; html: string; sections: TemplateSection[]; isActive: boolean }
+export interface WorkspaceTemplate { isDefault?:boolean; definition?: TemplateDefinition | null; revision?: number; id: string; name: string; description: string | null; html: string; sections: TemplateSection[]; isActive: boolean }
 export interface WorkspaceAutomation {
   datePolicy?: string
   id: string; name: string; hour: number; minute: number; times: string[]; weekdays: number[]; timezone: string; isActive: boolean
@@ -39,7 +39,6 @@ export interface UsageDetail {
 export interface UsageDetails { rows: UsageDetail[]; total: number; page: number; pageSize: number }
 export interface UsageFilters { recordedOnly?: string; from?: string; to?: string; userId?: string; type?: string; query?: string; page?: number; conversationId?: string }
 const usageParams = (filters: UsageFilters) => new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString()
-export interface AcademyAttempt { id?: string; type: 'daily' | 'weekly'; date: string; correct: number; total: number; points: number }
 
 export class WorkspaceRequestError extends Error {
   readonly status: number
@@ -74,7 +73,6 @@ export const listAutomations = () => workspaceRequest<{ automations: WorkspaceAu
 export const listUsers = () => workspaceRequest<{ users: WorkspaceUser[] }>('users')
 export const getUsage = (filters: UsageFilters = {}) => workspaceRequest<UsageSummary>(`usage?${usageParams(filters)}`)
 export const getUsageDetails = (filters: UsageFilters) => workspaceRequest<UsageDetails>(`usage/details?${usageParams(filters)}`)
-export const listAcademyAttempts = () => workspaceRequest<{ attempts: AcademyAttempt[] }>('academy/attempts')
 
 export interface BackgroundStatus {
   broker?: string; connected: boolean; total?:number; page?:number; types?:string[]; counts?:Record<string,number>; checkedAt?:string

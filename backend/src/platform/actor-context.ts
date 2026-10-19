@@ -19,8 +19,8 @@ export function canonicalDocumentKey(url:string,scope:string):string {return `${
 
 const rolePermissions:Record<ApplicationRole,string[]>={
  VIEWER:['workspace.read','report.read','document.read','chat.read'],
- EDITOR:['workspace.read','report.read','document.read','chat.read','chat.write','document.upload','scan.run','analysis.run','report.edit','report.publish','operation.manage','academy.write'],
- ADMIN:['workspace.read','report.read','document.read','chat.read','chat.write','document.upload','scan.run','analysis.run','report.edit','report.publish','operation.manage','academy.write','config.manage','admin.manage','delivery.send'],
+ EDITOR:['workspace.read','report.read','document.read','chat.read','chat.write','document.upload','scan.run','analysis.run','report.edit','report.publish','operation.manage'],
+ ADMIN:['workspace.read','report.read','document.read','chat.read','chat.write','document.upload','scan.run','analysis.run','report.edit','report.publish','operation.manage','config.manage','admin.manage','delivery.send'],
 }
 export function permissionsForRole(role:ApplicationRole,custom:string[]=[]):string[]{
  const ceiling=new Set(role==='VIEWER'?rolePermissions.VIEWER:role==='EDITOR'?[...rolePermissions.EDITOR,'delivery.send']:rolePermissions.ADMIN)

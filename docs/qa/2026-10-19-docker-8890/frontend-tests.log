@@ -1,0 +1,18 @@
+
+> frontend@0.0.0 test
+> vitest run src/features/chat
+
+
+ RUN  v5.0.0 /Users/ozkan/Documents/GitHub/atez-mevzuat-web-app/.claude/worktrees/dev-2/frontend
+
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+
+ Test Files  9 passed (9)
+      Tests  51 passed (51)
+   Start at  12:29:51
+   Duration  11.54s (import 38%, environment 30%, tests 24%, setup 4%, transform 3%)
+

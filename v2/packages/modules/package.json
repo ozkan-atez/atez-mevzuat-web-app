@@ -1,0 +1,25 @@
+{
+  "name": "@atez/modules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@atez/contracts": "workspace:*",
+    "@atez/platform": "workspace:*",
+    "cheerio": "^1.0.0",
+    "drizzle-orm": "^0.38.0",
+    "iconv-lite": "^0.6.3",
+    "omggif": "1.0.10",
+    "pdf-lib": "^1.17.1",
+    "pngjs": "7.0.0",
+    "zod": "^4.1.0",
+    "@marcbachmann/cel-js": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/omggif": "1.0.5",
+    "@types/pngjs": "6.0.5"
+  }
+}

@@ -90,6 +90,7 @@ export function buildManifest(snapshot: CompletedRunSnapshot): Buffer {
     targetDate: snapshot.run.targetDate,
     createdAt: snapshot.run.completedAt ?? snapshot.run.startedAt,
     index: snapshot.index,
+    gazetteDiscovery: snapshot.run.gazetteDiscovery,
     editions,
     filterAudit: snapshot.filterAudit,
     previousSourceAudit,

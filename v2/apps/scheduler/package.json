@@ -1,0 +1,16 @@
+{
+  "name": "@atez/scheduler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@atez/platform": "workspace:*",
+    "@atez/engine": "workspace:*",
+    "croner": "^9.0.0",
+    "zod": "^4.1.0",
+    "@atez/contracts": "workspace:*"
+  }
+}

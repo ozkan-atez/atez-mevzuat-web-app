@@ -54,6 +54,7 @@ export interface FetchAttemptInput {
 }
 
 export interface ScanRunDetailDto {
+  gazetteDiscovery?: { discovered: number; skipped: number }
   sourceKeys?: string[]
   sourceRuns?: Array<{ notes?:string[]; stages?: Array<{stage:string;status:string;totalItems:number;completedItems:number;error:string|null}>; id: string; status: string; source: { name: string; key: string }; documentCount: number; errorSummary: string | null }>
   id: string
@@ -112,7 +113,7 @@ export interface ScanRunDetailDto {
   }
   stages: Array<{
     stage: ScanStage
-    status: 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'FAILED'
+    status: 'PENDING' | 'RUNNING' | 'AWAITING_RETRY' | 'COMPLETED' | 'FAILED' | 'SKIPPED'
     completedItems: number
     totalItems: number
     failedItems: number
@@ -469,7 +470,7 @@ export interface ScanRepository {
   getRun(runId: string): Promise<ScanRunDetailDto | null>
   getExecutionRun(runId: string): Promise<{ id: string; status: ScanRunStatus; targetDate: string; downloadedBytes: bigint; indexObjectKey: string | null; indexSourceUrl: string | null } | null>
   saveIndex(runId: string, sourceUrl: string, object: StoredBlob): Promise<void>
-  saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<void>
+  saveEditions(runId: string, targetDate: string, editions: DiscoveredEdition[]): Promise<{ discovered: number; skipped: number }>
   listDocuments(runId: string): Promise<Array<{ id: string; sourceUrl: string; title: string }>>
   saveAssets(documentId: string, assets: DiscoveredAsset[]): Promise<void>
   listAssets(runId: string): Promise<Array<{ id: string; documentId: string; sourceUrl: string; storedObject: null | { objectKey: string; mediaType: string } }>>

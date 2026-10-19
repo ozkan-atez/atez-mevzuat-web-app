@@ -13,20 +13,11 @@ describe('persisted workspace routes', () => {
     expect(update).toHaveBeenCalledExactlyOnceWith({ where: { id: 'u1' }, data: { name: 'Changed' } })
     await app.close()
   })
-  it('rejects incomplete academy attempts before saving', async () => {
-    const transaction = vi.fn()
-    const app = Fastify(); await app.register(workspaceRoutes, { prisma: { $transaction: transaction } as unknown as PrismaClient })
-    const response = await app.inject({ method: 'POST', url: '/api/v1/academy/attempts', payload: { lessonId: 'daily', answers: [1] } })
-    expect(response.statusCode).toBe(400); expect(transaction).not.toHaveBeenCalled()
-    await app.close()
-  })
-  it('scores answers on the server and returns the previous best attempt when a repeat is worse', async () => {
-    const tx = { $executeRaw: vi.fn(), academyAttempt: { findFirst: vi.fn().mockResolvedValue({ id: 'best', lessonId: 'daily', period: '2026-10-05', score: 100 }), create: vi.fn(), update: vi.fn() } }
-    const app = Fastify(); await app.register(workspaceRoutes, { prisma: { $transaction: async (callback: (t: unknown) => unknown) => callback(tx) } as unknown as PrismaClient })
-    const response = await app.inject({ method: 'POST', url: '/api/v1/academy/attempts', payload: { lessonId: 'daily', answers: [0, 1, 0], score: 10000 } })
-    expect(response.statusCode).toBe(201)
-    expect(response.json()).toMatchObject({ id: 'best', type: 'daily', correct: 3, total: 3, points: 30 })
-    expect(tx.academyAttempt.create).not.toHaveBeenCalled(); expect(tx.academyAttempt.update).not.toHaveBeenCalled()
+  it.each(['GET', 'POST'] as const)('removes the academy %s endpoint', async method => {
+    const app = Fastify()
+    await app.register(workspaceRoutes, { prisma: {} as PrismaClient })
+    const response = await app.inject({ method, url: '/api/v1/academy/attempts' })
+    expect(response.statusCode).toBe(404)
     await app.close()
   })
   it('serves real queue status on the monitor endpoint', async () => {

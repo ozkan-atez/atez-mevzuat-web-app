@@ -137,31 +137,4 @@ export async function workspaceRoutes(app: FastifyInstance, { prisma, modularOpe
     if (!query.success || !query.data.conversationId || !query.data.type) return reply.code(400).send({message: 'Sohbet ve türünü seçin.'})
     return getUsageDetails(prisma, query.data)
   })
-  const toAttempt = (row: { id: string; lessonId: string; period: string; score: number }) => {
-    const total = row.lessonId === 'weekly' ? 5 : 3
-    const correct = Math.round(row.score * total / 100)
-    return { id: row.id, type: row.lessonId, date: row.period, correct, total, points: correct * 10 }
-  }
-  app.get('/api/v1/academy/attempts', guarded(async () => {
-    const actor = getActorContext()
-    return { attempts: (await prisma.academyAttempt.findMany({ ...(actor ? { where: { workspaceId: actor.workspaceId, ownerUserId: actor.userId } } : {}), orderBy: { createdAt: 'desc' }, take: 100 })).map(toAttempt) }
-  }))
-  app.post('/api/v1/academy/attempts', guarded(async (r, reply) => {
-    const body = z.object({ lessonId: z.enum(['daily', 'weekly']), answers: z.array(z.number().int().min(0).max(2)).max(5) }).parse(r.body)
-    const keys = body.lessonId === 'weekly' ? [1,0,1,0,1] : [1,0,1]
-    if (body.answers.length !== keys.length) return reply.code(400).send({ message: 'Tüm sorular yanıtlanmalıdır.' })
-    const now = DateTime.now().setZone('Europe/Istanbul')
-    const period = (body.lessonId === 'weekly' ? now.startOf('week') : now).toFormat('yyyy-MM-dd')
-    const score = Math.round(body.answers.filter((answer, i) => answer === keys[i]).length / keys.length * 100)
-    const actor = getActorContext()
-    const ownership = actor ? { workspaceId: actor.workspaceId, ownerUserId: actor.userId } : { workspaceId: null, ownerUserId: null }
-    // A lower repeat score must not overwrite the user's best score for this period.
-    const row = await prisma.$transaction(async tx => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`academy:${ownership.workspaceId}:${ownership.ownerUserId}:${body.lessonId}:${period}`}))`
-      const existing = await tx.academyAttempt.findFirst({ where: { ...ownership, lessonId: body.lessonId, period } })
-      if (existing && existing.score >= score) return existing
-      return existing ? tx.academyAttempt.update({ where: { id: existing.id }, data: { answers: body.answers, score } }) : tx.academyAttempt.create({ data: { ...body, ...ownership, period, score } })
-    })
-    return reply.code(201).send(toAttempt(row))
-  }))
 }

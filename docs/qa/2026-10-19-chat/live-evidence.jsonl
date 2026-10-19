@@ -1,0 +1,21 @@
+{"time": "2026-10-19T12:28:21.374000+03:00", "request": "req-xe", "method": "POST", "path": "/api/v1/chat/sessions", "event": "incoming request"}
+{"time": "2026-10-19T12:28:21.785000+03:00", "request": "req-xe", "status": 201, "event": "request completed"}
+{"time": "2026-10-19T12:28:21.802000+03:00", "request": "req-xg", "method": "POST", "path": "/api/v1/chat/sessions/a6bc41f4-2254-44ed-9484-4d5704b046fe/messages", "event": "incoming request"}
+{"time": "2026-10-19T12:28:22.204000+03:00", "request": "req-xg", "event": "chat.turn"}
+{"time": "2026-10-19T12:28:22.971000+03:00", "request": "req-xg", "event": "chat.turn"}
+{"time": "2026-10-19T12:28:22.976000+03:00", "request": "req-xg", "status": 200, "event": "request completed"}
+{"time": "2026-10-19T12:29:08.475000+03:00", "request": "req-yb", "method": "POST", "path": "/api/v1/chat/sessions/a6bc41f4-2254-44ed-9484-4d5704b046fe/messages", "event": "incoming request"}
+{"time": "2026-10-19T12:29:08.489000+03:00", "request": "req-yb", "event": "chat.turn"}
+{"time": "2026-10-19T12:29:12.703000+03:00", "request": "req-yb", "event": "chat.turn.stage"}
+{"time": "2026-10-19T12:29:12.703000+03:00", "request": "req-yb", "event": "chat.turn.stage"}
+{"time": "2026-10-19T12:29:12.703000+03:00", "request": "req-yb", "event": "chat.turn.stage"}
+{"time": "2026-10-19T12:29:16.705000+03:00", "request": "req-yb", "event": "chat.turn"}
+{"time": "2026-10-19T12:29:16.705000+03:00", "request": "req-yb", "status": 200, "event": "request completed"}
+{"time": "2026-10-19T12:29:18.750000+03:00", "request": "req-yf", "method": "GET", "path": "/api/v1/chat/sessions/a6bc41f4-2254-44ed-9484-4d5704b046fe/messages", "event": "incoming request"}
+{"time": "2026-10-19T12:29:18.754000+03:00", "request": "req-yf", "status": 401, "event": "request completed"}
+{"time": "2026-10-19T12:29:27.628000+03:00", "request": "req-yh", "method": "GET", "path": "/api/auth/callback", "event": "incoming request"}
+{"time": "2026-10-19T12:29:27.752000+03:00", "request": "req-yh", "status": 302, "event": "request completed"}
+{"time": "2026-10-19T12:29:27.831000+03:00", "request": "req-yi", "method": "GET", "path": "/api/auth/me", "event": "incoming request"}
+{"time": "2026-10-19T12:29:27.842000+03:00", "request": "req-yi", "status": 200, "event": "request completed"}
+{"time": "2026-10-19T12:29:34.282000+03:00", "request": "req-yo", "method": "GET", "path": "/api/v1/chat/sessions/a6bc41f4-2254-44ed-9484-4d5704b046fe/messages", "event": "incoming request"}
+{"time": "2026-10-19T12:29:34.287000+03:00", "request": "req-yo", "status": 401, "event": "request completed"}

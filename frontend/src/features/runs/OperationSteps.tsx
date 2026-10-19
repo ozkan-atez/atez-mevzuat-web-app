@@ -1,3 +1,4 @@
+import { allGazetteDocumentsSkipped } from './gazette-discovery'
 import { Can } from '../auth/Can'
 import { Alert, Button, Card, Progress, Tag } from 'antd'
 import { Link } from 'react-router-dom'
@@ -18,7 +19,8 @@ const steps: Array<{ stage: ScanStage; title: string; description: string }> = [
   { stage: 'WRITING_MANIFEST', title: 'Tarama kaydı tamamlanıyor', description: 'Çalışmanın denetlenebilir dosya envanteri oluşturuluyor.' },
 ]
 
-function resolveStatus(run: ScanRunDetail, stage: ScanStage): StageExecutionStatus {
+function resolveStatus(run: ScanRunDetail, stage: ScanStage): StageExecutionStatus | 'SKIPPED' {
+  if (allGazetteDocumentsSkipped(run) && !['DISCOVERING', 'WRITING_MANIFEST'].includes(stage)) return 'SKIPPED'
   return run.stages.find((item) => item.stage === stage)?.status
     ?? (run.currentStage === stage ? 'RUNNING' : 'PENDING')
 }
@@ -45,7 +47,7 @@ export function OperationSteps({ run, onRetryAiFilter, onRetryPreviousSources, i
           const label = source?.source.name ?? sourceLabels[key] ?? key
           return <li key={key} className="atez-operation-step">
             <div className="min-w-0 flex-1">
-              <div className="atez-operation-heading"><h3 className="atez-operation-title">{label}</h3><Tag color={status === 'COMPLETED' ? 'success' : status === 'RUNNING' ? 'processing' : status === 'FAILED' ? 'error' : status === 'PARTIAL' ? 'warning' : 'default'}>{status === 'COMPLETED' ? 'Tamamlandı' : status === 'RUNNING' ? 'İşleniyor' : status === 'FAILED' ? 'Hatalı' : status === 'PARTIAL' ? 'Kısmen tamamlandı' : status === 'CANCELLED' ? 'Çalıştırılmadı' : 'Bekliyor'}</Tag></div>
+              <div className="atez-operation-heading"><h3 className="atez-operation-title">{label}</h3><Tag color={status === 'COMPLETED' ? 'success' : status === 'RUNNING' ? 'processing' : status === 'FAILED' ? 'error' : status === 'PARTIAL' ? 'warning' : 'default'}>{status === 'SKIPPED' ? 'Gerekmedi' : status === 'COMPLETED' ? 'Tamamlandı' : status === 'RUNNING' ? 'İşleniyor' : status === 'FAILED' ? 'Hatalı' : status === 'PARTIAL' ? 'Kısmen tamamlandı' : status === 'CANCELLED' ? 'Çalıştırılmadı' : 'Bekliyor'}</Tag></div>
               <p className="atez-operation-description">Otomasyonun tarih ve içerik seçimine göre kayıtlar taranır; belgeler ve ekleri alınır, ilgili içerikler analiz edilerek raporlanır.</p>
               {source && <p>{source.documentCount} belge · <Link to={`/source-runs/${source.id}`}>Belgeleri ve işlem ayrıntılarını incele</Link></p>}
               {Boolean(source?.stages?.length) && <ol style={{paddingLeft:18,marginTop:12}}>{source?.stages?.slice().sort((a,b)=>Object.keys(sourceStageLabels).indexOf(a.stage)-Object.keys(sourceStageLabels).indexOf(b.stage)).map(stage => <li key={stage.stage} style={{marginBottom:8}}><span>{sourceStageLabels[stage.stage]??stage.stage}</span> <Tag color={stage.status==='COMPLETED'?'success':stage.status==='RUNNING'?'processing':['BLOCKED','FAILED','PARTIAL'].includes(stage.status)?'warning':'default'}>{stage.status==='COMPLETED'?'Tamamlandı':stage.status==='RUNNING'?'İşleniyor':stage.status==='SKIPPED'?(source?.documentCount===0?'Belge yok · gerekmedi':'Uygulanmıyor'):stage.status==='BLOCKED'?'Müdahale gerekli':stage.status==='PARTIAL'?'Eksik kapsam':stage.status==='FAILED'?'Hata':'Bekliyor'}</Tag>{stage.totalItems>0&&<small>{stage.completedItems}/{stage.totalItems}</small>}</li>)}</ol>}
@@ -60,7 +62,7 @@ export function OperationSteps({ run, onRetryAiFilter, onRetryPreviousSources, i
           return (
             <li key={step.stage} className="atez-operation-step">
               <div className={`atez-operation-icon is-${status.toLowerCase()}`}>
-                {status === 'COMPLETED' && <Check size={14} />}
+                {(status === 'COMPLETED' || status === 'SKIPPED') && <Check size={14} />}
                 {status === 'RUNNING' && <LoaderCircle size={14} className="animate-spin" />}
                 {status === 'FAILED' && <AlertCircle size={14} />}
                 {status === 'AWAITING_RETRY' && <AlertCircle size={14} />}
@@ -70,10 +72,10 @@ export function OperationSteps({ run, onRetryAiFilter, onRetryPreviousSources, i
                 <div className="atez-operation-heading">
                   <h3 className="atez-operation-title"><span aria-hidden="true">{index + 1}. </span><span>{step.title}</span></h3>
                   <Tag color={status === 'COMPLETED' ? 'success' : status === 'RUNNING' ? 'processing' : status === 'FAILED' ? 'error' : status === 'AWAITING_RETRY' ? 'warning' : 'default'}>
-                    {status === 'COMPLETED' ? 'Tamamlandı' : status === 'RUNNING' ? 'İşleniyor' : status === 'AWAITING_RETRY' ? 'Yeniden deneme bekliyor' : status === 'FAILED' ? 'Hatalı' : 'Bekliyor'}
+                    {status === 'SKIPPED' ? 'Gerekmedi' : status === 'COMPLETED' ? 'Tamamlandı' : status === 'RUNNING' ? 'İşleniyor' : status === 'AWAITING_RETRY' ? 'Yeniden deneme bekliyor' : status === 'FAILED' ? 'Hatalı' : 'Bekliyor'}
                   </Tag>
                 </div>
-                <p className="atez-operation-description">{step.description}</p>
+                <p className="atez-operation-description">{status === 'SKIPPED' ? 'Belgeler bu otomasyonda daha önce işlendi; yeni belge olmadığı için bu adım gerekmedi.' : step.description}</p>
                 {execution && execution.totalItems > 0 && (
                   <div className="atez-run-progress"><Progress strokeColor={status === 'FAILED' ? 'var(--atez-error)' : status === 'COMPLETED' ? 'var(--atez-success)' : 'var(--atez-accent)'} railColor="var(--atez-border)" percent={Math.round(execution.completedItems / execution.totalItems * 100)} size="small" showInfo={false} /><span>{execution.completedItems}/{execution.totalItems} tamamlandı{execution.failedItems > 0 ? ` · ${execution.failedItems} hatalı` : ''}</span></div>
                 )}

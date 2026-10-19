@@ -1,3 +1,4 @@
+import { ComponentPoolPage } from './features/workspace/ComponentPoolPage'
 import { Suspense, lazy } from 'react';
 import { Spin } from 'antd';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -19,7 +20,6 @@ const AutomationDetailPage = lazy(() => import('./features/workspace').then((mod
 const SourcesPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.SourcesPage })));
 const TemplatesPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.TemplatesPage })));
 const UsagePage = lazy(() => import('./features/workspace').then((module) => ({ default: module.UsagePage })));
-const AcademyPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.AcademyPage })));
 const AdminPage = lazy(() => import('./features/workspace').then((module) => ({ default: module.AdminPage })));
 const SourceRunDetail = lazy(() => import('./features/workspace').then((module) => ({ default: module.SourceRunDetail })));
 
@@ -46,9 +46,8 @@ export default function App() {
           <Route path="/operations/:id" element={<OperationDetail />} />
           <Route path="/sources" element={<SourcesPage />} />
           <Route path="/source-runs/:id" element={<SourceRunDetail />} />
-          <Route element={<RequirePermission permission="config.manage" />}><Route path="/templates" element={<TemplatesPage />} /></Route>
+          <Route element={<RequirePermission permission="config.manage" />}><Route path="/templates" element={<TemplatesPage />} /><Route path="/templates/components" element={<ComponentPoolPage />} /></Route>
           <Route path="/usage" element={<UsagePage />} />
-          <Route path="/academy" element={<AcademyPage />} />
           <Route element={<RequirePermission permission="admin.manage" />}><Route path="/admin" element={<AdminPage />} /></Route>
           <Route path="/chat" element={<ChatScreen />} />
           <Route path="/chat/:sessionId" element={<ChatScreen />} />

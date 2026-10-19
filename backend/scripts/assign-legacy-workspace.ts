@@ -30,7 +30,6 @@ async function main(){
    cursor=rows.at(-1)!.id
   }
   if(apply)await prisma.$transaction(async tx=>{
-   if(args.includes('--assign-academy'))await tx.academyAttempt.updateMany({where:{ownerUserId:null,workspaceId:null},data:{workspaceId,ownerUserId}})
    await assignMetadataPreservingActivity(tx.chatSession as unknown as LegacyActivityModel,{visibility:'LEGACY'},{workspaceId,ownerId:ownerUserId,visibility:'PRIVATE'})
    const privateData={workspaceId,ownerUserId,visibility:'PRIVATE',actorScope:privateScope}
    await assignMetadataPreservingActivity(tx.documentImport as unknown as LegacyActivityModel,{visibility:'LEGACY'},privateData)

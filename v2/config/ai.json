@@ -1,0 +1,11 @@
+{
+  "provider": "vertex",
+  "models": {
+    "main": "gemini-3.8-flash",
+    "lite": "gemini-3.5-flash-lite"
+  },
+  "mediaResolution": "medium",
+  "inlineBudgetBytes": 18874368,
+  "maxPagesPerPart": 1000,
+  "pricing": {}
+}

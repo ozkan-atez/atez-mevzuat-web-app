@@ -1,0 +1,403 @@
+Browser tab: 2, Title: "ATEZ Mevzuat Radarı", URL: "http://localhost:8890/chat/907bf3ba-dc32-4340-ae41-48abcb8747f3".
+0 AXWebArea ATEZ Mevzuat Radarı, URL: localhost:8890/chat/907bf3ba-dc32-4340-ae41-48abcb8747f3
+	1 container root
+		2 container Ana menü
+			3 button Mevzuat Radar
+				4 text Mevzuat 
+				5 text Radar
+			6 container
+				7 text ÇALIŞMA ALANI
+				8 menu
+					9 Dashboard
+						10 image appstore
+						11 text Dashboard
+					12 Raporlar
+						13 image file-text
+						14 text Raporlar
+					15 Sohbetler
+						16 image message
+						17 text Sohbetler
+					18 Otomasyonlar
+						19 image thunderbolt
+						20 text Otomasyonlar
+					21 Gelişim Akademisi
+						22 image read
+						23 text Gelişim Akademisi
+					24 text OPERASYON
+					25 container
+						26 Dağıtım
+							27 image send
+							28 text Dağıtım
+						29 Belgeler
+							30 image file-text
+							31 text Belgeler
+						32 Kaynaklar
+							33 image global
+							34 text Kaynaklar
+						35 Şablonlar
+							36 image book
+							37 text Şablonlar
+						38 Kullanım
+							39 image bar-chart
+							40 text Kullanım
+					41 text YÖNETIM
+					42 Yönetim
+						43 image setting
+						44 text Yönetim
+			45 text DA Docker admin
+			46 text ATEZ Ekibi
+		47 container
+			48 text Çalışma alanı  /
+			49 text Sohbetler
+			50 button Kullanıcı menüsü
+				51 text ATEZ Ekibi
+				52 image down
+			53 button Açık temaya geç
+				54 container sun
+			55 button Renk paleti seç
+				56 container bg-colors
+			57 button Bildirimler
+				58 container bell
+		59 container
+			60 container Sohbet geçmişi
+				61 link Description: form Yeni sohbet, Value: localhost:8890/chat
+				62 button edit Rapor düzelt
+					63 container edit
+					64 text Rapor düzelt
+				65 container Rapor değişiklikleri
+					66 heading Rapor değişiklikleri, Value: 2
+						67 text Rapor değişiklikleri
+					68 content list
+						69 link Value: localhost:8890/chat?report=95b64d13-1ed1-4100-b4c3-78aeb08475ac, Description: Harici Güç Kaynakları, Kablosuz Şarj Cihazları, Kablosuz Şarj Pedleri, Genel Kullanım Amaçlı Taşınabilir Bataryalar İçin Batarya Şarj Cihazları ve USB Tip-C Kabloları ile İlgili Çevreye Duyarlı Tasarım Gerekliliklerine Dair Tebliğ (2025/2052/AB) (SGM-2026/7)
+				70 container Sohbetler
+					71 heading Sohbetler, Value: 2
+						72 text Sohbetler
+					73 content list
+						74 container
+							75 link Description: QA-8890 Kayıtlı İşlem ve Otomasyonlar, Value: localhost:8890/chat/907bf3ba-dc32-4340-ae41-48abcb8747f3
+							76 button QA-8890 Kayıtlı İşlem ve Otomasyonlar sohbetini sil
+								77 container delete
+						78 container
+							79 link Description: Tariff Kaynağı İçin Tarama Başlatma, Value: localhost:8890/chat/6d3d02fd-4eca-44f4-b50f-38170a4bac0e
+							80 button Tariff Kaynağı İçin Tarama Başlatma sohbetini sil
+								81 container delete
+						82 container
+							83 link Description: 16 Ekim Tariff Taraması, Value: localhost:8890/chat/f06b4e29-89a7-414d-9c78-66dc4d8c7dbd
+							84 button 16 Ekim Tariff Taraması sohbetini sil
+								85 container delete
+						86 container
+							87 link Description: 3926.90.97.90.23 GTİP Gümrük Kıymet Değeri, Value: localhost:8890/chat/dcf11e69-bcd6-4ead-8036-96a2b64ae075
+							88 button 3926.90.97.90.23 GTİP Gümrük Kıymet Değeri sohbetini sil
+								89 container delete
+						90 container
+							91 link Description: 16 Ekim 2026 TARIFF ve İGMD Taraması, Value: localhost:8890/chat/40f4bb75-cb0b-4902-bb8a-ec4f97e93c09
+							92 button 16 Ekim 2026 TARIFF ve İGMD Taraması sohbetini sil
+								93 container delete
+						94 container
+							95 link Description: Mevzuat sohbeti, Value: localhost:8890/chat/0b89a568-a169-4ed7-a20b-8b43256b5a12
+							96 button Mevzuat sohbeti sohbetini sil
+								97 container delete
+						98 container
+							99 link Description: Bugün İçin Tarama Başlatma, Value: localhost:8890/chat/31d5d1bd-6bad-492d-8b77-e572fbe808ac
+							100 button Bugün İçin Tarama Başlatma sohbetini sil
+								101 container delete
+						102 container
+							103 link Description: Bugüne Ait Tarama Başlatma, Value: localhost:8890/chat/e4a62c8f-b002-4edf-8ff7-cb7a3377c943
+							104 button Bugüne Ait Tarama Başlatma sohbetini sil
+								105 container delete
+						106 container
+							107 link Description: Bugün İçin Yeni Tarama Başlatma, Value: localhost:8890/chat/4476dd93-d704-40c9-b714-00702aa214c8
+							108 button Bugün İçin Yeni Tarama Başlatma sohbetini sil
+								109 container delete
+						110 container
+							111 link Description: Yürürlük Tarihi Rapor Bileşeni, Value: localhost:8890/chat/58fe6690-c3d9-4b38-ad9b-8ddf156ad38a
+							112 button Yürürlük Tarihi Rapor Bileşeni sohbetini sil
+								113 container delete
+			114 container
+				115 text QA-8890 Kayıtlı İşlem ve Otomasyonlar Genel mevzuat soruları
+			116 container
+				117 text QA-8890: Kayıtlı işlem kaynaklarını, otomasyonları, son 3 taramayı ve dağıtım gruplarını ayrı başlıklarla listele. Yalnız mevcut kayıtları oku; yeni işlem başlatma.
+				118 text Son taramalar
+				119 text Bu yanıt sistemdeki kayıtlı rapor ve tarama verilerinden hazırlanmıştır.
+				120 text Tarama durumu
+				121 content list
+					122 container
+						123 AXListMarker • 
+						124 text Başarısız · 1 belge · 0 ilgili belge · 0 rapor. 
+						125 link Description: Taramayı incele, Value: localhost:8890/runs/81a02589-2f87-4174-b959-8eec67ecc024
+				126 content list
+					127 container
+						128 AXListMarker • 
+						129 text Başarısız · 0 belge · 1 ilgili belge · 0 rapor. 
+						130 link Description: Taramayı incele, Value: localhost:8890/runs/50cea80a-f729-43ab-a9c1-a50de9af5275
+				131 content list
+					132 container
+						133 AXListMarker • 
+						134 text Tamamlandı · 0 belge · 0 ilgili belge · 0 rapor. 
+						135 link Description: Taramayı incele, Value: localhost:8890/runs/65919884-1d00-408c-93ce-da85fd5d9d53
+				136 content list
+					137 container
+						138 AXListMarker • 
+						139 text Kısmen tamamlandı · 59 belge · 5 ilgili belge · 1 rapor. 
+						140 link Description: Taramayı incele, Value: localhost:8890/runs/8b5586b9-1658-45ce-8e01-a846d024cc42
+				141 content list
+					142 container
+						143 AXListMarker • 
+						144 text Başarısız · 1 belge · 0 ilgili belge · 0 rapor. 
+						145 link Description: Taramayı incele, Value: localhost:8890/runs/7579b16d-2ded-4a8c-b72f-78fa4ff3f8aa
+				146 content list
+					147 container
+						148 AXListMarker • 
+						149 text Tamamlandı · 2 belge · 0 ilgili belge · 0 rapor. 
+						150 link Description: Taramayı incele, Value: localhost:8890/runs/20989778-c58a-47bb-8d7f-ba46531bdf12
+				151 content list
+					152 container
+						153 AXListMarker • 
+						154 text Kısmen tamamlandı · 0 belge · 3 ilgili belge · 2 rapor. 
+						155 link Description: Taramayı incele, Value: localhost:8890/runs/d957d00f-c49f-4587-a913-d0df8d2d26b2
+				156 content list
+					157 container
+						158 AXListMarker • 
+						159 text Başarısız · 1 belge · 0 ilgili belge · 0 rapor. 
+						160 link Description: Taramayı incele, Value: localhost:8890/runs/c16b11cc-1f9e-4f7b-9bf9-527b64ee02d9
+				161 content list
+					162 container
+						163 AXListMarker • 
+						164 text Başarısız · 0 belge · 0 ilgili belge · 0 rapor. 
+						165 link Description: Taramayı incele, Value: localhost:8890/runs/375e55b5-2218-40c6-a53a-1b37f97264ab
+				166 content list
+					167 container
+						168 AXListMarker • 
+						169 text Tamamlandı · 13 belge · 0 ilgili belge · 1 rapor. 
+						170 link Description: Taramayı incele, Value: localhost:8890/runs/2d8bca96-f1be-4bb6-b7ac-c08cbe34c198
+				171 text QA-8890: Kullanılabilir işlem kaynaklarını ve rapor bileşenlerini listele. Kullanılabilir İşlem Kaynakları Sistemde bağımsız işlem (keşif/indirme) için yapılandırılmış kaynaklar:
+				172 content list
+					173 container
+						174 AXListMarker • 
+						175 text T.C. Resmî Gazete  ( resmi-gazete ) — Yetki türü:  OFFICIAL  (Kimlik:  fb15dca0-9221-4ab1-a38f-11980346d001 )
+					176 container
+						177 AXListMarker • 
+						178 text Ticaret Bakanlığı  ( ticaret-bakanligi ) — Yetki türü:  OFFICIAL  (Kimlik:  fb15dca0-9221-4ab1-a38f-11980346d002 )
+					179 container
+						180 AXListMarker • 
+						181 text İGMD  ( igmd ) — Yetki türü:  PROFESSIONAL  (Kimlik:  fb15dca0-9221-4ab1-a38f-11980346d003 )
+					182 container
+						183 AXListMarker • 
+						184 text Mevzuat.Net  ( mevzuat-net ) — Yetki türü:  COMMERCIAL  (Kimlik:  fb15dca0-9221-4ab1-a38f-11980346d004 )
+					185 container
+						186 AXListMarker • 
+						187 text TARIFF  ( tariff ) — Yetki türü:  COMMERCIAL  (Kimlik:  fb15dca0-9221-4ab1-a38f-11980346d005 )
+					188 container
+						189 AXListMarker • 
+						190 text files.igmd.org.tr  ( files.igmd.org.tr ) — Yetki türü:  REFERENCE  (Kimlik:  50b99f3b-7640-458e-9007-f8c7a5efe7ff )
+				191 text --- Rapor Bileşen Havuzu Rapor havuzunda yer alan aktif bileşenler:
+				192 content list
+					193 container
+						194 AXListMarker 1. 
+						195 text Özet  ( ozet ) ·  Kategori: Özet
+				196 text Raporun girişi: ne yayımlandı, ne değişti, ne zaman yürürlüğe giriyor.
+				197 content list
+					198 container
+						199 AXListMarker 1. 
+						200 text Öne çıkanlar  ( onemli-noktalar ) ·  Kategori: Özet
+				201 text Değişikliğin 3–6 maddelik özeti.
+				202 content list
+					203 container
+						204 AXListMarker 1. 
+						205 text Değişiklik kartı (yeni düzenleme / değişiklik)  ( yeni-duzenleme ) ·  Kategori: Değişiklik Kartı
+				206 text Düzenlemenin kimliği ve neyi değiştirdiği bilgisi.
+				207 content list
+					208 container
+						209 AXListMarker 1. 
+						210 text Süre uzatımı  ( sure-uzatimi ) ·  Kategori: Değişiklik Kartı
+				211 text Eski ve yeni süre yan yana karşılaştırması.
+				212 content list
+					213 container
+						214 AXListMarker 1. 
+						215 text Karşılaştırma tablosu (oran/değer)  ( karsilastirma-tablosu ) ·  Kategori: Karşılaştırma Tablosu
+				216 text Önceki ve yeni değerler ile değişim yüzdeleri.
+				217 content list
+					218 container
+						219 AXListMarker 1. 
+						220 text GTİP tablosu (önceki hal yok)  ( gtip-tablosu ) ·  Kategori: GTİP Tablosu
+				221 text Önceki hal bulunamadığında yalnızca yeni değerlerin listesi.
+				222 content list
+					223 container
+						224 AXListMarker 1. 
+						225 text Yürürlük ve tarihler  ( yururluk ) ·  Kategori: Zaman Çizelgesi
+				226 text Yayım, önceki hal ve yürürlük tarihleri ayrı ayrı.
+				227 content list
+					228 container
+						229 AXListMarker 1. 
+						230 text Yürürlük ve Geçiş Hükümleri Kartı  ( ai-bc28b12cd3 ) ·  Kategori: Zaman Çizelgesi
+				231 text Yürürlük tarihlerini, geçiş süresi açıklamasını ve intibak/geçiş hükümlerini tek bilgi kartında toplar.
+				232 content list
+					233 container
+						234 AXListMarker 1. 
+						235 text Etkilenenler ve pratik etki  ( etkilenenler ) ·  Kategori: Etkilenenler
+				236 text Etkilenen taraflar, sektörler ve firmalara pratik etki.
+				237 content list
+					238 container
+						239 AXListMarker 1. 
+						240 text Önerilen aksiyonlar  ( onerilen-aksiyonlar ) ·  Kategori: Etkilenenler
+				241 text Bulgulara dayalı, firmaların uygulayabileceği adımlar.
+				242 content list
+					243 container
+						244 AXListMarker 1. 
+						245 text Kaynaklar  ( kaynaklar ) ·  Kategori: Kaynaklar
+				246 text Ana kaynak, önceki hal ve destekleyici belgeler.
+				247 content list
+					248 container
+						249 AXListMarker 1. 
+						250 text Duyuru  ( duyuru ) ·  Kategori: Not / Uyarı
+				251 text Kurum duyurusu ya da bilgilendirme.
+				252 content list
+					253 container
+						254 AXListMarker 1. 
+						255 text Değişiklik yok  ( degisiklik-yok ) ·  Kategori: Not / Uyarı
+				256 text Gündemde ilgili bir değişiklik olmadığında gösterilir.
+				257 content list
+					258 container
+						259 AXListMarker 1. 
+						260 text Yürürlükten kaldırma  ( yururlukten-kaldirma ) ·  Kategori: Not / Uyarı
+				261 text Kaldırılan düzenleme ve etkisi.
+				262 content list
+					263 container
+						264 AXListMarker 1. 
+						265 text Önceki hal uyarısı  ( onceki-hal-uyarisi ) ·  Kategori: Not / Uyarı
+				266 text Önceki hal bulunamadığında veya belirsiz olduğunda uyarı.
+				267 content list
+					268 container
+						269 AXListMarker 1. 
+						270 text İstisnalar ve belirsizlikler  ( istisnalar ) ·  Kategori: Not / Uyarı
+				271 text Geçiş hükümleri, istisnalar ve belirsiz noktalar. QA-8890: Dağıtım gruplarını ve son gönderimlerin durumlarını oku. E-posta gönderme. Ayrıca sohbet için eklenen kaynaklarda gümrük ara; bulunan ilk kaynağın metnini getir. Sistem kayıtları incelendiğinde elde edilen sonuçlar aşağıda belirtilmiştir: 1. Dağıtım Grupları Sistemde kayıtlı herhangi bir dağıtım grubu bulunmamaktadır (liste boş). 2. Son Gönderim Durumları Sistemde kayıtlı herhangi bir bülten e-posta gönderim kaydı bulunmamaktadır. 3. Eklenen Kaynaklar (Gümrük Araması) Sohbet için etkinleştirilmiş kaynaklar arasında "gümrük" araması yapılmış olup, ayrıca genel kaynak listesi de kontrol edilmiştir. Sistemde sohbete açık/eklenmiş herhangi bir kaynak kaydı bulunmamaktadır; bu nedenle metin getirilememiştir. QA-8890: Arşiv belgelerinde kablosuz şarj ara, ilk sonucun sürüm metnini oku. Toplanan belgelerde de aynı konuyu ara ve ilk belgenin metnini getir. Kısa sonuç ver, yeni işlem başlatma. 1. Arşiv Belgeleri Sonucu
+				272 content list
+					273 container
+						274 AXListMarker • 
+						275 text Bulunan Belge:
+						276 link Value: resmigazete.gov.tr/eskiler/2026/10/20261016-14.htm, Description: Harici Güç Kaynakları, Kablosuz Şarj Cihazları, Kablosuz Şarj Pedleri, Genel Kullanım Amaçlı Taşınabilir Bataryalar İçin Batarya Şarj Cihazları ve USB Tip-C Kabloları ile İlgili Çevreye Duyarlı Tasarım Gerekliliklerine Dair Tebliğ (2025/2052/AB) (SGM-2026/7)
+					277 container
+						278 AXListMarker • 
+						279 text Tarih:  16 Ekim 2026 (Sürüm ID:  7540ff89-5480-4541-9025-972eff9cf912 )
+					280 container
+						281 AXListMarker • 
+						282 text Durum:  Metin çıkarma durumu bekliyor ( PENDING ) olduğundan arşiv sürüm metni henüz hazır değildir (boş dönmüştür).
+				283 text --- 2. Toplanan Belgeler Sonucu
+				284 content list
+					285 container
+						286 AXListMarker • 
+						287 text Bulunan Belge:
+						288 link Value: resmigazete.gov.tr/eskiler/2026/10/20261016-14.htm, Description: Harici Güç Kaynakları, Kablosuz Şarj Cihazları, Kablosuz Şarj Pedleri, Genel Kullanım Amaçlı Taşınabilir Bataryalar İçin Batarya Şarj Cihazları ve USB Tip-C Kabloları ile İlgili Çevreye Duyarlı Tasarım Gerekliliklerine Dair Tebliğ (2025/2052/AB) (SGM-2026/7)
+					289 container
+						290 AXListMarker • 
+						291 text Yayım Tarihi / Sayı:  16 Ekim 2026 / Sayı: 33402 (Belge ID:  f91b344e-35da-4653-89b6-687d6cccfac3 )
+					292 container
+						293 AXListMarker • 
+						294 text Özet Metin:
+					295 container
+						296 AXListMarker • 
+						297 text Kapsam:  Piyasaya arz edilen veya hizmete sunulan harici güç kaynakları, kablosuz şarj cihazları, kablosuz şarj pedleri, genel kullanım amaçlı taşınabilir batarya şarj cihazları ve USB Tip-C kablolarının çevreye duyarlı tasarım gerekliliklerini belirler. Kesintisiz güç kaynakları, belirli tıbbi cihazlar ve taşıt araçları için tasarlananlar kapsam dışıdır.
+					298 container
+						299 AXListMarker • 
+						300 text Mevzuat Uyumu ve Yürürlükten Kaldırma:  (AB) 2025/2052 sayılı Komisyon Tüzüğü dikkate alınarak hazırlanmış olup, mülga SGM-2020/5 sayılı Tebliği yürürlükten kaldırır.
+					301 container
+						302 AXListMarker • 
+						303 text Yürürlük:  1. madde, geçici 1. maddenin 3. fıkrası, 9. ve 10. maddeler yayımı tarihinde (16.10.2026); diğer tüm teknik ve temel hükümler ise  14/12/2028  tarihinde yürürlüğe girer.
+				304 text QA-8890: topicId 95b64d13-1ed1-4100-b4c3-78aeb08475ac için rapor_getir, analiz_getir ve onceki_kaynaklari_listele araçlarını kullan. Her birinin sonucunu bir cümleyle belirt.
+				305 content list
+					306 container
+						307 AXListMarker • 
+						308 text rapor_getir:  Harici güç kaynakları, kablosuz şarj aygıtları ve USB Tip-C kablolarına yönelik eko-tasarım, etiketleme ve enerji verimliliği şartlarını düzenleyen SGM-2026/7 sayılı Tebliğ bülteninin 2. sürüm içeriği getirilmiştir.
+					309 container
+						310 AXListMarker • 
+						311 text analiz_getir:  İlgili Tebliğin AB 2025/2052 tüzüğüne uyum kapsamını, yürürlük tarihlerini ve doğrulama kanıtlarını içeren mevzuat analiz çıktısı başarıyla alınmıştır.
+					312 container
+						313 AXListMarker • 
+						314 text onceki_kaynaklari_listele:  Bu konuya ilişkin sistemde kayıtlı herhangi bir önceki kaynak veya mevzuat atfı kaydı bulunmamaktadır.
+				315 text QA-8890: 3926.90.97.90.23 GTİP için 2026-10-19 tarihindeki birim gümrük kıymetini Tariff üzerinden sorgula. Kısa yanıt ver; bulunamazsa açıkça belirt.
+				316 text 3926.90.97.90.23
+				317 text  GTİP kodu için Tariff üzerinde 2026-10-19 sorgu tarihinde kayıtlı birim gümrük (gözetim) kıymeti: 
+				318 text 5.50 USD / kg
+				319 text  (Geçerlilik aralığı: 2026-07-11 – 4000-01-01 [açık uçlu], Kaynak: Tariff). QA-8890: Otomasyonları listele. Ardından 00000000-0000-4000-8000-000000000000 kimlikli işlemin durumunu getir. Kısa cevap ver.
+				320 text Otomasyon kayıtları
+				321 text Resmî Gazete günlük taraması
+				322 text  · Etkin · 05:00, 10:00, 15:00, 23:00 (Europe/Istanbul) Bu kapsamda kayıtlı çalışma yok. Bu kayıt tek başına neden çalışmadığını kanıtlamaz. QA-8890: 00000000-0000-4000-8000-000000000000 kimlikli işlemin durumunu getir.
+				323 text 00000000-0000-4000-8000-000000000000
+				324 text  kimlikli işlem sistemde bulunamamıştır. QA-8890: Seçili belgeyi oku. 1  belge eklendi Metin çıkarma işlemi kaydedildi. Durum: QUEUED. 
+				325 link Description: İşlemi izle, Value: localhost:8890/operations/86d46fc9-64ee-4196-9553-32aac887146f
+				326 text Belgeyi oku
+				327 text Başarısız
+				328 text Belgeyi oku :  Başarısız
+				329 container
+					330 image exclamation-circle
+					331 text Belgeden okunabilir metin çıkarılamadı.
+				332 button Adımı yeniden dene
+				333 link Description: İşlemi incele, Value: localhost:8890/operations/86d46fc9-64ee-4196-9553-32aac887146f
+				334 text QA-8890: QA Test Kartı adlı, yalnız başlık ve açıklama alanı olan yeni rapor bileşeni taslağı oluştur. Havuza kaydetme. QA ve test senaryoları için yalnızca başlık ve açıklama alanlarından oluşan sade bir bilgi kutusu (info-box) bileşeni tasarladım. Taslak başarıyla doğrulandı ve önizleme kartıyla sunuldu; bileşeni havuzda kullanmak isterseniz kart üzerindeki butonu kullanarak kaydedebilirsiniz.
+				335 container Bileşen taslağı: QA Test Kartı
+					336 text field (settable) Description: Bileşen adı, Value: QA Test Kartı
+					337 text Değişiklik kartı
+					338 image check-circle
+					339 text Doğrulandı
+					340 text Test ve doğrulama süreçlerinde kullanılmak üzere serbest başlık ve açıklama metni içeren sade bilgi kartı.
+					341 container QA Test Kartı önizlemesi
+						342 AXWebArea about:srcdoc
+							343 container
+								344 heading QA TEST KARTI, Value: 2
+									345 text QA TEST KARTI
+								346 heading BİLGİLENDİRME BAŞLIĞI, Value: 3
+									347 text BİLGİLENDİRME BAŞLIĞI
+								348 text Bu alan görsel doğrulama ve test senaryolarında gösterilecek örnek açıklama metnidir.
+					349 button Pasif kaydet
+					350 button Havuza ekle ve aktifleştir
+				351 text QA-8890: Havuzdaki ozet anahtarlı bileşeni başlığı daha belirgin olacak şekilde değiştir; yalnız değişiklik taslağı oluştur, kaydetme.
+				352 image close-circle
+				353 text Yapay zekâ yanıtı tamamlanamadı. Lütfen yeniden deneyin.
+				361 text QA-8890: Havuzdaki ozet bileşeninin başlığını daha belirgin yapacak değişiklik taslağını tekrar oluştur. Kaydetme. Mevcut 
+				362 text ozet
+				363 text  bileşeni için başlığı daha belirgin hale getiren yeni değişiklik taslağı hazırlandı ve önizleme kartıyla sunuldu.
+				364 text Tasarım Notu:
+				365 text  Düzenleme başlığı h2 seviyesinde vurgulu bir başlık olarak yapılandırıldı, değişiklik türü rozeti bilgi varyantıyla öne çıkarıldı ve giriş metni lead stiliyle başlığın altında korundu.
+				366 text Not: Taslakta doğrulama uyarısı (`nodes[1]: metin için tam olarak bir kaynak gerekli`) bulunmaktadır. Taslağı inceleyip havuza yeni sürüm olarak kaydetmek isterseniz kart üzerindeki butonu kullanabilirsiniz.
+				367 container Bileşen taslağı: Başlık ve Özet
+					368 text field (settable) Description: Bileşen adı, Value: Başlık ve Özet
+					369 text Özet
+					370 image close-circle
+					371 text Doğrulama hatası “ Özet ” bileşeninin değişikliği  · yerleşik bileşen olduğu için kopya olarak eklenir
+					372 text Raporun girişi: düzenleme adı başlığı, değişiklik türü rozeti ve yürürlük özeti.
+					373 container
+						374 heading 3
+					375 container
+						376 image exclamation-circle
+						377 text Doğrulama hataları
+						378 content list
+							379 text nodes[1]: metin için tam olarak bir kaynak gerekli (text, bind ya da slot)
+					380 button (disabled) Pasif kaydet
+					381 button (disabled) Havuza ekle ve aktifleştir
+				382 text QA-8890: raporlari_ara aracıyla kablosuz şarj raporlarını ara; en fazla 2 sonuç ver. "kablosuz şarj" sorgusuna ait bülten kaydı:
+				383 content list
+					384 container
+						385 AXListMarker • 
+						386 link Value: resmigazete.gov.tr/eskiler/2026/10/20261016-14.htm, Description: Harici Güç Kaynakları, Kablosuz Şarj Cihazları, Kablosuz Şarj Pedleri, Genel Kullanım Amaçlı Taşınabilir Bataryalar İçin Batarya Şarj Cihazları ve USB Tip-C Kabloları ile İlgili Çevreye Duyarlı Tasarım Gerekliliklerine Dair Tebliğ (2025/2052/AB) (SGM-2026/7)
+					387 container
+						388 AXListMarker • 
+						389 text Tarih / Sayı:  16 Ekim 2026 Cuma / Sayı: 33402
+					390 container
+						391 AXListMarker • 
+						392 text Özet:  Harici güç kaynakları, kablosuz şarj aygıtları ve USB Tip-C kablolar için eko-tasarım, birlikte çalışabilirlik, etiketleme ve enerji verimliliği şartlarını düzenleyen SGM-2026/7 sayılı Tebliğ yayımlanmıştır.
+					393 container
+						394 AXListMarker • 
+						395 link Description: Raporu İncele, Value: localhost:8890/reports/95b64d13-1ed1-4100-b4c3-78aeb08475ac?revision=2
+						396 text  (Sürüm 2)
+				397 text QA-8890 durdurma testi: Dış ticaret raporu hazırlama sürecini uzun ve ayrıntılı olarak açıkla. Araçla işlem başlatma.
+				398 image close-circle
+				399 text İşlem isteğiniz üzerine durduruldu. (Takip: 797445ce-afb0-4955-98a3-43f467fdc85a)
+			354 container
+				355 text entry area (settable) Mesaj
+				356 button (collapsed) Description: Belge ekle, Secondary Actions: Expand
+					357 container plus
+				358 button (disabled) Gönder
+					400 container arrow-up
+				360 text Enter ile gönderin, Shift+Enter ile satır ekleyin. Yanıtlar yapay zekâ tarafından üretilir; kritik kararlar için kaynağı doğrulayın.
+
+The focused UI element is 0 AXWebArea ATEZ Mevzuat Radarı, URL: localhost:8890/chat/907bf3ba-dc32-4340-ae41-48abcb8747f3

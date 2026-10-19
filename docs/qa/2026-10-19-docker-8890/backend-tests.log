@@ -1,0 +1,17 @@
+
+> backend@1.0.0 test
+> vitest run test/unit/chat test/unit/send-chat-message.test.ts test/unit/gemini-chat-model-client.test.ts test/unit/scan-intent.test.ts
+
+
+ RUN  v5.0.0 /Users/ozkan/Documents/GitHub/atez-mevzuat-web-app/.claude/worktrees/dev-2/backend
+
+
+ Test Files  12 passed (12)
+      Tests  92 passed (92)
+   Start at  12:29:53
+   Duration  8.67s (import 80%, transform 14%, tests 4%, setup 1%, worker 1%)
+
+     Import  81 modules were evaluated 120 times · 5.60s total, 80% of tracked time
+             ~1.82s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+

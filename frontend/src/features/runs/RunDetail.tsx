@@ -1,3 +1,4 @@
+import { allGazetteDocumentsSkipped, skippedReportMessage } from './gazette-discovery'
 import { RunFlow } from './RunFlow'
 import { ActionLink, PageToolbar } from '../../components/layout/PageToolbar'
 import { useState } from 'react'
@@ -76,6 +77,7 @@ export function RunDetail() {
         </section>
       </div>
 
+      {!!run.gazetteDiscovery?.skipped && <Alert type="info" showIcon message={`${run.gazetteDiscovery.discovered} belge bulundu; ${run.gazetteDiscovery.skipped} belge bu otomasyonda daha önce işlendiği için tekrar işlenmedi.`} />}
       {run.errorSummary && <Alert type={run.status === 'PARTIAL' ? 'warning' : 'error'} message={run.errorSummary} showIcon />}
       {error && (
         <Alert type="warning" message={error} showIcon action={<Button onClick={() => void refresh()}>Yenile</Button>} />
@@ -84,9 +86,9 @@ export function RunDetail() {
       <RunFlow run={run} />
       <section className="run-report-results" aria-label="Oluşturulan raporlar">
         <h2 className="atez-run-section-title">Oluşturulan raporlar</h2>
-        {run.reports?.length ? <div className="run-report-list">{run.reports.map(report=><Link key={report.id} to={`/runs/${run.id}/reports/${report.id}`}><div><strong>{report.card==='K6'?'Değişiklik bulunmadı':report.title}</strong><small>{report.card==='K6'?'Bu çalışmada raporlanacak yeni değişiklik tespit edilmedi.':`Sürüm ${report.version}`}</small></div><span>{report.card==='K6'?'Değişiklik yok raporunu aç':'Raporu aç'} →</span></Link>)}</div> : <p className="atez-run-card-subtitle">{run.status==='COMPLETED'?'Bu çalışmada oluşturulmuş rapor bulunmuyor.':'Henüz rapor oluşturulmadı. Çalışma durumunu yukarıdaki akıştan takip edebilirsiniz.'}</p>}
+        {run.reports?.length ? <div className="run-report-list">{run.reports.map(report=><Link key={report.id} to={`/runs/${run.id}/reports/${report.id}`}><div><strong>{report.card==='K6'?'Değişiklik bulunmadı':report.title}</strong><small>{report.card==='K6'?'Bu çalışmada raporlanacak yeni değişiklik tespit edilmedi.':`Sürüm ${report.version}`}</small></div><span>{report.card==='K6'?'Değişiklik yok raporunu aç':'Raporu aç'} →</span></Link>)}</div> : <p className="atez-run-card-subtitle">{allGazetteDocumentsSkipped(run)?skippedReportMessage:run.status==='COMPLETED'?'Bu çalışmada oluşturulmuş rapor bulunmuyor.':'Henüz rapor oluşturulmadı. Çalışma durumunu yukarıdaki akıştan takip edebilirsiniz.'}</p>}
       </section>
-      <details className="run-secondary-details"><summary>Belgeler ve kapsam sonuçları · {run.counts.documents}</summary><CollectedDocuments editions={run.editions} /></details>
+      <details className="run-secondary-details"><summary>Belgeler ve kapsam sonuçları · {run.counts.documents}</summary><CollectedDocuments editions={run.editions} sourceRuns={run.sourceRuns} /></details>
       <details className="run-secondary-details"><summary>İşlem ayrıntıları ve yeniden deneme</summary><OperationSteps run={run} onRetryAiFilter={() => void handleRetry('filter')} onRetryPreviousSources={() => void handleRetry('previous-sources')} isRetrying={isRetrying} retryError={retryError} /></details>
 
     </div>

@@ -31,7 +31,7 @@ export async function runAutomation(prisma: PrismaClient, id: string, requestKey
       ...jobInitiatorFields(),
       requestKey: key, sourceKeys, automationId: id, trigger: requestKey ? 'MANUAL' : 'CRON', timezone: automation.timezone,
       targetDate: new Date(`${targetDate}T00:00:00Z`),
-      workspaceConfig: { automationName: automation.name, datePolicy: automation.datePolicy, sourceIds: automation.sourceIds, groupIds: automation.groupIds, templateId: automation.templateId, template: template ? { html: template.html, sections: template.sections, definition: template.definition, revision: template.revision } : null, deliveryMode: 'MANUAL_APPROVAL' } as Prisma.InputJsonValue,
+      workspaceConfig: { automationName: automation.name, datePolicy: automation.datePolicy, sourceIds: automation.sourceIds, groupIds: automation.groupIds, templateId: automation.templateId, template: template ? { html: template.html, sections: template.sections, definition: template.definition, revision: template.revision, studioSnapshot: template.studioSnapshot } : null, deliveryMode: 'MANUAL_APPROVAL' } as Prisma.InputJsonValue,
       outbox: { create: { requestKey: key, ...jobInitiatorFields() } },
     } })
     await tx.workspaceAutomation.update({ where: { id }, data: { lastRunId: run.id, lastRunAt: new Date(), lastError: null } })
