@@ -1,3 +1,4 @@
+import { closeEmbeddedStudio, initializeEmbeddedStudio } from './platform/studio-transport'
 import { HttpComponentStudio } from './modules/chat/application/component-studio'
 import { backgroundUsageModel } from './modules/usage/background-usage'
 import { PrismaUsageRecorder } from './modules/usage/prisma-usage-recorder'
@@ -19,6 +20,7 @@ import { SingleWindowTariffLookup } from './modules/tariff/tariff-lookup'
 
 async function start() {
   const env = loadEnv()
+  await initializeEmbeddedStudio()
   const ai = createGoogleAi()
   const objectStore = new S3ObjectStore(env.s3)
   const tariffCredentials = tariffCredentialsFromEnv()
@@ -47,6 +49,8 @@ async function start() {
       objectStore: async () => { await objectStore.ensureBucket() },
     },
   })
+
+  app.addHook('onClose', closeEmbeddedStudio)
 
   try {
     await objectStore.ensureBucket()

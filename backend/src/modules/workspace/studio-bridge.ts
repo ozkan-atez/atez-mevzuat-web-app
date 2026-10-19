@@ -1,8 +1,9 @@
+import { studioFetch } from '../../platform/studio-transport'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import { templateHtml } from './report-template-catalog'
 const json=(v:unknown)=>v as Prisma.InputJsonValue
 export async function studioRequest<T>(base:string,path:string,body?:unknown):Promise<T>{
- const response=await fetch(`${base.replace(/\/$/,'')}${path}`,{...(body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),signal:AbortSignal.timeout(180000),redirect:'error'})
+ const response=await studioFetch(`${base.replace(/\/$/,'')}${path}`,{...(body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),signal:AbortSignal.timeout(180000),redirect:'error'})
  if(!response.ok)throw new Error('Şablon stüdyosu işlemi tamamlanamadı.')
  return response.json() as Promise<T>
 }

@@ -1,3 +1,4 @@
+import { studioFetch } from '../../../platform/studio-transport'
 /**
  * Sohbetten bileşen oluşturma: v2 şablon stüdyosuna (bileşen havuzu + AI bileşen servisi) köprü.
  *
@@ -58,7 +59,7 @@ export class HttpComponentStudio implements ComponentStudio {
   constructor(options: { baseUrl: string; timeoutMs?: number; fetcher?: typeof fetch }) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '')
     this.timeoutMs = options.timeoutMs ?? 120_000
-    this.fetcher = options.fetcher ?? fetch
+    this.fetcher = options.fetcher ?? studioFetch
   }
 
   private async request<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {

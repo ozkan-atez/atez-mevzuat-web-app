@@ -21,8 +21,8 @@ export interface Runtime {
   close(): Promise<void>
 }
 
-export async function bootRuntime(role: string, opts: { amqp?: boolean } = {}): Promise<Runtime> {
-  const env = loadEnv()
+export async function bootRuntime(role: string, opts: { amqp?: boolean; env?: NodeJS.ProcessEnv } = {}): Promise<Runtime> {
+  const env = loadEnv(opts.env)
   const log = createLogger({ role }, env.LOG_LEVEL)
   const db = createDb(env.DATABASE_URL, { logger: log })
   const amqp =

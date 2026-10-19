@@ -17,7 +17,13 @@ if (!['api', 'worker', 'web'].includes(mode)) throw new Error('api, worker veya 
 const env = {
   ...process.env, ...saved,
   NODE_ENV: 'production',
-  COMPONENT_STUDIO_URL: saved.COMPONENT_STUDIO_URL ?? 'http://127.0.0.1:3101',
+  COMPONENT_STUDIO_URL: 'http://embedded-studio',
+  STUDIO_DATABASE_URL: saved.STUDIO_DATABASE_URL ?? (() => {
+    const url = new URL(saved.LOCAL_DATABASE_URL ?? 'postgresql://atez:atezpassword@127.0.0.1:5432/atez_db')
+    url.pathname = '/atez_studio_v2'; url.search = ''; return url.toString()
+  })(),
+  AMQP_URL: saved.LOCAL_RABBITMQ_URL ?? 'amqp://localhost:5672',
+  CONFIG_DIR: resolve(root, 'v2/config'),
   SOURCE_CREDENTIAL_KEY_FILE: saved.SOURCE_CREDENTIAL_KEY_FILE ?? resolve(homedir(), '.config/atez/source-credentials.key'),
   DATABASE_URL: saved.LOCAL_DATABASE_URL ?? 'postgresql://atez:atezpassword@127.0.0.1:5432/atez_db?schema=public',
   RABBITMQ_URL: saved.LOCAL_RABBITMQ_URL ?? saved.RABBITMQ_URL ?? `amqp://${encodeURIComponent(saved.RABBITMQ_USER ?? 'atez')}:${encodeURIComponent(saved.RABBITMQ_PASSWORD ?? 'atezpassword')}@127.0.0.1:5672`,
