@@ -12,7 +12,10 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "test:source-access": "node --import tsx scripts/test-browser-source-access.ts --gemini",
-    "test:google-search": "node --import tsx scripts/test-google-search.ts"
+    "test:google-search": "node --import tsx scripts/test-google-search.ts",
+    "workflow:install": "pnpm --dir workflow install --frozen-lockfile",
+    "workflow:check": "pnpm --dir workflow typecheck",
+    "workflow:test": "pnpm --dir workflow test"
   },
   "keywords": [],
   "author": "",

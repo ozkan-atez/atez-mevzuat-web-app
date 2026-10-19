@@ -1,4 +1,4 @@
-import { newScanEngine } from '../v2-integration/selection'
+import { newScanEngine } from '../scan-pipeline/selection'
 import { DateTime } from 'luxon'
 import { Prisma, type PrismaClient } from '@prisma/client'
 import type { PgBoss } from 'pg-boss'

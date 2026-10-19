@@ -1,7 +1,7 @@
 import { apiFetch } from '../../lib/apiFetch'
 import type { CompiledTemplateV2, ComponentDefinition, ComponentDraft, StudioComponent, StudioComponentDetail, TemplateDefinitionV2, TemplateFullV2, TemplateRowV2 } from './studio-types'
 
-/** v2 API istemcisi (Vite proxy: /api/v2 → v2 apps/api). Eski uçlar (/api/v1) workspaceRequest'te kalır. */
+/** Şablon stüdyosu istemcisi. /api/v2 adresleri ana API içindeki gömülü stüdyoya gider. */
 export class StudioRequestError extends Error {
   readonly status: number
   readonly issues: string[]

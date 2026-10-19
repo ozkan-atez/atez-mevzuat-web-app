@@ -24,7 +24,7 @@ const env = {
     url.pathname = '/atez_studio_v2'; url.search = ''; return url.toString()
   })(),
   AMQP_URL: saved.LOCAL_RABBITMQ_URL ?? 'amqp://localhost:5672',
-  CONFIG_DIR: resolve(root, 'v2/config'),
+  CONFIG_DIR: resolve(root, 'backend/workflow/config'),
   SOURCE_CREDENTIAL_KEY_FILE: saved.SOURCE_CREDENTIAL_KEY_FILE ?? resolve(homedir(), '.config/atez/source-credentials.key'),
   DATABASE_URL: saved.LOCAL_DATABASE_URL ?? 'postgresql://atez:atezpassword@127.0.0.1:5432/atez_db?schema=public',
   RABBITMQ_URL: saved.LOCAL_RABBITMQ_URL ?? saved.RABBITMQ_URL ?? `amqp://${encodeURIComponent(saved.RABBITMQ_USER ?? 'atez')}:${encodeURIComponent(saved.RABBITMQ_PASSWORD ?? 'atezpassword')}@127.0.0.1:5672`,

@@ -1,5 +1,5 @@
 {
-  "name": "atez-radar-v2",
+  "name": "@atez/workflow",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.0",
@@ -17,10 +17,10 @@
     "infra:down": "docker compose -f docker-compose.yml down",
     "worker": "tsx --env-file-if-exists=.env apps/worker/src/main.ts",
     "relay": "tsx --env-file-if-exists=.env apps/relay/src/main.ts",
-    "api": "tsx --env-file-if-exists=.env apps/api/src/main.ts",
     "scheduler": "tsx --env-file-if-exists=.env apps/scheduler/src/main.ts",
     "topology:export": "tsx packages/platform/src/messaging/export-cli.ts",
-    "run-once": "tsx --env-file-if-exists=.env apps/worker/src/run-once.ts"
+    "run-once": "tsx --env-file-if-exists=.env apps/worker/src/run-once.ts",
+    "studio": "tsx --env-file-if-exists=.env apps/studio/src/main.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

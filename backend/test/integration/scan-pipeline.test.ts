@@ -2,7 +2,7 @@ import { buildApp } from '../../src/app'
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PrismaClient } from '@prisma/client'
-import { executeV2Scan, importPipelineResults, type PipelineSnapshot } from '../../src/modules/v2-integration/pipeline'
+import { executeWorkflowScan, importPipelineResults, type PipelineSnapshot } from '../../src/modules/scan-pipeline/pipeline'
 import { runWithActorContext, type ActorContext } from '../../src/platform/actor-context'
 import { PrismaScanRepository } from '../../src/modules/scan-runs/infrastructure/prisma-scan-repository'
 import { PrismaTopicAnalysisRepository } from '../../src/modules/topic-analysis/infrastructure/prisma-topic-analysis-repository'
@@ -69,7 +69,7 @@ suite('V2 results in existing application screens',()=>{
  }))
  it('executes with actor context and records failures without reporting success',async()=>runWithActorContext(actor,async()=>{
   const run=await createRun(),start=vi.fn().mockResolvedValue(snapshot.id)
-  await executeV2Scan(prisma,{runId:run.id,outboxId:randomUUID(),type:'START_SCAN'},store,{start,snapshot:async()=>({...snapshot,status:'FAILED',reports:[],failures:[{node:'analyze',error:'fixture'}]}),close:async()=>{}})
+  await executeWorkflowScan(prisma,{runId:run.id,outboxId:randomUUID(),type:'START_SCAN'},store,{start,snapshot:async()=>({...snapshot,status:'FAILED',reports:[],failures:[{node:'analyze',error:'fixture'}]}),close:async()=>{}})
   expect(start).toHaveBeenCalledWith(expect.any(String),{date:snapshot.date},{kind:'user',workspaceId:actor.workspaceId,userId})
   expect((await prisma.scanRun.findUniqueOrThrow({where:{id:run.id}})).status).toBe('FAILED')
   const repository=new PrismaScanRepository(prisma)

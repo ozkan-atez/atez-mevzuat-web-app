@@ -9,7 +9,7 @@ const embeddedOrigin = 'http://embedded-studio'
 
 async function getStudio(): Promise<EmbeddedStudio> {
   if (!instance) {
-    const entry = new URL('../../../v2/apps/api/src/embedded.ts', import.meta.url).href
+    const entry = new URL('../../workflow/apps/studio/src/embedded.ts', import.meta.url).href
     instance = import(entry).then(module => module.createEmbeddedStudio(process.env))
     instance = instance!.catch(error => { instance = undefined; throw error })
   }

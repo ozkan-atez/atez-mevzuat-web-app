@@ -1,4 +1,4 @@
-/** v2 şablon stüdyosu türleri (v2/packages/contracts/src/templates.ts ile aynı biçim). */
+/** v2 şablon stüdyosu türleri (backend/workflow/packages/contracts/src/templates.ts ile aynı biçim). */
 export type ComponentCategory = 'BASLIK' | 'OZET' | 'DEGISIKLIK_KARTI' | 'KARSILASTIRMA_TABLOSU' | 'GTIP_TABLOSU' | 'ZAMAN_CIZELGESI' | 'ETKILENENLER' | 'KAYNAKLAR' | 'NOT_UYARI'
 export type ComponentOrigin = 'BUILTIN' | 'USER' | 'AI'
 export type ComponentStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'

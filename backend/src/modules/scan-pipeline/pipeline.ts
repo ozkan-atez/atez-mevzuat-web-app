@@ -21,7 +21,7 @@ export interface ApplicationPipeline {
 }
 let runtime:Promise<ApplicationPipeline>|undefined
 export function applicationPipeline():Promise<ApplicationPipeline> {
- if(!runtime){const entry=new URL('../../../../v2/apps/worker/src/application-pipeline.ts',import.meta.url).href;runtime=import(entry).then(m=>m.createApplicationPipeline(process.env));runtime=runtime!.catch(e=>{runtime=undefined;throw e})}
+ if(!runtime){const entry=new URL('../../../workflow/apps/worker/src/application-pipeline.ts',import.meta.url).href;runtime=import(entry).then(m=>m.createApplicationPipeline(process.env));runtime=runtime!.catch(e=>{runtime=undefined;throw e})}
  return runtime
 }
 export function stableId(value:string){const h=createHash('sha256').update(value).digest('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-5${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`}
@@ -32,7 +32,7 @@ export function mappedStages(snapshot:PipelineSnapshot){
  return [...groups].map(([stage,steps])=>{const totalItems=steps.reduce((n,s)=>n+s.total,0),completedItems=Math.min(totalItems,steps.reduce((n,s)=>n+s.succeeded+s.skipped,0)),failedItems=steps.reduce((n,s)=>n+s.failed,0);return {stage,totalItems,completedItems,failedItems,status:failedItems?'FAILED' as const:steps.every(s=>s.closed)?(totalItems?'COMPLETED' as const:'SKIPPED' as const):totalItems?'RUNNING' as const:'PENDING' as const}})
 }
 
-export async function executeV2Scan(prisma:PrismaClient,command:ScanCommand,store:Pick<ObjectStore,'putRunFile'|'getContent'>,pipeline?:ApplicationPipeline){
+export async function executeWorkflowScan(prisma:PrismaClient,command:ScanCommand,store:Pick<ObjectStore,'putRunFile'|'getContent'>,pipeline?:ApplicationPipeline){
  const run=await prisma.scanRun.findUniqueOrThrow({where:{id:command.runId}})
  const config=(run.workspaceConfig??{}) as Record<string,unknown>
  const template=config.template as {studioSnapshot?:{id:string;revision:number}}|null

@@ -1,4 +1,4 @@
-import { newScanEngine, usesV2 } from '../../v2-integration/selection'
+import { newScanEngine, usesWorkflowEngine } from '../../scan-pipeline/selection'
 import { backfillDocumentArchive } from '../../documents/application/backfill-document-archive'
 import {getActorContext,privateActorScope,jobInitiatorFields,reportAccessWhere,topicAccessWhere} from '../../../platform/actor-context'
 import {createHash} from 'node:crypto'
@@ -404,7 +404,7 @@ export class PrismaScanRepository {
     }))
     return {
       id: run.id, sourceKeys: run.sourceKeys, status: run.status, currentStage: run.currentStage,
-      v2RetryAvailable: usesV2(run.workspaceConfig) && ['FAILED','PARTIAL'].includes(run.status),
+      v2RetryAvailable: usesWorkflowEngine(run.workspaceConfig) && ['FAILED','PARTIAL'].includes(run.status),
       targetDate: run.targetDate.toISOString().slice(0, 10), startedAt: run.startedAt?.toISOString() ?? null,
       completedAt: run.completedAt?.toISOString() ?? null, errorSummary: run.errorSummary,
       filter: filterJob ? {
@@ -713,7 +713,7 @@ export class PrismaScanRepository {
       }
       const run = await tx.scanRun.findUnique({ where: { id: runId }, include: { aiJobs: { where: { kind: 'DOCUMENT_FILTER' } } } })
       const job = run?.aiJobs[0]
-      if(run && usesV2(run.workspaceConfig) && ['FAILED','PARTIAL'].includes(run.status)) {
+      if(run && usesWorkflowEngine(run.workspaceConfig) && ['FAILED','PARTIAL'].includes(run.status)) {
         const actor=getActorContext()
         if(actor && (run.workspaceId!==actor.workspaceId || (run.initiatorUserId && run.initiatorUserId!==actor.userId)))throw new AiFilterRetryConflictError('Tarama sahibi uyuşmuyor.')
         const claimed=await tx.scanRun.updateMany({where:{id:runId,status:run.status},data:{status:'QUEUED',errorSummary:null,completedAt:null}})

@@ -1,4 +1,4 @@
-# v2 (pnpm monorepo): tek imaj; servis rolü komutla seçilir (api / worker / relay / scheduler / db:migrate).
+# Workflow workspace (pnpm): tek imaj; servis rolü komutla seçilir (studio / worker / relay / scheduler / db:migrate).
 FROM node:22-bookworm-slim
 WORKDIR /app
 RUN apt-get update \
@@ -10,4 +10,4 @@ RUN pnpm install --frozen-lockfile && chown -R node:node /app
 ENV NODE_ENV=production HOST=0.0.0.0 COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 USER node
 EXPOSE 3100
-CMD ["pnpm", "api"]
+CMD ["pnpm", "studio"]

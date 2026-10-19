@@ -4,7 +4,7 @@
 
 Bu dal, Antigravity klasöründe `localhost:5173` üzerinde kullanılan sürümü esas alır. Arayüz aynı adreste, ana API `3001` üzerinde çalışır. Şablon stüdyosu artık API/rapor worker’ı içine gömülüdür; ayrı `3101` servisi gerekmez. Mevcut ana ve stüdyo veritabanları ayrı tutulur ve verileri korunur. V2 tarama/analiz motoru yeni Resmî Gazete taramalarında mevcut ekranlara bağlıdır; geçmiş kayıtlar ve diğer kaynak bağlayıcıları korunur. Ayrıntılar için V2 backend geçiş notlarına bakın.
 
-Mevcut kurulumu güncellerken `v2/` içinde `pnpm install --frozen-lockfile`, `frontend/` içinde `npm run build`, ardından proje kökünde `./deploy/install-local-services.sh` çalıştırılır. Bu geçiş için migration veya veritabanı sıfırlama gerekmez. Yeni makine kurulumu mevcut `.env`, yerel kimlik yapılandırması ve veritabanı yedeklerini ayrıca gerektirir; bunlar GitHub’a taşınmaz. Ayrıntılar: [şablon stüdyosu işletim notları](docs/operations/template-studio.md).
+Mevcut kurulumu güncellerken `backend/workflow/` içinde `pnpm install --frozen-lockfile`, `frontend/` içinde `npm run build`, ardından proje kökünde `./deploy/install-local-services.sh` çalıştırılır. Bu geçiş için migration veya veritabanı sıfırlama gerekmez. Yeni makine kurulumu mevcut `.env`, yerel kimlik yapılandırması ve veritabanı yedeklerini ayrıca gerektirir; bunlar GitHub’a taşınmaz. Ayrıntılar: [şablon stüdyosu işletim notları](docs/operations/template-studio.md).
 
 Bu sürüm, manuel olarak seçilen bir tarih için Resmî Gazete ana ve mükerrer sayılarını; ilanlar dahil tüm belgeleri ve belge içindeki desteklenen dosyaları toplar. Başlık ve gerektiğinde içerik tabanlı Gemini filtresinden geçen her ilgili belge bağımsız analiz edilir, önceki resmî kaynağıyla ilişkilendirilir ve tek kartlı ATEZ HTML bültenine dönüştürülür. İlgili değişiklik yoksa Gemini çağrısı yapılmadan `00-degisiklik-yok.html` üretilir.
 
@@ -141,3 +141,7 @@ Google Search ve genel tarayıcı ajanı şu anda kapalıdır. Sohbet menüsünd
 Seçili tanımlı kaynaklardan içerik toplama, arşiv belgeleri, kayıtlı rapor/analizler, otomasyon ve işlem kayıtları kullanılabilir. Kanıt bulunmadığında asistanın eksikliği belirtmesi istenir. Kaynak toplama otomasyonları ve yetkili Tariff bağlantısı devam eder; genel internette model tabanlı araştırma açılmaz.
 
 V2 backend geçişi, veri koruma, test sonuçları ve geri dönüş: [işletim notları](docs/operations/v2-backend-integration.md).
+
+## Backend düzeni
+
+Tarama ve analiz motoru ile şablon stüdyosu `backend/workflow/` altında görevlerine göre ayrılmıştır. Ana uygulama bağlantısı `backend/src/modules/scan-pipeline/` katmanındadır. Kaynak kodda ayrı bir `v2/` kök dizini yoktur. [Modül yapısı ve geliştirme komutları](backend/workflow/README.md).

@@ -1,4 +1,4 @@
-# Yerel geliştirme altyapısı (v2). Üretimde şirketin mevcut RabbitMQ / PostgreSQL / MinIO
+# İş akışı geliştirme altyapısı. Üretimde şirketin mevcut RabbitMQ / PostgreSQL / MinIO
 # kurulumları kullanılır (§0.1); bu dosya yalnızca geliştirici makinesi içindir.
 # Portlar eski sistemle (5432/5672/9000) çakışmasın diye 55xxx aralığındadır.
 name: atez-radar-v2

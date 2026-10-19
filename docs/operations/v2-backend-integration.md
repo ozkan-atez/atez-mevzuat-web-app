@@ -25,3 +25,7 @@ Yerel çalışma çıktıları `.local/*v2*.log`, karşılaştırma kayıtları 
 Yeni taramaları eski motora yönlendirmek için yerel yapılandırmada `SCAN_ENGINE=legacy` seçilip API ve worker yeniden başlatılır. Önceden V2 olarak oluşturulmuş çalışmalar V2 olarak kalır. Kuyruk veya veritabanı silmek gerekmez. Çalışan iş sırasında restart yapılırsa ana kuyruğun 90 saniyelik lease süresi dolduktan sonra yeniden teslim aynı V2 çalışmasını sürdürür.
 
 Canlı yerel QA: 19.10.2026 tarihi için V2 taraması 13 kayıt buldu, kapsam değerlendirmesi sonrasında değişiklik yok raporu üretti. Aynı uygulamada yeniden deneme, tarama aşamaları ve rapor görüntüleme kontrol edildi. Rapor içeren analiz/karşılaştırma senaryoları gerçek test altyapısında kontrollü RG/TARIFF/AI fixture ile doğrulandı.
+
+## Kaynak kod düzeni
+
+İş akışı ve stüdyo kodu `backend/workflow/` altındadır; uygulama adaptörü `backend/src/modules/scan-pipeline/` dizinindedir. Önceki kök `v2/` dizini kaldırılmıştır. Bu yalnız kaynak kod taşımasıdır: mevcut motor kimlikleri, API adresleri, veritabanları, kuyruklar ve saklanan rapor anahtarları korunur. Ayrıntılar: [iş akışı mimarisi](../../backend/workflow/README.md).

@@ -1,5 +1,5 @@
-import { executeV2Scan } from './modules/v2-integration/pipeline'
-import { usesV2 } from './modules/v2-integration/selection'
+import { executeWorkflowScan } from './modules/scan-pipeline/pipeline'
+import { usesWorkflowEngine } from './modules/scan-pipeline/selection'
 import { dispatchConnectorTests, executeConnectorTest } from './modules/managed-sources/connector-setup'
 import { connectorQueueName } from './platform/rabbitmq'
 import { backgroundUsageModel, withUsageContext } from './modules/usage/background-usage'
@@ -196,7 +196,7 @@ async function startWorker() {
       const initiator = await prisma.scanOutbox.findUniqueOrThrow({ where: { id: command.outboxId } })
       const usageRun = await prisma.scanRun.findUniqueOrThrow({where:{id:command.runId}})
       await withJobActor(prisma, initiator, 'scan.run', () => withUsageContext({conversationId:command.runId,conversationType:usageRun.automationId || !initiator.initiatorUserId ? 'AUTOMATION':'OPERATION',mode:'ANALYSIS',usageLabel:((usageRun.workspaceConfig as any)?.automationName ?? 'Mevzuat taraması')+' · Rapor üretimi'}, () => executeScanCommand(prisma, command, job.retryCount, async resumeStalled => {
-      if (usesV2(usageRun.workspaceConfig)) return executeV2Scan(prisma, command, objectStore)
+      if (usesWorkflowEngine(usageRun.workspaceConfig)) return executeWorkflowScan(prisma, command, objectStore)
       await executeScanRun(command.runId, {
         repository,
         http,

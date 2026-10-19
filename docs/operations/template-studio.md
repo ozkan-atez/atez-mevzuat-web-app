@@ -7,12 +7,12 @@
 - `http://localhost:5173/templates`: şablon listesi, rapor tarifi, sistemin kullandığı biçim, bölüm seçimi, kaydetme ve önizleme.
 - `/templates/components`: 15 başlangıç bileşeni, filtreler ve görsel önizleme.
 - Sohbet: bileşen oluşturma/değiştirme araçları, taslak önizleme ve havuza kaydetme. Kaynak sürümde sohbetin çıktısı bileşen taslağıdır; tam şablon üretimi değildir.
-- Tarayıcı `/api/v2/*` isteklerini mevcut API'ye gönderir. Oturum, CSRF ve `config.manage` denetiminden sonra yalnız stüdyo yolları yerel v2 servisine aktarılır.
+- Tarayıcı `/api/v2/*` isteklerini mevcut API'ye gönderir. Oturum, CSRF ve `config.manage` denetiminden sonra yalnız stüdyo yolları gömülü stüdyoya aktarılır.
 - Stüdyo ana API sürecinde, ağ portu açmadan çalışır. Tarayıcı aynı `localhost:5173/api/v2/*` yolunu kullanır; istekler oturum/CSRF/yetki kontrolünden sonra süreç içinde işlenir. Ayrı 3101 dinleyicisi yoktur.
 - `atez_studio_v2` veritabanı, şablon kimlikleri, sürümleri ve bileşenler korunur. Ana `atez_db` ile veritabanı birleştirmesi yapılmaz.
 - Rapor worker’ı gerektiğinde aynı stüdyo modülünü kendi sürecinde kullanır; ayrı servise bağlanmaz.
 
-20 Ekim 2026 geçişinde mevcut veritabanlarına migration uygulanmaz. Bağımlılıklar `backend/` ve `frontend/` içinde `npm ci`, `v2/` içinde `pnpm install --frozen-lockfile` ile kurulur. `deploy/install-local-services.sh` API/worker/web servislerini günceller ve eski ayrı stüdyo servisini durdurup devre dışı bırakır. Mevcut Vertex ayarları korunur. İlk stüdyo geçişinde tarama motoru etkinleştirilmemişti. Sonraki V2 backend entegrasyonu için [geçiş notları](v2-backend-integration.md) geçerlidir; bağımsız scheduler kullanılmaz.
+20 Ekim 2026 geçişinde mevcut veritabanlarına migration uygulanmaz. Bağımlılıklar `backend/` ve `frontend/` içinde `npm ci`, `backend/workflow/` içinde `pnpm install --frozen-lockfile` ile kurulur. `deploy/install-local-services.sh` API/worker/web servislerini günceller ve eski ayrı stüdyo servisini durdurup devre dışı bırakır. Mevcut Vertex ayarları korunur. İlk stüdyo geçişinde tarama motoru etkinleştirilmemişti. Sonraki V2 backend entegrasyonu için [geçiş notları](v2-backend-integration.md) geçerlidir; bağımsız scheduler kullanılmaz.
 
 `deploy/run-local.mjs` yerel kullanımda `COMPONENT_STUDIO_URL=http://embedded-studio` işaretini kullanır. Bu bir ağ adresi değil, süreç içi taşıma seçimidir. `STUDIO_DATABASE_URL` belirtilmezse yerel PostgreSQL bağlantısının `atez_studio_v2` veritabanı kullanılır; ana uygulama bağlantısı değiştirilmez. Stüdyo modülü ana veritabanıyla aynı veritabanı adına bağlanmayı reddeder. Eski `run-studio.mjs` yalnız bağımsız kullanım/geri dönüş için korunmuştur; normal kurulum onu başlatmaz.
 
@@ -20,7 +20,7 @@
 
 Şablonlar mevcut `ReportTemplate` tablosuna kimlik ve sürümleri korunarak yansıtılır. `studioSnapshot` alanı şablon tanımını ve sürümü sabitlenmiş bileşenleri içerir. Sohbet ve otomasyon işinin başlangıcında bu snapshot dondurulur. Sonraki şablon değişiklikleri önceki raporları değiştirmez.
 
-`v2/apps/api/src/legacy-reports.ts` ve `legacy-context.ts` mevcut rapor analizini v2 renderer'a bağlayan ek uyarlamalardır. Kaynak stüdyonun sözleşmeleri, servisleri ve renderer'ı değiştirilmez. Özet, operasyonel etki, etkilenen taraflar, doğrulanmış yürürlük tarihleri, kaynaklar ve belirsizlikler aktarılır. Önizleme örnek veri kullanır; gerçek rapor üretimi yalnız işin kanıtlarını kullanır.
+`backend/workflow/apps/studio/src/legacy-reports.ts` ve `legacy-context.ts` mevcut rapor analizini iş akışı renderer'ına bağlayan ek uyarlamalardır. Kaynak stüdyonun sözleşmeleri, servisleri ve renderer'ı değiştirilmez. Özet, operasyonel etki, etkilenen taraflar, doğrulanmış yürürlük tarihleri, kaynaklar ve belirsizlikler aktarılır. Önizleme örnek veri kullanır; gerçek rapor üretimi yalnız işin kanıtlarını kullanır.
 
 Sınır: eski analiz sözleşmesindeki serbest metin karşılaştırmaları karşılaştırma notu olarak korunur; bunlardan v2'nin yapılandırılmış GTİP/oran satırları veya sayısal değişim yüzdeleri tahmin edilmez. Bu sınırlama eski analizden stüdyo raporuna dönüşüm içindir; yeni V2 taramaları yapılandırılmış analiz hattını kullanır.
 
