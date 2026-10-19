@@ -8,7 +8,16 @@ import { renderPageSkeleton } from '../templates/bulten-v2'
 let logoDataUri: string | undefined
 
 export async function renderReportHtml(spec: ReportSpec): Promise<string> {
-  if(spec.customization?.studioReport && !spec.customization.customHtml)return spec.customization.studioReport.html
+  if(spec.customization?.studioReport) {
+    const $=load(spec.customization.studioReport.html)
+    const card=$('article.card').first()
+    if(!card.length)throw new Error('Stüdyo raporunun içerik alanı bulunamadı.')
+    const content=spec.customization.customHtml ?? card.html() ?? ''
+    card.empty().append($('<div>').attr('data-field','customization.customHtml').html(sanitizeReportFragment(content)))
+    $('meta[name="x-atez-topic"]').remove()
+    $('head').append($('<meta>').attr('name','x-atez-topic').attr('content',spec.topicId??''))
+    return $.html()
+  }
   if(spec.customization?.templateReport && !spec.customization.customHtml) return renderTemplateReport(spec.customization.templateReport,{title:spec.documentTitle,reportId:spec.reportId,date:spec.displayDate,issueNumber:spec.issueNumber,topicId:spec.topicId ?? 'degisiklik-yok'})
   const cardHtml = customizeCard(renderCard(spec), spec)
   return renderPageSkeleton({

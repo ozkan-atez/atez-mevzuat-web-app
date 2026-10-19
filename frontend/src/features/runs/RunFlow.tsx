@@ -50,7 +50,7 @@ export function RunFlow({run}:{run:ScanRunDetail}) {
         <div className="run-flow-track"><span className="run-flow-indicator" role="img" aria-label={labels[state]}><Icon size={16} aria-hidden="true"/></span></div>
         <div className="run-flow-stage-body">
         {state!=='COMPLETED' && <span className="run-flow-status">{labels[state]}</span>}
-        {state==='SKIPPED' && <p>Yeni belge olmadığı için tekrar işlem gerekmedi.</p>}
+        {state==='SKIPPED' && <p>Bu aşama için ek işlem gerekmedi.</p>}
         <ul className="run-flow-logs">{keys.map(stage=>{
           const record=records.find(r=>r.stage===stage)
           if(!record) return null

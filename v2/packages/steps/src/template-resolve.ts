@@ -16,6 +16,11 @@ export async function resolveTemplate(ctx: StepContext<StepDeps>): Promise<Resol
   const components = new ComponentService(ctx.deps.db)
   const templates = new TemplateService(ctx.deps.db, components)
   await components.ensureBuiltins()
+  if (typeof ctx.runInput.templateVersionId === 'string') {
+    const pinned = await templates.getVersion(ctx.runInput.templateVersionId)
+    if (!pinned) throw new PermanentError('Dondurulan şablon sürümü bulunamadı.', 'TEMPLATE_VERSION_MISSING')
+    return { versionId: ctx.runInput.templateVersionId, definition: pinned.definition, analysisHash: hashJson(analysisView(pinned.definition)) }
+  }
   const requested = ctx.runInput.templateId
   const t = typeof requested === 'string' ? await templates.get(requested) : await templates.ensureDefault()
   if (!t) throw new PermanentError(`Şablon yok: ${String(requested)}`, 'TEMPLATE_NOT_FOUND')

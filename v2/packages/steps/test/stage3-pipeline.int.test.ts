@@ -1,3 +1,4 @@
+import { pipelineSnapshot } from '../../../apps/worker/src/application-pipeline'
 import { fileURLToPath } from 'node:url'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
@@ -160,6 +161,11 @@ describe('Aşama 3: önceki hal, kümülatif analiz ve READY rapor (sahte RG/TAR
     const [lineage] = await node(runId, 'lineage')
     expect(lineage!.output).toMatchObject({ status: 'FOUND', attempts: [{ strategy: 'TARIFF', status: 'FOUND' }] })
     const { report: r, spec, analysis } = await latestSpec()
+    const snapshot = await pipelineSnapshot({db:h.db,store:store as never},runId)
+    expect(snapshot).toMatchObject({done:true,status:'COMPLETED'})
+    expect(snapshot.reports[0]?.html).toContain('<')
+    expect(snapshot.documents.length).toBeGreaterThan(0)
+    expect(snapshot.reports[0]?.analysis.summary).toBe(analysis.summary)
     expect(r.status).toBe('READY')
     expect(spec.card).toBe('ORAN_TABLOSU')
     // Varsayılan şablon: bütün yerleşik bileşenler açık; görünme kurallarına göre bölümler.

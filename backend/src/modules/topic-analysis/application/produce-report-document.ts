@@ -23,7 +23,7 @@ export async function produceReportDocument(input:{base:ReportSpec;workspaceConf
   return {spec,html,generated}
 }
 export async function renderValidatedReport(spec:ReportSpec) {
-  if(spec.customization?.studioReport && !spec.customization.customHtml)return renderReportHtml(spec)
+  if(spec.customization?.studioReport){const html=await renderReportHtml(spec);validateReportHtml(html,{structuredTemplate:true,card:spec.card,topicId:spec.topicId,basename:'01-report.html'});return html}
   const html=await renderReportHtml(spec)
   validateReportHtml(html,{card:spec.card,topicId:spec.topicId,basename:spec.card==='K6'?'00-degisiklik-yok.html':'01-report.html',
     structuredTemplate:Boolean(spec.customization?.templateReport),

@@ -11,6 +11,7 @@
     "@atez/engine": "workspace:*",
     "@atez/steps": "workspace:*",
     "@atez/contracts": "workspace:*",
-    "drizzle-orm": "^0.38.0"
+    "drizzle-orm": "^0.38.0",
+    "@atez/modules": "workspace:*"
   }
 }

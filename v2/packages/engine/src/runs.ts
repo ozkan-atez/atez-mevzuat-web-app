@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { StartRunRequest, type Actor, type RecipeDefinition, type RunMode, type StepKey } from '@atez/contracts'
-import { enqueueStepCommand, schema, type Db, type DbOrTx } from '@atez/platform'
+import { hashJson, enqueueStepCommand, schema, type Db, type DbOrTx } from '@atez/platform'
 import { mergeWith, type RecipeRegistry } from './recipes'
 
 const { run, runStep, workItem } = schema
@@ -14,14 +14,24 @@ export interface StartedRun {
 /**
  * Run başlatır: run, run_step'ler ve kök işler + komutlar tek transaction'da (outbox).
  */
-export async function startRun(db: Db, recipes: RecipeRegistry, request: unknown, actor: Actor): Promise<StartedRun> {
+export async function startRun(db: Db, recipes: RecipeRegistry, request: unknown, actor: Actor, options: { id?: string } = {}): Promise<StartedRun> {
   const req = StartRunRequest.parse(request)
   const recipe = recipes.get(req.recipeKey)
   if (!recipe) throw new Error(`Tarif bulunamadı: ${req.recipeKey}`)
   return db.transaction(async (tx) => {
+    if (options.id) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${options.id}))`)
+      const [existing] = await tx.select().from(run).where(eq(run.id, options.id))
+      if (existing) {
+        const owner = existing.actor as Actor
+        if (owner.workspaceId !== actor.workspaceId || owner.userId !== actor.userId || existing.recipeKey !== req.recipeKey || hashJson(existing.input) !== hashJson(req.input) || existing.mode !== req.mode) throw new Error('Run identity conflict')
+        return { runId: existing.id, recipeKey: existing.recipeKey, recipeVersion: existing.recipeVersion }
+      }
+    }
     const [r] = await tx
       .insert(run)
       .values({
+        ...(options.id ? { id: options.id } : {}),
         recipeKey: recipe.key,
         recipeVersion: recipe.version,
         recipe,

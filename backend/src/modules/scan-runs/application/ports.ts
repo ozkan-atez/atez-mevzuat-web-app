@@ -54,6 +54,7 @@ export interface FetchAttemptInput {
 }
 
 export interface ScanRunDetailDto {
+  v2RetryAvailable?: boolean
   gazetteDiscovery?: { discovered: number; skipped: number }
   sourceKeys?: string[]
   sourceRuns?: Array<{ notes?:string[]; stages?: Array<{stage:string;status:string;totalItems:number;completedItems:number;error:string|null}>; id: string; status: string; source: { name: string; key: string }; documentCount: number; errorSummary: string | null }>

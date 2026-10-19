@@ -1,3 +1,4 @@
+import { newScanEngine, usesV2 } from '../../v2-integration/selection'
 import { backfillDocumentArchive } from '../../documents/application/backfill-document-archive'
 import {getActorContext,privateActorScope,jobInitiatorFields,reportAccessWhere,topicAccessWhere} from '../../../platform/actor-context'
 import {createHash} from 'node:crypto'
@@ -50,7 +51,7 @@ export class PrismaScanRepository {
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
           timezone: 'Europe/Istanbul',
           sourceKeys: input.sourceKeys ?? ['resmi-gazete'],
-          workspaceConfig: {datePolicy:input.datePolicy??'PUBLISHED_DATE'},
+          workspaceConfig: {engine:newScanEngine(),datePolicy:input.datePolicy??'PUBLISHED_DATE'},
           outbox: { create: { ...jobInitiatorFields(),requestKey: input.requestKey } },
         },
       })
@@ -87,6 +88,7 @@ export class PrismaScanRepository {
         data: {
           requestKey,
           scheduleSlot: input.slotKey,
+          workspaceConfig: {engine:newScanEngine()},
           trigger: 'CRON',
           targetDate: new Date(`${input.targetDate}T00:00:00.000Z`),
           timezone: 'Europe/Istanbul',
@@ -402,6 +404,7 @@ export class PrismaScanRepository {
     }))
     return {
       id: run.id, sourceKeys: run.sourceKeys, status: run.status, currentStage: run.currentStage,
+      v2RetryAvailable: usesV2(run.workspaceConfig) && ['FAILED','PARTIAL'].includes(run.status),
       targetDate: run.targetDate.toISOString().slice(0, 10), startedAt: run.startedAt?.toISOString() ?? null,
       completedAt: run.completedAt?.toISOString() ?? null, errorSummary: run.errorSummary,
       filter: filterJob ? {
@@ -710,6 +713,14 @@ export class PrismaScanRepository {
       }
       const run = await tx.scanRun.findUnique({ where: { id: runId }, include: { aiJobs: { where: { kind: 'DOCUMENT_FILTER' } } } })
       const job = run?.aiJobs[0]
+      if(run && usesV2(run.workspaceConfig) && ['FAILED','PARTIAL'].includes(run.status)) {
+        const actor=getActorContext()
+        if(actor && (run.workspaceId!==actor.workspaceId || (run.initiatorUserId && run.initiatorUserId!==actor.userId)))throw new AiFilterRetryConflictError('Tarama sahibi uyuşmuyor.')
+        const claimed=await tx.scanRun.updateMany({where:{id:runId,status:run.status},data:{status:'QUEUED',errorSummary:null,completedAt:null}})
+        if(!claimed.count)throw new AiFilterRetryConflictError('Tarama zaten yeniden başlatılıyor.')
+        const command=await tx.scanOutbox.create({data:{...jobInitiatorFields(),scanRunId:runId,commandType:'RETRY_AI_FILTER',requestKey}})
+        return {runId,commandId:command.id,status:'QUEUED' as const}
+      }
       if (!run || !job || run.status !== 'AWAITING_RETRY' || run.currentStage !== 'AI_FILTERING' || job.status !== 'AWAITING_RETRY') {
         throw new AiFilterRetryConflictError('AI filter is not awaiting retry')
       }

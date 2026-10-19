@@ -1,3 +1,4 @@
+import { Can } from '../auth/Can'
 import { allGazetteDocumentsSkipped, skippedReportMessage } from './gazette-discovery'
 import { RunFlow } from './RunFlow'
 import { ActionLink, PageToolbar } from '../../components/layout/PageToolbar'
@@ -89,7 +90,7 @@ export function RunDetail() {
         {run.reports?.length ? <div className="run-report-list">{run.reports.map(report=><Link key={report.id} to={`/runs/${run.id}/reports/${report.id}`}><div><strong>{report.card==='K6'?'Değişiklik bulunmadı':report.title}</strong><small>{report.card==='K6'?'Bu çalışmada raporlanacak yeni değişiklik tespit edilmedi.':`Sürüm ${report.version}`}</small></div><span>{report.card==='K6'?'Değişiklik yok raporunu aç':'Raporu aç'} →</span></Link>)}</div> : <p className="atez-run-card-subtitle">{allGazetteDocumentsSkipped(run)?skippedReportMessage:run.status==='COMPLETED'?'Bu çalışmada oluşturulmuş rapor bulunmuyor.':'Henüz rapor oluşturulmadı. Çalışma durumunu yukarıdaki akıştan takip edebilirsiniz.'}</p>}
       </section>
       <details className="run-secondary-details"><summary>Belgeler ve kapsam sonuçları · {run.counts.documents}</summary><CollectedDocuments editions={run.editions} sourceRuns={run.sourceRuns} /></details>
-      <details className="run-secondary-details"><summary>İşlem ayrıntıları ve yeniden deneme</summary><OperationSteps run={run} onRetryAiFilter={() => void handleRetry('filter')} onRetryPreviousSources={() => void handleRetry('previous-sources')} isRetrying={isRetrying} retryError={retryError} /></details>
+      <details className="run-secondary-details"><summary>İşlem ayrıntıları ve yeniden deneme</summary>{run.v2RetryAvailable && <Can permission="analysis.run"><Button onClick={() => void handleRetry('filter')} loading={isRetrying}>Taramayı yeniden dene</Button></Can>}<OperationSteps run={run} onRetryAiFilter={() => void handleRetry('filter')} onRetryPreviousSources={() => void handleRetry('previous-sources')} isRetrying={isRetrying} retryError={retryError} /></details>
 
     </div>
   )

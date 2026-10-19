@@ -1,3 +1,4 @@
+import { resolveTemplate } from '../src/template-resolve'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AiStudio, BUILTIN_COMPONENTS, ComponentService, TemplateService, ValidationFailed, applyDescriptions, applyCompiled, loadShell, runTemplateTool } from '@atez/modules'
@@ -175,4 +176,13 @@ describe('Şablon stüdyosu ve bileşen havuzu (§10.1)', () => {
     }
     expect((await templates.get(t.id))!.version).toBe(before)
   })
+  it('keeps the submitted template revision even after its latest version changes', async () => {
+    const original=await templates.create({title:'Pinned pipeline template',brief:'Original brief'})
+    await templates.save(original.id,{...original.definition,brief:'Changed brief'})
+    const result=await resolveTemplate({deps:{db:db.db},runInput:{templateVersionId:original.versionId}} as never)
+    expect(result.versionId).toBe(original.versionId)
+    expect(result.definition.brief).toBe('Original brief')
+  })
+
+
 })

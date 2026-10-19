@@ -31,7 +31,7 @@ export function RunReportDetail() {
       {canEdit && html && !error && <ReviseButton onClick={() => setEditing(true)} />}
     </PageToolbar>
     {error ? <Alert type="error" showIcon title="Bülten yüklenemedi" description={error} /> : !html ? <Skeleton active paragraph={{ rows: 8 }} /> :
-      <iframe title="Değişiklik yok bülteni" srcDoc={html} sandbox="allow-popups allow-popups-to-escape-sandbox" className="atez-published-report-frame" />}
+      <iframe title="Tarama raporu" srcDoc={html} sandbox="allow-popups allow-popups-to-escape-sandbox" className="atez-published-report-frame" />}
     <ReportCorrectionDrawer open={editing} onClose={() => setEditing(false)}><div className="atez-report-correction-content">{editing && reportId && <ReportWorkspace topicId={reportId} popup onRevisionSaved={() => setReload(value => value + 1)} />}</div></ReportCorrectionDrawer>
   </div>
 }

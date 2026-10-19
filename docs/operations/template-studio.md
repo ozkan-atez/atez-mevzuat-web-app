@@ -12,7 +12,7 @@
 - `atez_studio_v2` veritabanı, şablon kimlikleri, sürümleri ve bileşenler korunur. Ana `atez_db` ile veritabanı birleştirmesi yapılmaz.
 - Rapor worker’ı gerektiğinde aynı stüdyo modülünü kendi sürecinde kullanır; ayrı servise bağlanmaz.
 
-20 Ekim 2026 geçişinde mevcut veritabanlarına migration uygulanmaz. Bağımlılıklar `backend/` ve `frontend/` içinde `npm ci`, `v2/` içinde `pnpm install --frozen-lockfile` ile kurulur. `deploy/install-local-services.sh` API/worker/web servislerini günceller ve eski ayrı stüdyo servisini durdurup devre dışı bırakır. Mevcut Vertex ayarları korunur. V2 tarama motoru, worker, relay ve scheduler bu geçiş kapsamında etkinleştirilmez.
+20 Ekim 2026 geçişinde mevcut veritabanlarına migration uygulanmaz. Bağımlılıklar `backend/` ve `frontend/` içinde `npm ci`, `v2/` içinde `pnpm install --frozen-lockfile` ile kurulur. `deploy/install-local-services.sh` API/worker/web servislerini günceller ve eski ayrı stüdyo servisini durdurup devre dışı bırakır. Mevcut Vertex ayarları korunur. İlk stüdyo geçişinde tarama motoru etkinleştirilmemişti. Sonraki V2 backend entegrasyonu için [geçiş notları](v2-backend-integration.md) geçerlidir; bağımsız scheduler kullanılmaz.
 
 `deploy/run-local.mjs` yerel kullanımda `COMPONENT_STUDIO_URL=http://embedded-studio` işaretini kullanır. Bu bir ağ adresi değil, süreç içi taşıma seçimidir. `STUDIO_DATABASE_URL` belirtilmezse yerel PostgreSQL bağlantısının `atez_studio_v2` veritabanı kullanılır; ana uygulama bağlantısı değiştirilmez. Stüdyo modülü ana veritabanıyla aynı veritabanı adına bağlanmayı reddeder. Eski `run-studio.mjs` yalnız bağımsız kullanım/geri dönüş için korunmuştur; normal kurulum onu başlatmaz.
 

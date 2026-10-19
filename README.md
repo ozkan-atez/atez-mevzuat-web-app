@@ -139,3 +139,5 @@ Yeni uygulama çağrıları `provider=vertex` ile mevcut kullanım tablosuna kay
 Google Search ve genel tarayıcı ajanı şu anda kapalıdır. Sohbet menüsünde bu seçenekler sunulmaz; eski istemcilerden gelen `webSearch=true` veya `browserAgent=true` istekleri API'de reddedilir. Sohbet uygulama katmanı da model veya tarayıcı çağrısı yapmadan bu istekleri engeller.
 
 Seçili tanımlı kaynaklardan içerik toplama, arşiv belgeleri, kayıtlı rapor/analizler, otomasyon ve işlem kayıtları kullanılabilir. Kanıt bulunmadığında asistanın eksikliği belirtmesi istenir. Kaynak toplama otomasyonları ve yetkili Tariff bağlantısı devam eder; genel internette model tabanlı araştırma açılmaz.
+
+V2 backend geçişi, veri koruma, test sonuçları ve geri dönüş: [işletim notları](docs/operations/v2-backend-integration.md).

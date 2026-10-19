@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { and, eq, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { EXCHANGES, PARKING_QUEUE, enqueueStepCommand, schema } from '@atez/platform'
 import { SYSTEM_ACTOR } from '@atez/contracts'
-import { Reaper, RecipeRegistry, StepRegistry } from '@atez/engine'
+import { startRun, Reaper, RecipeRegistry, StepRegistry } from '@atez/engine'
 import { startHarness, type Harness } from '@atez/engine/testing'
 import { demoJoin, demoSplit, demoUpper, type DemoDeps } from '../src/demo'
 
@@ -23,6 +24,16 @@ describe('Aşama 1: örnek tarif uçtan uca (Postgres + RabbitMQ)', () => {
   const items = (runId: string, nodeId: string) =>
     h.db.db.select().from(workItem).where(and(eq(workItem.runId, runId), eq(workItem.nodeId, nodeId))).orderBy(workItem.itemKey)
   const joinOutput = async (runId: string) => (await items(runId, 'join'))[0]?.output as { text: string; count: number } | undefined
+
+  it('application delivery identity is idempotent and rejects conflicting requests', async () => {
+    const id=randomUUID(),recipes=RecipeRegistry.fromDir(RECIPES)
+    const request={recipeKey:'demo-words',input:{text:'identity'},mode:'FILL_MISSING'}
+    const [a,b]=await Promise.all([startRun(h.db.db,recipes,request,SYSTEM_ACTOR,{id}),startRun(h.db.db,recipes,request,SYSTEM_ACTOR,{id})])
+    expect(a.runId).toBe(b.runId)
+    await expect(startRun(h.db.db,recipes,{...request,input:{text:'different'}},SYSTEM_ACTOR,{id})).rejects.toThrow('Run identity conflict')
+    await expect(startRun(h.db.db,recipes,request,{...SYSTEM_ACTOR,workspaceId:randomUUID()},{id})).rejects.toThrow('Run identity conflict')
+    expect(await h.waitForRun(id)).toBe('COMPLETED')
+  })
 
   it('fan-out, CEL koşulu ve bariyerle tamamlanır', async () => {
     const runId = await h.start('demo-words', { text: 'alpha beta skip gamma' })

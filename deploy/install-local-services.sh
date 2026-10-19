@@ -19,6 +19,8 @@ for mode in ['api','worker','web']:
               'EnvironmentVariables':{'PATH':f'{Path(node).parent}:/usr/local/bin:/usr/bin:/bin'}}
     with (agents/f'{label}.plist').open('wb') as output: plistlib.dump(config,output)
 PY
+"$atez_node" "$atez_root/deploy/ensure-v2-queue.mjs"
+
 # The studio now runs inside the API/worker without a separate listener.
 if launchctl print "gui/$atez_uid/io.atez.mevzuat.studio" >/dev/null 2>&1; then
   launchctl bootout "gui/$atez_uid/io.atez.mevzuat.studio"

@@ -75,7 +75,7 @@ export function OperationSteps({ run, onRetryAiFilter, onRetryPreviousSources, i
                     {status === 'SKIPPED' ? 'Gerekmedi' : status === 'COMPLETED' ? 'Tamamlandı' : status === 'RUNNING' ? 'İşleniyor' : status === 'AWAITING_RETRY' ? 'Yeniden deneme bekliyor' : status === 'FAILED' ? 'Hatalı' : 'Bekliyor'}
                   </Tag>
                 </div>
-                <p className="atez-operation-description">{status === 'SKIPPED' ? 'Belgeler bu otomasyonda daha önce işlendi; yeni belge olmadığı için bu adım gerekmedi.' : step.description}</p>
+                <p className="atez-operation-description">{status === 'SKIPPED' ? (allGazetteDocumentsSkipped(run) ? 'Belgeler bu otomasyonda daha önce işlendi; yeni belge olmadığı için bu adım gerekmedi.' : 'Bu aşama için işlenecek kapsam içi belge bulunmadı.') : step.description}</p>
                 {execution && execution.totalItems > 0 && (
                   <div className="atez-run-progress"><Progress strokeColor={status === 'FAILED' ? 'var(--atez-error)' : status === 'COMPLETED' ? 'var(--atez-success)' : 'var(--atez-accent)'} railColor="var(--atez-border)" percent={Math.round(execution.completedItems / execution.totalItems * 100)} size="small" showInfo={false} /><span>{execution.completedItems}/{execution.totalItems} tamamlandı{execution.failedItems > 0 ? ` · ${execution.failedItems} hatalı` : ''}</span></div>
                 )}

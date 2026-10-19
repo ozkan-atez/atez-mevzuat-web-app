@@ -108,6 +108,16 @@ describe('RunDetail', () => {
     expect(EventSourceConstructor).not.toHaveBeenCalled()
   })
 
+  it('retries a failed V2 workflow on its existing scan record', async () => {
+    const run={id:'run-1',status:'FAILED',v2RetryAvailable:true,currentStage:'GENERATING_REPORTS',targetDate:'2026-10-19',startedAt:null,completedAt:null,errorSummary:'Rapor hazırlanamadı.',counts:{editions:1,documents:1,assets:0,completedItems:1,totalItems:2,failedItems:1},stages:[],editions:[],reports:[]}
+    const fetchMock=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(run))).mockResolvedValueOnce(new Response(JSON.stringify({runId:'run-1',status:'QUEUED'}),{status:202})).mockResolvedValueOnce(new Response(JSON.stringify({...run,status:'QUEUED',v2RetryAvailable:false,errorSummary:null})))
+    vi.stubGlobal('fetch',fetchMock);vi.stubGlobal('EventSource',SilentEventSource)
+    renderDetail()
+    await userEvent.click(await screen.findByRole('button',{name:'Taramayı yeniden dene'}))
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/scan-runs/run-1/ai-filter/retry',expect.objectContaining({method:'POST'}))
+    expect((await screen.findAllByText('Sırada'))[0]).toBeVisible()
+  })
+
   it('retries a paused AI filter on the same run', async () => {
     const pausedRun = {
       id: 'run-1', status: 'AWAITING_RETRY', currentStage: 'AI_FILTERING', targetDate: '2026-07-11',

@@ -80,6 +80,9 @@ importers:
       '@atez/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@atez/modules':
+        specifier: workspace:*
+        version: link:../../packages/modules
       '@atez/platform':
         specifier: workspace:*
         version: link:../../packages/platform

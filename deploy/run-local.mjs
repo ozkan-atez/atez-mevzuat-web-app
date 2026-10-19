@@ -17,6 +17,7 @@ if (!['api', 'worker', 'web'].includes(mode)) throw new Error('api, worker veya 
 const env = {
   ...process.env, ...saved,
   NODE_ENV: 'production',
+  SCAN_ENGINE: saved.SCAN_ENGINE ?? 'v2',
   COMPONENT_STUDIO_URL: 'http://embedded-studio',
   STUDIO_DATABASE_URL: saved.STUDIO_DATABASE_URL ?? (() => {
     const url = new URL(saved.LOCAL_DATABASE_URL ?? 'postgresql://atez:atezpassword@127.0.0.1:5432/atez_db')
@@ -37,6 +38,7 @@ const env = {
   PORT: '3001', API_HOST: '127.0.0.1',
   NODE_EXTRA_CA_CERTS: resolve(root, 'backend/certs/GeoTrustTLSRSACAG1.pem'),
 }
+env.V2_AMQP_URL = saved.V2_AMQP_URL ?? (() => { const url=new URL(env.RABBITMQ_URL); url.pathname='/atez-v2'; return url.href })()
 const args = mode === 'web' ? [resolve(root, 'deploy/serve-web.mjs')] : ['--import', 'tsx', `src/${mode === 'api' ? 'server' : 'worker'}.ts`]
 const child = spawn(process.execPath, args, { cwd: resolve(root, 'backend'), env, stdio: 'inherit' })
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal))
