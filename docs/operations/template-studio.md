@@ -22,7 +22,7 @@
 
 `v2/apps/api/src/legacy-reports.ts` ve `legacy-context.ts` mevcut rapor analizini v2 renderer'a bağlayan ek uyarlamalardır. Kaynak stüdyonun sözleşmeleri, servisleri ve renderer'ı değiştirilmez. Özet, operasyonel etki, etkilenen taraflar, doğrulanmış yürürlük tarihleri, kaynaklar ve belirsizlikler aktarılır. Önizleme örnek veri kullanır; gerçek rapor üretimi yalnız işin kanıtlarını kullanır.
 
-Sınır: eski analiz sözleşmesindeki serbest metin karşılaştırmaları karşılaştırma notu olarak korunur; bunlardan v2'nin yapılandırılmış GTİP/oran satırları veya sayısal değişim yüzdeleri tahmin edilmez. V2 analiz hattının tamamı bu iş kapsamında mevcut tarama motorunun yerine geçirilmemiştir.
+Sınır: eski analiz sözleşmesindeki serbest metin karşılaştırmaları karşılaştırma notu olarak korunur; bunlardan v2'nin yapılandırılmış GTİP/oran satırları veya sayısal değişim yüzdeleri tahmin edilmez. Bu sınırlama eski analizden stüdyo raporuna dönüşüm içindir; yeni V2 taramaları yapılandırılmış analiz hattını kullanır.
 
 Mevcut eski HTML/definition şablonlarının rapor yolu korunur. Uygulanmış `20261019140000_template_studio` göçünün ek tabloları geri alınmaz; güncel stüdyo için otoritatif depolama v2 veritabanıdır. `20261019160000_link_v2_studio` snapshot bağlantısını ekler. Akademi kaldırma göçü ayrı tutulur.
 
@@ -34,7 +34,7 @@ Göç öncesi yerel yedek: `.local/backups/template-studio-20261019/before-studi
 
 ## Dev aktarımı ve geri dönüş
 
-Çalışan Antigravity sürümü `dev` dalının içerik tabanıdır; önceki dev geçmişi merge commit ile korunmuştur. Yeni V2 tarama/analiz backend entegrasyonu sonraki iştir. Yerel geçiş yedeği `.local/backups/dev-promotion-20261020/` altında iki PostgreSQL dump’ı, kaynak arşivi ve eski stüdyo servis tanımını içerir; GitHub’a gönderilmez.
+Çalışan Antigravity sürümü `dev` dalının içerik tabanıdır; önceki dev geçmişi merge commit ile korunmuştur. Sonraki V2 tarama/analiz backend entegrasyonu [ayrı işletim notunda](v2-backend-integration.md) açıklanır. Yerel geçiş yedeği `.local/backups/dev-promotion-20261020/` altında iki PostgreSQL dump’ı, kaynak arşivi ve eski stüdyo servis tanımını içerir; GitHub’a gönderilmez.
 
 Geri dönüşte kaynak arşivi veya geçiş öncesi commit kullanılıp eski servis kurulumu yeniden çalıştırılabilir. Veritabanı geçişi yapılmadığından bu değişiklik için veritabanı geri yüklemek gerekmez.
 

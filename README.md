@@ -2,7 +2,7 @@
 
 ## Dev dalının çalışma tabanı — 20 Ekim 2026
 
-Bu dal, Antigravity klasöründe `localhost:5173` üzerinde kullanılan sürümü esas alır. Arayüz aynı adreste, ana API `3001` üzerinde çalışır. Şablon stüdyosu artık API/rapor worker’ı içine gömülüdür; ayrı `3101` servisi gerekmez. Mevcut ana ve stüdyo veritabanları ayrı tutulur ve verileri korunur. V2’nin yeni tarama/analiz motorunun devreye alınması sonraki aşamadır.
+Bu dal, Antigravity klasöründe `localhost:5173` üzerinde kullanılan sürümü esas alır. Arayüz aynı adreste, ana API `3001` üzerinde çalışır. Şablon stüdyosu artık API/rapor worker’ı içine gömülüdür; ayrı `3101` servisi gerekmez. Mevcut ana ve stüdyo veritabanları ayrı tutulur ve verileri korunur. V2 tarama/analiz motoru yeni Resmî Gazete taramalarında mevcut ekranlara bağlıdır; geçmiş kayıtlar ve diğer kaynak bağlayıcıları korunur. Ayrıntılar için V2 backend geçiş notlarına bakın.
 
 Mevcut kurulumu güncellerken `v2/` içinde `pnpm install --frozen-lockfile`, `frontend/` içinde `npm run build`, ardından proje kökünde `./deploy/install-local-services.sh` çalıştırılır. Bu geçiş için migration veya veritabanı sıfırlama gerekmez. Yeni makine kurulumu mevcut `.env`, yerel kimlik yapılandırması ve veritabanı yedeklerini ayrıca gerektirir; bunlar GitHub’a taşınmaz. Ayrıntılar: [şablon stüdyosu işletim notları](docs/operations/template-studio.md).
 
