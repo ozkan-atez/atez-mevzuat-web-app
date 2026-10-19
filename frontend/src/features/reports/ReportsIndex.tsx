@@ -1,11 +1,11 @@
-import { ActionLink, ReviseButton } from '../../components/layout/PageToolbar'
+import { ActionLink } from '../../components/layout/PageToolbar'
 import { StandaloneReportCorrection } from './StandaloneReportCorrection'
 import { useCan } from '../auth/AuthProvider'
 import { ReportCorrectionDrawer } from '../revision/ReportCorrectionDrawer'
 import { ReportWorkspace } from '../revision/ReportWorkspace'
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Empty, Grid, Input, Select, Space, Table, Tag, Typography } from 'antd'
-import { EyeOutlined, ReloadOutlined } from '@ant-design/icons'
+import { EditOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons'
 import { listStandaloneReports, type StandaloneReport } from './standalone-api'
 import { StartScanButton } from '../scans/StartScanButton'
 import { useNavigate } from 'react-router-dom'
@@ -126,7 +126,7 @@ export function ReportsIndex() {
             { title: 'Otomasyon', key:'automation',responsive:['md'],width:190,render:(_value,row)=>row.automationId ? <ActionLink to={`/automations/${row.automationId}`}>{row.automationName || 'Otomasyon ayrıntıları'}</ActionLink> : <Typography.Text type="secondary">{row.automationName || (row.creationType==='Otomasyon'?'Zamanlanmış tarama':'—')}</Typography.Text> },
             { title: 'Rapor içeriği', dataIndex: 'card', key: 'card', responsive: ['md'], render: (value: string) => <Tag color={value === 'K6' ? 'green' : 'purple'}>{value === 'K6' ? 'Değişiklik yok' : value === 'DOCUMENT' ? 'Belge analizi' : 'Mevzuat raporu'}</Tag> },
             { title: 'Sürüm', dataIndex: 'version', key: 'version', responsive: ['sm'], render: (value: number) => `v${value}` },
-            { title: 'İşlemler', key: 'open', width: 236, align: 'right', render: (_value, row) => <div className="atez-report-row-actions"><ActionLink icon={<EyeOutlined aria-hidden />} to={row.standalone ? `/reports/documents/${row.id}` : row.topicId ? `/reports/${row.topicId}` : `/runs/${row.runId}/reports/${row.id}`}>İncele</ActionLink>{canEdit && <ReviseButton type="default" onClick={() => setEditing(row)} />}</div> },
+            { title: 'İşlemler', key: 'open', width: 136, align: 'right', render: (_value, row) => <div className="atez-report-row-actions">{canEdit ? <Button type="default" icon={<EditOutlined aria-hidden />} className="atez-page-action" onClick={() => setEditing(row)}>İncele</Button> : <ActionLink icon={<EyeOutlined aria-hidden />} to={row.standalone ? `/reports/documents/${row.id}` : row.topicId ? `/reports/${row.topicId}` : `/runs/${row.runId}/reports/${row.id}`}>İncele</ActionLink>}</div> },
           ]}
         />
       </Card>

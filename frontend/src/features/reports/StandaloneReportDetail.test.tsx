@@ -6,11 +6,11 @@ import { StandaloneReportDetail } from './StandaloneReportDetail'
 import { ReportsIndex } from './ReportsIndex'
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
 describe('standalone report publication views',()=>{
-  it('shows standalone reports alongside scan reports with its own route',async()=>{
+  it('shows standalone reports alongside scan reports with an inspect action',async()=>{
     vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>new Response(JSON.stringify(String(input).includes('standalone-reports')?{reports:[{id:'standalone1',title:'Yüklenen belgeden rapor',latestVersion:2,operationTaskId:'root1',createdAt:'2026-10-11T10:00:00Z'}]}:{runs:[]}))))
     render(<MemoryRouter><ReportsIndex /></MemoryRouter>)
     expect(await screen.findByText('Yüklenen belgeden rapor')).toBeVisible()
-    expect(screen.getByRole('link',{name:'İncele'})).toHaveAttribute('href','/reports/documents/standalone1')
+    expect(screen.getByRole('button',{name:'İncele'})).toBeEnabled()
   })
   it('loads each immutable published revision and keeps preview sandboxed',async()=>{
     vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{

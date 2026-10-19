@@ -63,14 +63,15 @@ describe('ReportsIndex', () => {
     render(<MemoryRouter><ReportsIndex /></MemoryRouter>)
     expect(await screen.findByText('İthalat Tebliği')).toBeVisible()
     expect(screen.getByText('Değişiklik yok bülteni')).toBeVisible()
-    expect(screen.getAllByRole('link', { name: 'İncele' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'İncele' })).toHaveLength(2)
 
-    await userEvent.click(screen.getAllByRole('button', {name:'Revize et'})[1]!)
+    await userEvent.click(screen.getAllByRole('button', {name:'İncele'})[1]!)
     expect(await screen.findByTestId('report-editor')).toHaveTextContent('report-2')
     await userEvent.click(screen.getByRole('button', {name:'Close'}))
 
     await userEvent.type(screen.getByRole('searchbox', { name: 'Raporlarda ara' }), 'İthalat')
     await waitFor(() => expect(screen.queryByText('Değişiklik yok bülteni')).not.toBeInTheDocument())
-    expect(screen.getByRole('link', { name: 'İncele' })).toHaveAttribute('href', '/reports/topic-1')
+    await userEvent.click(screen.getByRole('button', { name: 'İncele' }))
+    expect(await screen.findByTestId('report-editor')).toHaveTextContent('topic-1')
   })
 })
