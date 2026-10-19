@@ -1,15 +1,17 @@
 import { SourceIcon } from './SourceIcon'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Form, Input, Modal, Spin, Typography } from 'antd'
-import { FileTextOutlined, GlobalOutlined, PlusOutlined, CloudUploadOutlined, LinkOutlined, SearchOutlined, CloseOutlined, CheckOutlined, ArrowRightOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
+import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Space, Spin, Typography } from 'antd'
+import { EditOutlined, DeleteOutlined, FileTextOutlined, GlobalOutlined, PlusOutlined, CloudUploadOutlined, LinkOutlined, SearchOutlined, CloseOutlined, CheckOutlined, ArrowRightOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { Can } from '../auth/Can'
 import { apiFetch } from '../../lib/apiFetch'
 import { workspaceRequest } from './api'
+import type { ManagedSource } from './ManagedSourcesPanel'
 import './connectors.css'
 
-type Connector = { id:string; name:string; baseUrl:string; key:string; profiles:Array<{status:string;verifiedAt:string|null;validation:{message?:string;checkedAt?:string}|null}> }
+type Connector = { isActive?:boolean; id:string; name:string; baseUrl:string; key:string; profiles:Array<{status:string;verifiedAt:string|null;validation:{message?:string;checkedAt?:string}|null}> }
 type Document = {id:string;title:string;canonicalUrl?:string;latestVersion:{mimeType:string;extractionStatus:string}|null}
-type Extra = {id:string;title:string;url:string;fetchError:string|null;fetchedAt:string|null}
+type Extra = ManagedSource
+type EditableSource = { kind: 'connector'; source: Connector } | { kind: 'extra'; source: Extra }
 const fileLabel=(type:string|undefined)=>type==='application/pdf'?'PDF':type?.includes('wordprocessingml')?'Word belgesi':type?.includes('spreadsheetml')?'Excel tablosu':type?.startsWith('image/')?'Görsel':type==='text/csv'?'CSV tablosu':'Belge'
 const labels:Record<string,string>={VERIFIED:'Bağlı',SETUP_QUEUED:'Kurulum sırada',SETUP_RUNNING:'Kontrol ediliyor',NEEDS_REVIEW:'Kontrol gerekli',DRAFT:'Kurulum bekliyor'}
 const busyStatus=(status:string)=>['SETUP_QUEUED','SETUP_RUNNING'].includes(status)
@@ -25,20 +27,49 @@ export function ConnectorsPage(){
   const [query,setQuery]=useState(''),[dragging,setDragging]=useState(false)
   const fileInput=useRef<HTMLInputElement>(null)
   const [issue,setIssue]=useState<Connector|null>(null)
-  const [form]=Form.useForm(),[accountForm]=Form.useForm()
+  const [form]=Form.useForm(),[accountForm]=Form.useForm(),[editForm]=Form.useForm()
+  const [editing,setEditing]=useState<EditableSource|null>(null)
+  const [editError,setEditError]=useState('')
   const load=useCallback(async()=>{
-    const result=await workspaceRequest<{sources:Connector[]}>('connectors');setSources(result.sources);setCatalogLoaded(true)
+    const result=await workspaceRequest<{sources:Connector[]}>('connectors');setSources(result.sources.filter(source=>source.isActive!==false));setCatalogLoaded(true)
     const results=await Promise.allSettled([
       workspaceRequest<{documents:Document[]}>('documents?origin=UPLOAD&limit=100'),
       workspaceRequest<{sources:Extra[]}>('managed-sources'),
     ])
     if(results[0].status==='fulfilled')setDocuments(results[0].value.documents??[])
     else if(!/403/.test(String(results[0].reason?.status)))setError('Belge arşivi yüklenemedi: '+errorMessage(results[0].reason))
-    if(results[1].status==='fulfilled')setExtras(results[1].value.sources??[])
+    if(results[1].status==='fulfilled')setExtras((results[1].value.sources??[]).filter(source=>source.isActive!==false))
   },[])
   useEffect(()=>{void load().catch(e=>setError(errorMessage(e))).finally(()=>setLoading(false))},[load])
   useEffect(()=>{if(!sources.some(s=>busyStatus(s.profiles?.[0]?.status??'')))return;const timer=setInterval(()=>void load().catch(e=>setError(errorMessage(e))),3000);return()=>clearInterval(timer)},[sources,load])
   async function test(id:string,path:string,body?:unknown){setBusy(id);setError('');setNotice('');try{const result=await workspaceRequest<{message?:string}>(path,{method:'POST',...(body?{body:JSON.stringify(body)}:{})});setNotice(result.message??'Bağlantı kontrolü sıraya alındı. Sonuç burada görünecek.');await load()}catch(e){setError(errorMessage(e))}finally{setBusy(null)}}
+  function edit(item:EditableSource){
+    setEditError('');setEditing(item)
+    editForm.setFieldsValue({name:item.kind==='connector'?item.source.name:item.source.title,url:item.kind==='connector'?item.source.baseUrl:item.source.url})
+  }
+  async function saveEdit(){
+    const values=await editForm.validateFields().catch(()=>null);if(!values||!editing)return
+    setBusy('edit');setEditError('')
+    try{
+      const item=editing
+      await workspaceRequest(item.kind==='connector'?`sources/${item.source.id}`:`managed-sources/${item.source.id}`,{
+        method:item.kind==='connector'?'PATCH':'PUT',
+        body:JSON.stringify(item.kind==='connector'?{name:values.name.trim(),baseUrl:values.url.trim()}:{title:values.name.trim(),url:values.url.trim(),description:item.source.description,keywords:item.source.keywords,useInChat:item.source.useInChat,useInRuns:item.source.useInRuns,isActive:item.source.isActive}),
+      })
+      setEditing(null);setNotice('Kaynak güncellendi.');await load()
+    }catch(e){setEditError(errorMessage(e))}finally{setBusy(null)}
+  }
+  async function remove(item:EditableSource){
+    setBusy(item.source.id);setError('');setNotice('')
+    try{
+      await workspaceRequest(`${item.kind==='connector'?'sources':'managed-sources'}/${item.source.id}`,{method:'DELETE'})
+      setNotice('Kaynak silindi. Geçmiş rapor ve kayıtlar korundu.');await load()
+    }catch(e){setError(errorMessage(e))}finally{setBusy(null)}
+  }
+  function managementActions(item:EditableSource){
+    const name=item.kind==='connector'?item.source.name:item.source.title
+    return <Space size={4}><Button type="text" size="small" icon={<EditOutlined/>} title="Düzenle" disabled={!!busy} onClick={()=>edit(item)} aria-label={`${name} kaynağını düzenle`}/><Popconfirm title="Kaynak silinsin mi?" description={`${name} listeden kaldırılır ve yeni taramalarda kullanılmaz. Geçmiş rapor ve kayıtlar korunur.`} okText="Sil" cancelText="Vazgeç" okButtonProps={{danger:true}} onConfirm={()=>remove(item)}><Button type="text" size="small" icon={<DeleteOutlined/>} title="Sil" danger disabled={!!busy} aria-label={`${name} kaynağını sil`}/></Popconfirm></Space>
+  }
   function chooseFile(candidate:File|undefined){
     if(!candidate)return
     if(!/\.(pdf|docx|xlsx|csv|txt|png|jpe?g|webp)$/i.test(candidate.name)){setError('Bu dosya türü desteklenmiyor. PDF, Word, Excel, CSV, metin veya görsel seçin.');return}
@@ -77,14 +108,21 @@ export function ConnectorsPage(){
         <SourceIcon url={source.baseUrl} sourceKey={source.key}/>
         <div className="connector-identity"><h3>{source.name||source.key}</h3><a href={source.baseUrl} target="_blank" rel="noreferrer">{source.baseUrl.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a>{status==='NEEDS_REVIEW'&&<p className="connector-error-summary">{cleanMessage(profile?.validation?.message??'Bağlantı doğrulanamadı.')}</p>}</div>
         <span className="connector-kind">Web{source.key==='tariff'&&<small>API</small>}</span><div className="connector-health">{status==='NEEDS_REVIEW'?<button className="connector-status warning" onClick={()=>setIssue(source)}><i className="status-dot"/>Kontrol gerekli · Ayrıntılar <ArrowRightOutlined aria-hidden="true"/></button>:<span className={`connector-status ${status==='VERIFIED'?'good':''}`}><i className="status-dot"/>{labels[status]??'Kontrol gerekli'}</span>}<small>{profile?.verifiedAt?`Son test · ${new Date(profile.verifiedAt).toLocaleDateString('tr-TR')}`:busyStatus(status)?'Sonuç otomatik güncellenir':'İlk bağlantı kontrolü bekleniyor'}</small></div>
-        <Can permission="config.manage"><Button className="connector-test" loading={busy===source.id||busyStatus(status)} onClick={()=>{if(['tariff','mevzuat-net'].includes(source.key)){accountForm.resetFields();setAccount(source)}else void test(source.id,`connectors/${source.id}/test`)}}>Test et</Button></Can>
+        <Can permission="config.manage"><Space className="connector-actions" size={8}><Button className="connector-test" loading={busy===source.id||busyStatus(status)} onClick={()=>{if(['tariff','mevzuat-net'].includes(source.key)){accountForm.resetFields();setAccount(source)}else void test(source.id,`connectors/${source.id}/test`)}}>Test et</Button>{managementActions({kind:'connector',source})}</Space></Can>
       </article>})}
-      {visibleExtras.map(source=><article key={`extra-${source.id}`} className="connector-row"><SourceIcon url={source.url}/><div className="connector-identity"><h3>{source.title}</h3><a href={source.url} target="_blank" rel="noreferrer">{source.url}</a>{source.fetchError&&<p className="connector-error-summary">{cleanMessage(source.fetchError)}</p>}</div><span className="connector-kind">Web <small>Ek kaynak</small></span><span className={`connector-status ${source.fetchError?'warning':'good'}`}><i className="status-dot"/>{source.fetchError?'Kontrol gerekli':source.fetchedAt?'İçerik alındı':'Test bekliyor'}</span><Can permission="config.manage"><Button className="connector-test" loading={busy===source.id} onClick={()=>void test(source.id,`managed-sources/${source.id}/refresh`)}>Test et</Button></Can></article>)}
+      {visibleExtras.map(source=><article key={`extra-${source.id}`} className="connector-row"><SourceIcon url={source.url}/><div className="connector-identity"><h3>{source.title}</h3><a href={source.url} target="_blank" rel="noreferrer">{source.url}</a>{source.fetchError&&<p className="connector-error-summary">{cleanMessage(source.fetchError)}</p>}</div><span className="connector-kind">Web <small>Ek kaynak</small></span><span className={`connector-status ${source.fetchError?'warning':'good'}`}><i className="status-dot"/>{source.fetchError?'Kontrol gerekli':source.fetchedAt?'İçerik alındı':'Test bekliyor'}</span><Can permission="config.manage"><Space className="connector-actions" size={8}><Button className="connector-test" loading={busy===source.id} onClick={()=>void test(source.id,`managed-sources/${source.id}/refresh`)}>Test et</Button>{managementActions({kind:'extra',source})}</Space></Can></article>)}
       </div></section>}
       {visibleDocuments.length>0&&<section className="connector-section" aria-label="Belgeler"><div className="connector-section-heading"><h2>Belgeler <span>{visibleDocuments.length}</span></h2><p>Eklediğiniz dosyaların özgün kopyaları burada saklanır.</p></div><div className="connector-list"><div className="connector-column-head" aria-hidden="true"><span>Kaynak</span><span>Tür</span><span>Durum</span><span/></div>{visibleDocuments.map(doc=><article key={doc.id} className="connector-row"><div className="connector-mark document-mark"><FileTextOutlined/></div><div className="connector-identity"><h3>{doc.title}</h3><p>{fileLabel(doc.latestVersion?.mimeType)} <span>·</span> {doc.canonicalUrl?'Bağlantıdan eklendi':'Yüklenen dosya'}</p></div><span className="connector-kind">{fileLabel(doc.latestVersion?.mimeType)}</span><div className="connector-health"><span className={`connector-status ${doc.latestVersion?.extractionStatus==='FAILED'?'warning':''}`}><i className="status-dot"/>{doc.latestVersion?.extractionStatus==='FAILED'?'İçerik kontrolü gerekli':'Arşivde'}</span><small>Özgün dosya saklanıyor</small></div><Can permission="document.upload"><Button className="connector-test" loading={busy===doc.id} onClick={()=>void test(doc.id,`documents/${doc.id}/test`)}>Test et</Button></Can></article>)}</div></section>}
       {!loading&&catalogLoaded&&!visibleSources.length&&!visibleDocuments.length&&!visibleExtras.length&&<div className="connector-empty"><Empty description={query?'Aramanızla eşleşen kaynak bulunamadı.':'Henüz kaynak eklenmedi.'}/></div>}
     </Spin>
     <p className="connector-footnote"><SafetyCertificateOutlined/> Bağlantı testi erişimi doğrular. Belge analizi ayrı olarak yapılır.</p>
+    <Modal title="Kaynağı düzenle" open={!!editing} onCancel={()=>{if(busy!=='edit')setEditing(null)}} onOk={()=>void saveEdit()} okText="Kaydet" cancelText="Vazgeç" confirmLoading={busy==='edit'} cancelButtonProps={{disabled:busy==='edit'}} closable={busy!=='edit'} mask={{closable:busy!=='edit'}}>
+      <Form form={editForm} layout="vertical" disabled={busy==='edit'}>
+        <Form.Item name="name" label="Kaynak adı" rules={[{required:true,whitespace:true,max:200,message:'Kaynak adını girin (en fazla 200 karakter).'}]}><Input/></Form.Item>
+        <Form.Item name="url" label="Kaynak bağlantısı" rules={[{required:true,type:'url',message:'Geçerli bir bağlantı girin.'},{validator:(_,value)=>!value||/^https?:\/\//i.test(value)?Promise.resolve():Promise.reject(new Error('HTTP veya HTTPS bağlantısı girin.'))}]}><Input/></Form.Item>
+      </Form>
+      {editError&&<Alert type="error" title={editError} showIcon/>}
+    </Modal>
     <Modal title={`${issue?.name??'Kaynak'} · Bağlantı sorunu`} open={!!issue} onCancel={()=>setIssue(null)} footer={<Button onClick={()=>setIssue(null)}>Kapat</Button>}>
       <Alert type="warning" showIcon title={cleanMessage(issue?.profiles[0]?.validation?.message??'Bağlantı doğrulanamadı.')} />
       <Typography.Title level={5}>Ne yapabilirim?</Typography.Title>
